@@ -22,8 +22,7 @@
  *
  */
 
-#include "proton/export.hpp"
-#include "proton/object.hpp"
+#include "proton/internal/object.hpp"
 
 #include <vector>
 
@@ -39,64 +38,53 @@ class proton_event;
 class proton_handler
 {
   public:
-    PN_CPP_EXTERN proton_handler();
-    PN_CPP_EXTERN virtual ~proton_handler();
+    proton_handler();
+    virtual ~proton_handler();
 
     ///@name Over-ride these member functions to handle events
     ///@{
-    PN_CPP_EXTERN virtual void on_reactor_init(proton_event &e);
-    PN_CPP_EXTERN virtual void on_reactor_quiesced(proton_event &e);
-    PN_CPP_EXTERN virtual void on_reactor_final(proton_event &e);
-    PN_CPP_EXTERN virtual void on_timer_task(proton_event &e);
-    PN_CPP_EXTERN virtual void on_connection_init(proton_event &e);
-    PN_CPP_EXTERN virtual void on_connection_bound(proton_event &e);
-    PN_CPP_EXTERN virtual void on_connection_unbound(proton_event &e);
-    PN_CPP_EXTERN virtual void on_connection_local_open(proton_event &e);
-    PN_CPP_EXTERN virtual void on_connection_local_close(proton_event &e);
-    PN_CPP_EXTERN virtual void on_connection_remote_open(proton_event &e);
-    PN_CPP_EXTERN virtual void on_connection_remote_close(proton_event &e);
-    PN_CPP_EXTERN virtual void on_connection_final(proton_event &e);
-    PN_CPP_EXTERN virtual void on_session_init(proton_event &e);
-    PN_CPP_EXTERN virtual void on_session_local_open(proton_event &e);
-    PN_CPP_EXTERN virtual void on_session_local_close(proton_event &e);
-    PN_CPP_EXTERN virtual void on_session_remote_open(proton_event &e);
-    PN_CPP_EXTERN virtual void on_session_remote_close(proton_event &e);
-    PN_CPP_EXTERN virtual void on_session_final(proton_event &e);
-    PN_CPP_EXTERN virtual void on_link_init(proton_event &e);
-    PN_CPP_EXTERN virtual void on_link_local_open(proton_event &e);
-    PN_CPP_EXTERN virtual void on_link_local_close(proton_event &e);
-    PN_CPP_EXTERN virtual void on_link_local_detach(proton_event &e);
-    PN_CPP_EXTERN virtual void on_link_remote_open(proton_event &e);
-    PN_CPP_EXTERN virtual void on_link_remote_close(proton_event &e);
-    PN_CPP_EXTERN virtual void on_link_remote_detach(proton_event &e);
-    PN_CPP_EXTERN virtual void on_link_flow(proton_event &e);
-    PN_CPP_EXTERN virtual void on_link_final(proton_event &e);
-    PN_CPP_EXTERN virtual void on_delivery(proton_event &e);
-    PN_CPP_EXTERN virtual void on_transport(proton_event &e);
-    PN_CPP_EXTERN virtual void on_transport_error(proton_event &e);
-    PN_CPP_EXTERN virtual void on_transport_head_closed(proton_event &e);
-    PN_CPP_EXTERN virtual void on_transport_tail_closed(proton_event &e);
-    PN_CPP_EXTERN virtual void on_transport_closed(proton_event &e);
-    PN_CPP_EXTERN virtual void on_selectable_init(proton_event &e);
-    PN_CPP_EXTERN virtual void on_selectable_updated(proton_event &e);
-    PN_CPP_EXTERN virtual void on_selectable_readable(proton_event &e);
-    PN_CPP_EXTERN virtual void on_selectable_writable(proton_event &e);
-    PN_CPP_EXTERN virtual void on_selectable_expired(proton_event &e);
-    PN_CPP_EXTERN virtual void on_selectable_error(proton_event &e);
-    PN_CPP_EXTERN virtual void on_selectable_final(proton_event &e);
-    PN_CPP_EXTERN virtual void on_unhandled(proton_event &e);
+    virtual void on_reactor_init(proton_event &e);
+    virtual void on_reactor_quiesced(proton_event &e);
+    virtual void on_reactor_final(proton_event &e);
+    virtual void on_timer_task(proton_event &e);
+    virtual void on_connection_init(proton_event &e);
+    virtual void on_connection_bound(proton_event &e);
+    virtual void on_connection_unbound(proton_event &e);
+    virtual void on_connection_local_open(proton_event &e);
+    virtual void on_connection_local_close(proton_event &e);
+    virtual void on_connection_remote_open(proton_event &e);
+    virtual void on_connection_remote_close(proton_event &e);
+    virtual void on_connection_final(proton_event &e);
+    virtual void on_session_init(proton_event &e);
+    virtual void on_session_local_open(proton_event &e);
+    virtual void on_session_local_close(proton_event &e);
+    virtual void on_session_remote_open(proton_event &e);
+    virtual void on_session_remote_close(proton_event &e);
+    virtual void on_session_final(proton_event &e);
+    virtual void on_link_init(proton_event &e);
+    virtual void on_link_local_open(proton_event &e);
+    virtual void on_link_local_close(proton_event &e);
+    virtual void on_link_local_detach(proton_event &e);
+    virtual void on_link_remote_open(proton_event &e);
+    virtual void on_link_remote_close(proton_event &e);
+    virtual void on_link_remote_detach(proton_event &e);
+    virtual void on_link_flow(proton_event &e);
+    virtual void on_link_final(proton_event &e);
+    virtual void on_delivery(proton_event &e);
+    virtual void on_transport(proton_event &e);
+    virtual void on_transport_error(proton_event &e);
+    virtual void on_transport_head_closed(proton_event &e);
+    virtual void on_transport_tail_closed(proton_event &e);
+    virtual void on_transport_closed(proton_event &e);
+    virtual void on_selectable_init(proton_event &e);
+    virtual void on_selectable_updated(proton_event &e);
+    virtual void on_selectable_readable(proton_event &e);
+    virtual void on_selectable_writable(proton_event &e);
+    virtual void on_selectable_expired(proton_event &e);
+    virtual void on_selectable_error(proton_event &e);
+    virtual void on_selectable_final(proton_event &e);
+    virtual void on_unhandled(proton_event &e);
     ///@}
-
-    /// Add a child handler, equivalent to this->push_back(&h)
-    /// h must not be deleted before this handler.
-    void add_child_handler(proton_handler &h);
-
-  private:
-    std::vector<proton_handler*> children_;
-    typedef std::vector<proton_handler*>::iterator iterator;
-    friend class proton_event;
-    pn_ptr<pn_handler_t> pn_handler_;
-    friend class container_impl;
 };
 
 }

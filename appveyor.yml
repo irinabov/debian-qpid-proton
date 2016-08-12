@@ -2,6 +2,9 @@ version: '{branch}.{build}'
 configuration: RelWithDebInfo
 install:
 - cinst -y swig
+cache:
+- C:\ProgramData\chocolatey\bin -> appveyor.yml
+- C:\ProgramData\chocolatey\lib -> appveyor.yml
 before_build:
 - mkdir BLD
 - cd BLD
@@ -12,5 +15,6 @@ build:
   verbosity: normal
 test_script:
 - cd BLD
-- ctest -V -C RelWithDebInfo
+- cmake --build . --target install --config %CONFIGURATION%
+- ctest -V -C %CONFIGURATION%
 - cd ..

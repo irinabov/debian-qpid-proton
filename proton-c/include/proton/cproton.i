@@ -57,6 +57,8 @@ typedef unsigned long int uintptr_t;
 %immutable PN_OBJECT;
 %immutable PN_VOID;
 %immutable PN_WEAKREF;
+/* Treat pn_handle_t like uintptr_t - syntactically it is a C void* but really it's just an int */
+%apply uintptr_t { pn_handle_t };
 %include "proton/object.h"
 
 %ignore pn_error_format;
@@ -868,7 +870,6 @@ typedef unsigned long int uintptr_t;
 {
  require:
   msg != NULL;
-  size >= 0;
 }
 
 %contract pn_message_encode(pn_message_t *msg, char *bytes, size_t *size)
@@ -909,12 +910,6 @@ typedef unsigned long int uintptr_t;
 }
 
 %include "proton/sasl.h"
-
-%contract pn_messenger(const char *name)
-{
- ensure:
-  pn_message != NULL;
-}
 
 %contract pn_messenger_name(pn_messenger_t *messenger)
 {

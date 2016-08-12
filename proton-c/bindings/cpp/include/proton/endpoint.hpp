@@ -1,5 +1,5 @@
-#ifndef PROTON_CPP_ENDPOINT_H
-#define PROTON_CPP_ENDPOINT_H
+#ifndef PROTON_ENDPOINT_HPP
+#define PROTON_ENDPOINT_HPP
 
 /*
  *
@@ -21,47 +21,49 @@
  * under the License.
  *
  */
-#include "proton/config.hpp"
-#include "proton/export.hpp"
-#include "proton/condition.hpp"
-#include "proton/comparable.hpp"
+
+#include "./internal/config.hpp"
+#include "./error_condition.hpp"
+#include "./internal/export.hpp"
+#include "./internal/comparable.hpp"
 
 namespace proton {
 
 /// The base class for session, connection, and link.
-class endpoint {
+class
+PN_CPP_CLASS_EXTERN endpoint {
   public:
     PN_CPP_EXTERN virtual ~endpoint();
 
-    /// A bit mask of state bit values.
-    ///
-    /// A state mask is matched against an endpoint as follows: If the
-    /// state mask contains both local and remote flags, then an exact
-    /// match against those flags is performed. If state contains only
-    /// local or only remote flags, then a match occurs if any of the
-    /// local or remote flags are set respectively.
-    ///
-    /// @see connection::find_links, connection::find_sessions
-    typedef int state;
-
-    PN_CPP_EXTERN static const state LOCAL_UNINIT;  ///< Local endpoint is uninitialized
-    PN_CPP_EXTERN static const state REMOTE_UNINIT; ///< Remote endpoint is uninitialized
-    PN_CPP_EXTERN static const state LOCAL_ACTIVE;  ///< Local endpoint is active
-    PN_CPP_EXTERN static const state REMOTE_ACTIVE; ///< Remote endpoint is active
-    PN_CPP_EXTERN static const state LOCAL_CLOSED;  ///< Local endpoint has been closed
-    PN_CPP_EXTERN static const state REMOTE_CLOSED; ///< Remote endpoint has been closed
-    PN_CPP_EXTERN static const state LOCAL_MASK;    ///< Mask including all LOCAL_ bits (UNINIT, ACTIVE, CLOSED)
-    PN_CPP_EXTERN static const state REMOTE_MASK;   ///< Mask including all REMOTE_ bits (UNINIT, ACTIVE, CLOSED)
-
-
-    /// Get the local error condition.
-    virtual condition local_condition() const = 0;
+    // XXX Add the container accessor here.
+    
+    /// True if the local end is uninitialized.
+    virtual bool uninitialized() const = 0;
+    
+    /// True if the local end is active.
+    virtual bool active() const = 0;
+    
+    /// True if the local and remote ends are closed.
+    virtual bool closed() const = 0;
 
     /// Get the error condition of the remote endpoint.
-    virtual condition remote_condition() const = 0;
+    virtual class error_condition error() const = 0;
 
-#if PN_HAS_CPP11
+    // XXX Add virtual open() and open(endpoint_options)
+    
+    /// Close the endpoint.
+    ///
+    /// @see endpoint_lifecycle
+    virtual void close() = 0;
+
+    /// Close the endpoint with an error condition.
+    ///
+    /// @see endpoint_lifecycle
+    virtual void close(const error_condition&) = 0;
+
+#if PN_CPP_HAS_DEFAULTED_FUNCTIONS
     // Make everything explicit for C++11 compilers
+    
     endpoint() = default;
     endpoint& operator=(const endpoint&) = default;
     endpoint& operator=(endpoint&&) = default;
@@ -71,40 +73,37 @@ class endpoint {
 #endif
 };
 
-/// @cond INTERNAL
-/// XXX important to expose?
+namespace internal {
 
-template <class T> class iter_base  : public comparable<iter_base<T> > {
+template <class T, class D> class iter_base {
   public:
     typedef T value_type;
 
-    T& operator*() const { return *ptr_; }
-    const T* operator->() const { return &ptr_; }
-    operator bool() const { return !!ptr_; }
-    bool operator !() const { return !ptr_; }
-    bool operator==(const iter_base<T>& x) const { return ptr_ == x.ptr_; }
-    bool operator!=(const iter_base<T>& x) const { return ptr_ != x.ptr_; }
-
+    T operator*() const { return obj_; }
+    T* operator->() const { return const_cast<T*>(&obj_); }
+    D operator++(int) { D x(*this); ++(*this); return x; }
+    bool operator==(const iter_base<T, D>& x) const { return obj_ == x.obj_; }
+    bool operator!=(const iter_base<T, D>& x) const { return obj_ != x.obj_; }
+    
   protected:
-    explicit iter_base(T p = 0, endpoint::state s = 0) : ptr_(p), state_(s) {}
-    T ptr_;
-    endpoint::state state_;
+    explicit iter_base(T p = 0) : obj_(p) {}
+    T obj_;
 };
 
-/// An iterator range.
-template<class I> class range {
+template<class I> class iter_range {
   public:
     typedef I iterator;
 
-    explicit range(I begin = I(), I end = I()) : begin_(begin), end_(end) {}
+    explicit iter_range(I begin = I(), I end = I()) : begin_(begin), end_(end) {}
     I begin() const { return begin_; }
     I end() const { return end_; }
+    bool empty() const { return begin_ == end_; }
+    
   private:
     I begin_, end_;
 };
 
-/// @endcond
+} // internal
+} // proton
 
-}
-
-#endif // PROTON_CPP_H
+#endif // PROTON_ENDPOINT_HPP
