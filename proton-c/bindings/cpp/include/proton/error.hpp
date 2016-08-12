@@ -1,5 +1,5 @@
-#ifndef PROTON_CPP_EXCEPTIONS_H
-#define PROTON_CPP_EXCEPTIONS_H
+#ifndef PROTON_ERROR_HPP
+#define PROTON_ERROR_HPP
 
 /*
  *
@@ -22,63 +22,38 @@
  *
  */
 
-#include "proton/config.hpp"
-#include "proton/export.hpp"
+#include "./internal/config.hpp"
+#include "./internal/export.hpp"
 
 #include <stdexcept>
 #include <string>
 
 namespace proton {
 
-/// The base proton error.
-///    
+/// The base Proton error.
+///
 /// All exceptions thrown from functions in the proton namespace are
 /// subclasses of proton::error.
-struct error : public std::runtime_error {
-    /// @cond INTERNAL
-    /// XXX do we intend users to construct these (and subclasses)?
+struct
+PN_CPP_CLASS_EXTERN error : public std::runtime_error {
+    /// Construct the error with a message.
     PN_CPP_EXTERN explicit error(const std::string&);
-    /// @endcond
 };
 
-/// Raised if a timeout expires.
-struct timeout_error : public error {
-    /// @cond INTERNAL
+/// An operation timed out.
+struct
+PN_CPP_CLASS_EXTERN timeout_error : public error {
+    /// Construct the error with a message.
     PN_CPP_EXTERN explicit timeout_error(const std::string&);
-    /// @endcond
 };
 
-/// @cond INTERNAL
-/// XXX change namespace
-    
-/// Raised if there is an error decoding AMQP data as a C++ value.
-struct decode_error : public error {
-    PN_CPP_EXTERN explicit decode_error(const std::string&);
+/// An error converting between AMQP and C++ data.
+struct
+PN_CPP_CLASS_EXTERN conversion_error : public error {
+    /// Construct the error with a message.
+    PN_CPP_EXTERN explicit conversion_error(const std::string&);
 };
 
-/// Raised if there is an error encoding a C++ value as AMQP data.
-struct encode_error : public error {
-    PN_CPP_EXTERN explicit encode_error(const std::string&);
-};
+} // proton
 
-/// @endcond
-
-/// @cond INTERNAL
-/// XXX need to discuss
-    
-/// Error reading or writing external IO.
-struct io_error : public error {
-    PN_CPP_EXTERN explicit io_error(const std::string&);
-};
-
-/// Attempt to use a closed resource (connnection, session, or link).
-struct closed_error : public io_error {
-    PN_CPP_EXTERN explicit closed_error(const std::string& = default_msg);
-    static const std::string default_msg;
-};
-
-/// @endcond
-
-}
-
-#endif // PROTON_CPP_EXCEPTIONS_H
+#endif // PROTON_ERROR_HPP

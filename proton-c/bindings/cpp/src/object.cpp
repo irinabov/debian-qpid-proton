@@ -17,10 +17,11 @@
  * under the License.
  */
 
-#include "proton/object.hpp"
+#include "proton/internal/object.hpp"
 #include <proton/object.h>
 
 namespace proton {
+namespace internal {
 
 void pn_ptr_base::incref(void *p) {
     if (p) ::pn_incref(const_cast<void*>(p));
@@ -30,4 +31,4 @@ void pn_ptr_base::decref(void *p) {
     if (p) ::pn_decref(const_cast<void*>(p));
 }
 
-}
+}}

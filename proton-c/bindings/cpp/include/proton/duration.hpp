@@ -1,5 +1,5 @@
-#ifndef PROTON_CPP_DURATION_H
-#define PROTON_CPP_DURATION_H
+#ifndef PROTON_DURATION_HPP
+#define PROTON_DURATION_HPP
 
 /*
  *
@@ -22,38 +22,52 @@
  *
  */
 
-#include "proton/export.hpp"
-#include "proton/types.hpp"
-#include "proton/comparable.hpp"
+#include "./internal/export.hpp"
+#include "./internal/comparable.hpp"
+#include "./types_fwd.hpp"
+
+#include <iosfwd>
 
 namespace proton {
 
 /// A span of time in milliseconds.
-class duration : public comparable<duration> {
+class duration : private internal::comparable<duration> {
   public:
-    /// @cond INTERNAL
-    /// XXX public and mutable?
-    uint64_t milliseconds;
-    /// @endcond
+    /// Numeric type used to store milliseconds    
+    typedef int64_t numeric_type;
 
-    /// Create a duration.
-    explicit duration(uint64_t ms = 0) : milliseconds(ms) {}
+    /// Construct from milliseconds
+    explicit duration(numeric_type ms = 0) : ms_(ms) {}
 
-    PN_CPP_EXTERN static const duration FOREVER;   ///< Wait for ever
+    /// Assign
+    duration& operator=(numeric_type ms) { ms_ = ms; return *this; }
+
+    /// Return milliseconds
+    numeric_type milliseconds() const { return ms_; }
+
+    PN_CPP_EXTERN static const duration FOREVER;   ///< Wait forever
     PN_CPP_EXTERN static const duration IMMEDIATE; ///< Don't wait at all
     PN_CPP_EXTERN static const duration SECOND;    ///< One second
     PN_CPP_EXTERN static const duration MINUTE;    ///< One minute
+
+  private:
+    numeric_type ms_;
 };
 
-inline bool operator<(duration x, duration y) { return x.milliseconds < y.milliseconds; }
-inline bool operator==(duration x, duration y) { return x.milliseconds == y.milliseconds; }
+/// Print duration
+PN_CPP_EXTERN std::ostream& operator<<(std::ostream&, duration);
 
-inline duration operator*(duration d, amqp_ulong n) { return duration(d.milliseconds*n); }
-inline duration operator*(amqp_ulong n, duration d) { return d * n; }
+/// @name Comparison and arithmetic operators
+/// @{
+inline bool operator<(duration x, duration y) { return x.milliseconds() < y.milliseconds(); }
+inline bool operator==(duration x, duration y) { return x.milliseconds() == y.milliseconds(); }
 
-inline amqp_timestamp operator+(amqp_timestamp ts, duration d) { return amqp_timestamp(ts.milliseconds+d.milliseconds); }
-inline amqp_timestamp operator+(duration d, amqp_timestamp ts) { return ts + d; }
+inline duration operator+(duration x, duration y) { return duration(x.milliseconds() + y.milliseconds()); }
+inline duration operator-(duration x, duration y) { return duration(x.milliseconds() - y.milliseconds()); }
+inline duration operator*(duration d, uint64_t n) { return duration(d.milliseconds()*n); }
+inline duration operator*(uint64_t n, duration d) { return d * n; }
+/// @}
 
-}
+} // proton
 
-#endif // PROTON_CPP_DURATION_H
+#endif // PROTON_DURATION_HPP

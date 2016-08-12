@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 2.8.7)
 
 project (Proton C)
 
@@ -159,7 +159,9 @@ install (FILES LICENSE README.md TODO
          DESTINATION ${PROTON_SHARE})
 
 install (DIRECTORY examples
-         DESTINATION ${PROTON_SHARE})
+         DESTINATION ${PROTON_SHARE}
+         REGEX "/examples/CMakeLists.txt$" EXCLUDE
+         PATTERN "*Config.cmake" EXCLUDE)
 
 # add relevant CTest support
 find_program (MAVEN_EXE mvn DOC "Location of the maven program")

@@ -1,7 +1,8 @@
-#ifndef VALUE_H
-#define VALUE_H
+#ifndef PROTON_VALUE_HPP
+#define PROTON_VALUE_HPP
 
 /*
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,107 +19,153 @@
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
+ *
  */
 
-#include "proton/data.hpp"
-#include "proton/types.hpp"
+#include "./codec/encoder.hpp"
+#include "./codec/decoder.hpp"
+#include "./internal/type_traits.hpp"
+#include "./scalar.hpp"
+#include "./types_fwd.hpp"
+
+#include <iosfwd>
 
 namespace proton {
 
-/// A holder for an AMQP value.
-///
-/// A proton::value can hold any AMQP data value, simple or compound.
-/// It has assignment and conversion operators to convert its contents
-/// easily to and from native C++ types.
-class value : public comparable<value> {
+class message;
+
+namespace internal {
+
+class value_base;
+PN_CPP_EXTERN std::ostream& operator<<(std::ostream& o, const value_base& x);
+
+/// Separate value data from implicit conversion constructors to avoid
+/// recursions.
+class value_base {
   public:
-    /// Create an empty value.
-    PN_CPP_EXTERN value();
-
-    /// Copy a value.
-    PN_CPP_EXTERN value(const value&);
-
-#if PN_HAS_CPP11
-    PN_CPP_EXTERN value(value&&);
-#endif
-
-    /// Copy a value.
-    PN_CPP_EXTERN value& operator=(const value&);
-
-    /// Explicit conversion from from C++ type T.
-    template <class T> explicit value(const T& x) : data_(proton::data::create()) { encode() << x; }
-
-    /// Allow implicit conversion from a proton::scalar.
-    value(const scalar& x) { encode() << x; }
-
-    /// Create a value from C++ type T.
-    template <class T> value& operator=(const T& x) { encode() << x; return *this; }
-
-    /// Remove any contained data.
-    PN_CPP_EXTERN void clear();
-
-    /// True if the value contains no data.
-    PN_CPP_EXTERN bool empty() const;
-
-    /// Get the type of the current value.
+    /// Get the type ID for the current value.
     PN_CPP_EXTERN type_id type() const;
 
-    /// @name Get methods
-    ///
-    /// Extract the value to type T.
-    ///
-    /// @{
+    /// True if the value is null
+    PN_CPP_EXTERN bool empty() const;
 
-    /// Get the value.
-    template<class T> void get(T &t) const { decode() >> t; }
+  protected:
+    codec::data& data() const;
+    mutable class codec::data data_;
 
-    /// Get an AMQP map as any type T that satisfies the map concept.
-    template<class T> void get_map(T& t) const { decode() >> to_map(t); }
-
-    /// Get a map as a as any type T that is a sequence pair-like types with first and second.
-    template<class T> void get_pairs(T& t) const { decode() >> to_pairs(t); }
-
-    /// Get an AMQP array or list as type T that satisfies the sequence concept. */
-    template<class T> void get_sequence(T& t) const { decode() >> to_sequence(t); }
-
-    /// @}
-
-    /// Get the value as C++ type T.
-    template<class T> T get() const { T t; get(t); return t; }
-
-    /// @name As methods
-    ///
-    /// As methods do "loose" conversion, they will convert the scalar
-    /// value to the requested type if possible, else throw type_error.
-    ///
-    /// @{
-    PN_CPP_EXTERN int64_t as_int() const;        ///< Allowed if `type_id_is_integral(type())`
-    PN_CPP_EXTERN uint64_t as_uint() const;      ///< Allowed if `type_id_is_integral(type())`
-    PN_CPP_EXTERN double as_double() const;      ///< Allowed if `type_id_is_floating_point(type())`
-    PN_CPP_EXTERN std::string as_string() const; ///< Allowed if `type_id_is_string_like(type())`
-    /// @}
-
-    /// @cond INTERNAL
-    /// XXX undiscussed
-    PN_CPP_EXTERN encoder encode();              ///< Clear and return an encoder for this value.
-    PN_CPP_EXTERN decoder decode() const;        ///< Rewind and return an encoder for this value.
-    PN_CPP_EXTERN class data& data() const;      ///< Return a data reference, no clear or rewind.
-    /// @endcond
-
-  private:
-    mutable class data data_;
-
-    /// @cond INTERNAL
-    friend PN_CPP_EXTERN void swap(value&, value&);
-    friend PN_CPP_EXTERN bool operator==(const value& x, const value& y);
-    friend PN_CPP_EXTERN bool operator<(const value& x, const value& y);
-    friend PN_CPP_EXTERN class encoder operator<<(class encoder e, const value& dv);
-    friend PN_CPP_EXTERN class decoder operator>>(class decoder d, value& dv);
-    friend PN_CPP_EXTERN std::ostream& operator<<(std::ostream& o, const value& dv);
-    friend class message;
+    /// @cond INTERNAL    
+  friend class proton::message;
+  friend class codec::encoder;
+  friend class codec::decoder;
+  friend PN_CPP_EXTERN std::ostream& operator<<(std::ostream&, const value_base&);
     /// @endcond
 };
 
+} // internal
+
+/// A holder for any AMQP value, simple or complex.
+///
+/// @see @ref types_page
+class value : public internal::value_base, private internal::comparable<value> {
+  private:
+    // Enabler for encodable types excluding proton::value.
+    template<class T, class U=void> struct assignable :
+        public internal::enable_if<codec::is_encodable<T>::value, U> {};
+    template<class U> struct assignable<value, U> {};
+
+  public:
+    /// Create a null value
+    PN_CPP_EXTERN value();
+
+    /// @name Copy a value
+    /// @{
+    PN_CPP_EXTERN value(const value&);
+    PN_CPP_EXTERN value& operator=(const value&);
+#if PN_CPP_HAS_RVALUE_REFERENCES
+    PN_CPP_EXTERN value(value&&);
+    PN_CPP_EXTERN value& operator=(value&&);
+#endif
+    /// @}
+
+    /// Construct from any allowed type T.
+    template <class T> value(const T& x, typename assignable<T>::type* = 0) { *this = x; }
+
+    /// Assign from any allowed type T.
+    template <class T> typename assignable<T, value&>::type operator=(const T& x) {
+        codec::encoder e(*this);
+        e << x;
+        return *this;
+    }
+
+    /// Reset the value to null
+    PN_CPP_EXTERN void clear();
+
+    /// @cond INTERNAL (deprecated)
+    template<class T> void get(T &t) const;
+    template<class T> T get() const;
+    PN_CPP_EXTERN int64_t as_int() const;
+    PN_CPP_EXTERN uint64_t as_uint() const;
+    PN_CPP_EXTERN double as_double() const;
+    PN_CPP_EXTERN std::string as_string() const;
+    /// @endcond
+
+    /// swap values
+  friend PN_CPP_EXTERN void swap(value&, value&);
+
+    /// @name Comparison operators
+    /// @{
+  friend PN_CPP_EXTERN bool operator==(const value& x, const value& y);
+  friend PN_CPP_EXTERN bool operator<(const value& x, const value& y);
+    /// @}
+
+    /// @cond INTERNAL
+    PN_CPP_EXTERN explicit value(const codec::data&);
+    /// @endcond
+};
+
+/// @copydoc scalar::get
+/// @related proton::value
+template<class T> T get(const value& v) { T x; get(v, x); return x; }
+
+/// Like get(const value&) but assigns the value to a reference
+/// instead of returning it.  May be more efficient for complex values
+/// (arrays, maps, etc.)
+///
+/// @related proton::value
+template<class T> void get(const value& v, T& x) { codec::decoder d(v, true); d >> x; }
+
+/// @copydoc scalar::coerce
+/// @related proton::value
+template<class T> T coerce(const value& v) { T x; coerce(v, x); return x; }
+
+/// Like coerce(const value&) but assigns the value to a reference
+/// instead of returning it.  May be more efficient for complex values
+/// (arrays, maps, etc.)
+///
+/// @related proton::value
+template<class T> void coerce(const value& v, T& x) {
+    codec::decoder d(v, false);
+    if (type_id_is_scalar(v.type())) {
+        scalar s;
+        d >> s;
+        x = internal::coerce<T>(s);
+    } else {
+        d >> x;
+    }
 }
 
-#endif // VALUE_H
+/// Special case for get<null>(), just checks that value contains NULL.
+template<> inline void get<null>(const value& v, null&) { assert_type_equal(NULL_TYPE, v.type()); }
+
+/// @cond INTERNAL
+template<class T> void value::get(T &x) const { x = proton::get<T>(*this); }
+template<class T> T value::get() const { return proton::get<T>(*this); }
+inline int64_t value::as_int() const { return proton::coerce<int64_t>(*this); }
+inline uint64_t value::as_uint() const { return proton::coerce<uint64_t>(*this); }
+inline double value::as_double() const { return proton::coerce<double>(*this); }
+inline std::string value::as_string() const { return proton::coerce<std::string>(*this); }
+/// @endcond
+
+} // proton
+
+#endif // PROTON_VALUE_HPP

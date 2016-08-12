@@ -1,5 +1,5 @@
-#ifndef PROTON_CPP_TASK_H
-#define PROTON_CPP_TASK_H
+#ifndef PROTON_TASK_HPP
+#define PROTON_TASK_HPP
 
 /*
  *
@@ -23,26 +23,26 @@
  */
 
 /// @cond INTERNAL
-/// XXX needs more discussion
+/// XXX Needs more discussion
     
-#include "proton/export.hpp"
-#include "proton/object.hpp"
+#include "./internal/export.hpp"
+#include "./internal/object.hpp"
 
-#include "proton/reactor.h"
+#include <proton/reactor.h>
 
 namespace proton {
 
-/// A task for timer events.
-class task : public object<pn_task_t> {
+/// **Experimental** - A task for timer events.
+class task : public internal::object<pn_task_t> {
   public:
-    task(pn_task_t* t) : object<pn_task_t>(t) {}
+    task(pn_task_t* t) : internal::object<pn_task_t>(t) {}
 
     /// Cancel the scheduled task.
     PN_CPP_EXTERN void cancel();
 };
 
-}
+} // proton
 
 /// @endcond
 
-#endif // PROTON_CPP_TASK_H
+#endif // PROTON_TASK_HPP

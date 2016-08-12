@@ -19,6 +19,7 @@
  *
  */
 
+#include "platform.h"
 #include <proton/types.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,4 +28,8 @@ pn_bytes_t pn_bytes(size_t size, const char *start)
 {
   pn_bytes_t bytes = {size, start};
   return bytes;
+}
+
+pn_timestamp_t pn_timestamp_now() {
+  return pn_i_now();
 }
