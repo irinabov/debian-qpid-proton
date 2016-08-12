@@ -1,0 +1,4 @@
+usr/lib/*/libqpid-proton.so
+usr/include/proton
+usr/lib/*/cmake/Proton
+usr/lib/*/pkgconfig/libqpid-proton.pc

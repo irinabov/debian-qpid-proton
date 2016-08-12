@@ -1,3 +1,9 @@
+qpid-proton (0.13.1-1trusty+qpid1) trusty; urgency=medium
+
+  * Rebased on Proton 0.13.1
+
+ -- Irina Boverman <iboverma@redhat.com>  Fri, 12 Aug 2016 11:12:48 -0400
+
 qpid-proton (0.12.1-1trusty+qpid1) trusty; urgency=medium
 
   * Rebased on Proton 0.12.1
