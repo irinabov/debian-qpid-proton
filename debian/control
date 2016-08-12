@@ -21,18 +21,6 @@ Homepage: http://qpid.apache.org/proton
 Vcs-Browser: http://git.debian.org/?p=pkg-middleware/qpid-proton.git
 Vcs-Git: git://git.debian.org/git/pkg-middleware/qpid-proton.git
 
-Package: qpid-proton-dump
-Architecture: any
-Depends: libqpid-proton7 (>= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
-Description: Qpid Proton messaging tools
- Qpid Proton is a high-performance, lightweight messaging library. It can be
- used in the widest range of messaging applications, including brokers, client
- libraries, routers, bridges, proxies, and more. Proton makes it trivial to
- integrate with the AMQP 1.0 ecosystem from any platform, environment, or
- language.
- .
- This package provides the Qpid Proton dump tool.
-
 Package: libqpid-proton7
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
