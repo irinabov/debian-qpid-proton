@@ -1,7 +1,8 @@
-#ifndef ANNOTATION_KEY_HPP
-#define ANNOTATION_KEY_HPP
+#ifndef PROTON_ANNOTATION_KEY_HPP
+#define PROTON_ANNOTATION_KEY_HPP
 
 /*
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,59 +19,66 @@
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
+ *
  */
 
-#include "proton/types.hpp"
-#include "proton/scalar.hpp"
+#include "./internal/scalar_base.hpp"
+#include "./symbol.hpp"
 
 namespace proton {
-    
-class encoder;
-class decoder;
 
 /// A key for use with AMQP annotation maps.
 ///
-/// An annotation_key can contain either a uint64_t or a
-/// proton::amqp::amqp_symbol.
-class annotation_key : public restricted_scalar {
+/// An annotation_key can contain either a uint64_t or a proton::symbol.
+class annotation_key : public internal::scalar_base {
   public:
-    /// Create an empty key.
-    annotation_key() { scalar_ = uint64_t(0); }
+    using internal::scalar_base::type;
 
-    /// @name Assignment operators
-    ///
-    /// Assign a C++ value, deducing the AMQP type().
-    ///
+    /// An empty annotation key has a uint64_t == 0 value.
+    annotation_key() { put_(uint64_t(0)); }
+
+    /// Construct from any type that can be assigned.
+    template <class T> annotation_key(const T& x) { *this = x; }
+
+    /// @name Assign from a uint64_t or symbol.
     /// @{
-    annotation_key& operator=(uint64_t x) { scalar_ = x; return *this; }
-    annotation_key& operator=(const amqp_symbol& x) { scalar_ = x; return *this; }
-    /// `std::string` is encoded as proton::amqp::amqp_symbol.
-    annotation_key& operator=(const std::string& x) { scalar_ = amqp_symbol(x); return *this; }
-    /// `char*` is encoded as proton::amqp::amqp_symbol.
-    annotation_key& operator=(const char *x) { scalar_ = amqp_symbol(x); return *this; }
+    annotation_key& operator=(uint64_t x) { put_(x); return *this; }
+    annotation_key& operator=(const symbol& x) { put_(x); return *this; }
     /// @}
 
-    /// A constructor that converts from any type that we can assign
-    /// from.
-    template <class T> annotation_key(T x) { *this = x; }
-
-    /// @name Get methods
-    ///
+    /// @name Extra conversions for strings, treated as codec::SYMBOL.
     /// @{
-    void get(uint64_t& x) const { scalar_.get(x); }
-    void get(amqp_symbol& x) const { scalar_.get(x); }
+    annotation_key& operator=(const std::string& x) { put_(symbol(x)); return *this; }
+    annotation_key& operator=(const char *x) { put_(symbol(x)); return *this; }
     /// @}
-
-    /// Return the value as type T.
-    template<class T> T get() const { T x; get(x); return x; }
 
     /// @cond INTERNAL
-    friend PN_CPP_EXTERN encoder operator<<(encoder, const annotation_key&);
-    friend PN_CPP_EXTERN decoder operator>>(decoder, annotation_key&);
-    friend class message;
+  friend class message;
+  friend class codec::decoder;
     /// @endcond
 };
 
-}
+/// @cond INTERNAL
+/// Primary template for get<T>(message_id), specialized for legal types.
+template <class T> T get(const annotation_key& x);
+/// @endcond
 
-#endif // ANNOTATION_KEY_HPP
+/// Get the uint64_t value or throw conversion_error.
+///
+/// @related annotation_key
+template<> inline uint64_t get<uint64_t>(const annotation_key& x) { return internal::get<uint64_t>(x); }
+
+/// Get the @ref symbol value or throw conversion_error.
+///
+/// @related annotation_key
+template<> inline symbol get<symbol>(const annotation_key& x) { return internal::get<symbol>(x); }
+
+/// Get the @ref binary value or throw conversion_error.
+///
+/// @copydoc scalar::coerce
+/// @related annotation_key
+template<class T> T coerce(const annotation_key& x) { return internal::coerce<T>(x); }
+
+} // proton
+
+#endif // PROTON_ANNOTATION_KEY_HPP

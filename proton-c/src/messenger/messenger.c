@@ -1495,7 +1495,7 @@ int pn_messenger_start(pn_messenger_t *messenger)
   // returned. Currently no attempt is made to check the name part of the
   // address, as the intent here is to fail fast if the addressed host
   // is invalid or unavailable.
-  if (messenger->flags | PN_FLAGS_CHECK_ROUTES) {
+  if (messenger->flags & PN_FLAGS_CHECK_ROUTES) {
     pn_list_t *substitutions = pn_list(PN_WEAKREF, 0);
     pn_transform_get_substitutions(messenger->routes, substitutions);
     for (size_t i = 0; i < pn_list_size(substitutions) && error == 0; i++) {
@@ -1699,7 +1699,7 @@ pn_connection_t *pn_messenger_resolve(pn_messenger_t *messenger, const char *add
   return connection;
 }
 
-PN_EXTERN pn_link_t *pn_messenger_get_link(pn_messenger_t *messenger,
+pn_link_t *pn_messenger_get_link(pn_messenger_t *messenger,
                                            const char *address, bool sender)
 {
   char *name = NULL;
@@ -2292,7 +2292,7 @@ int pn_messenger_reject(pn_messenger_t *messenger, pn_tracker_t tracker, int fla
                           PN_STATUS_REJECTED, flags, false, false);
 }
 
-PN_EXTERN pn_link_t *pn_messenger_tracker_link(pn_messenger_t *messenger,
+pn_link_t *pn_messenger_tracker_link(pn_messenger_t *messenger,
                                                pn_tracker_t tracker)
 {
   pni_store_t *store = pn_tracker_store(messenger, tracker);
@@ -2353,17 +2353,21 @@ int pn_messenger_rewrite(pn_messenger_t *messenger, const char *pattern, const c
   return 0;
 }
 
-PN_EXTERN int pn_messenger_set_flags(pn_messenger_t *messenger, const int flags)
+int pn_messenger_set_flags(pn_messenger_t *messenger, const int flags)
 {
   if (!messenger)
     return PN_ARG_ERR;
-  if (flags != 0 && (flags ^ PN_FLAGS_CHECK_ROUTES) != 0)
+  if (flags == 0) {
+    messenger->flags = 0;
+  } else if (flags & (PN_FLAGS_CHECK_ROUTES | PN_FLAGS_ALLOW_INSECURE_MECHS)) {
+    messenger->flags |= flags;
+  } else {
     return PN_ARG_ERR;
-  messenger->flags = flags;
+  }
   return 0;
 }
 
-PN_EXTERN int pn_messenger_get_flags(pn_messenger_t *messenger)
+int pn_messenger_get_flags(pn_messenger_t *messenger)
 {
   return messenger ? messenger->flags : 0;
 }
