@@ -1,7 +1,8 @@
-#ifndef MESSAGE_ID_HPP
-#define MESSAGE_ID_HPP
+#ifndef PROTON_MESSAGE_ID_HPP
+#define PROTON_MESSAGE_ID_HPP
 
 /*
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,68 +19,72 @@
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
+ *
  */
 
-#include "proton/types.hpp"
-#include "proton/scalar.hpp"
+#include "./binary.hpp"
+#include "./internal/scalar_base.hpp"
+#include "./uuid.hpp"
+
+#include <string>
 
 namespace proton {
-    
-class encoder;
-class decoder;
 
 /// An AMQP message ID.
-///    
+///
 /// It can contain one of the following types:
 ///
 ///  - uint64_t
-///  - proton::amqp::amqp_uuid
-///  - proton::amqp::amqp_binary
-///  - proton::amqp::amqp_string
-class message_id : public restricted_scalar {
+///  - std::string
+///  - proton::uuid
+///  - proton::binary
+///
+class message_id : public internal::scalar_base {
   public:
-    /// Create an empty (0) message ID.
-    message_id() { scalar_ = uint64_t(0); }
+    /// An empty message_id has a uint64_t value set to 0.
+    message_id() { put_(uint64_t(0)); }
+
+    /// Construct from any type that can be assigned.
+    template <class T> message_id(const T& x) { *this = x; }
 
     /// @name Assignment operators
-    ///
     /// Assign a C++ value, deduce the AMQP type()
     ///
     /// @{
-    message_id& operator=(uint64_t x) { scalar_ = x; return *this; }
-    message_id& operator=(const amqp_uuid& x) { scalar_ = x; return *this; }
-    message_id& operator=(const amqp_binary& x) { scalar_ = x; return *this; }
-    message_id& operator=(const amqp_string& x) { scalar_ = x; return *this; }
-    /// std::string is encoded as amqp_string
-    message_id& operator=(const std::string& x) { scalar_ = amqp_string(x); return *this; }
-    /// char* is encoded as amqp_string
-    message_id& operator=(const char *x) { scalar_ = amqp_string(x); return *this; }
+    message_id& operator=(uint64_t x) { put_(x); return *this; }
+    message_id& operator=(const uuid& x) { put_(x); return *this; }
+    message_id& operator=(const binary& x) { put_(x); return *this; }
+    message_id& operator=(const std::string& x) { put_(x); return *this; }
+    message_id& operator=(const char* x) { put_(x); return *this; } ///< Treated as amqp::STRING
     /// @}
 
-    /// Create a message ID from any type that we can assign from.
-    template <class T> message_id(T x) { *this = x; }
+  private:
+    message_id(const pn_atom_t& a): internal::scalar_base(a) {}
 
-    /// @name Get methods
-    ///
-    /// get(T&) extracts the value if the types match exactly and
-    /// throws type_error otherwise.
-    ///
-    /// @{
-    void get(uint64_t& x) const { scalar_.get(x); }
-    void get(amqp_uuid& x) const { scalar_.get(x); }
-    void get(amqp_binary& x) const { scalar_.get(x); }
-    void get(amqp_string& x) const { scalar_.get(x); }
-    /// @}
-
-    /// Return the value as type T.
-    template<class T> T get() const { T x; get(x); return x; }
-
-    /// @cond INTERNAL
-    friend PN_CPP_EXTERN encoder operator<<(encoder, const message_id&);
-    friend PN_CPP_EXTERN decoder operator>>(decoder, message_id&);
-    friend class message;
-    /// @endcond
+    ///@cond INTERNAL
+  friend class message;
+  friend class codec::decoder;
+    ///@endcond
 };
 
-}
-#endif // MESSAGE_ID_HPP
+/// @cond INTERNAL
+/// Base template for get(message_id), specialized for legal message_id types.
+template <class T> T get(const message_id& x);
+/// @endcond
+
+/// Get the uint64_t value or throw conversion_error. @related message_id
+template<> inline uint64_t get<uint64_t>(const message_id& x) { return internal::get<uint64_t>(x); }
+/// Get the @ref uuid value or throw conversion_error. @related message_id
+template<> inline uuid get<uuid>(const message_id& x) { return internal::get<uuid>(x); }
+/// Get the @ref binary value or throw conversion_error. @related message_id
+template<> inline binary get<binary>(const message_id& x) { return internal::get<binary>(x); }
+/// Get the std::string value or throw conversion_error. @related message_id
+template<> inline std::string get<std::string>(const message_id& x) { return internal::get<std::string>(x); }
+
+/// @copydoc scalar::coerce
+/// @related message_id
+template<class T> T coerce(const message_id& x) { return internal::coerce<T>(x); }
+
+} // proton
+
+#endif // PROTON_MESSAGE_ID_HPP

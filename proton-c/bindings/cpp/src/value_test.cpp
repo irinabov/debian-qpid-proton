@@ -17,83 +17,92 @@
  * under the License.
  */
 
-#include "test_bits.hpp"
+#include "scalar_test.hpp"
 
-#include <proton/value.hpp>
-#include <algorithm>
-#include <iostream>
-#include <iterator>
-#include <map>
-#include <sstream>
-#include <vector>
+namespace {
 
 using namespace std;
 using namespace proton;
 using namespace test;
 
-// Inserting and extracting simple C++ values.
-template <class T> void value_test(T x, type_id tid, const std::string& s, T y) {
-    value v(x);
-    ASSERT_EQUAL(tid, v.type());
-    ASSERT_EQUAL(x, v.get<T>());
+// Inserting and extracting arrays from a container T of type U
+template <class T> void sequence_test(type_id tid, const many<typename T::value_type>& values) {
+    T x(values.begin(), values.end());
 
-    value v2;
+    value vx(x);                // construct
+    ASSERT_EQUAL(tid, vx.type());
+    ASSERT_EQUAL(x, get<T>(vx));
+    ASSERT_EQUAL(x, coerce<T>(vx));
+    {
+        T y;
+        get(vx, y);             // Two argument get.
+        ASSERT_EQUAL(x, y);
+    }
+    {
+        T y;
+        coerce(vx, y);          // Two argument coerce.
+        ASSERT_EQUAL(x, y);
+    }
+    value v2;                   // assign
     v2 = x;
     ASSERT_EQUAL(tid, v2.type());
-    ASSERT_EQUAL(x, v2.get<T>());
+    ASSERT_EQUAL(x, get<T>(v2));
+    ASSERT_EQUAL(x, coerce<T>(v2));
+    ASSERT_EQUAL(vx, v2);
 
-    value v3(v);
-    v3 = x;
-    ASSERT_EQUAL(tid, v3.type());
-    ASSERT_EQUAL(x, v3.get<T>());
-
-    ASSERT_EQUAL(v, v2);
-    ASSERT_EQUAL(s, str(v));
-    ASSERT(x != y);
-    ASSERT(x < y);
-    ASSERT(y > x);
+    T y(x);
+    *y.begin() = *(++y.begin()); // Second element is bigger so y is lexicographically bigger than x
+    value vy(y);
+    ASSERT(vx != vy);
+    ASSERT(vx < vy);
+    ASSERT(vy > vx);
 }
 
-// Map values
-void map_test() {
-    std::map<string, int> m;
-    m["a"] = 1;
-    m["b"] = 2;
-    m["c"] = 3;
+template <class T, class U> void map_test(const U& values) {
+    T m(values.begin(), values.end());
     value v(m);
-    ASSERT_EQUAL("{\"a\"=1, \"b\"=2, \"c\"=3}",  str(v));
-    std::map<value, value> mv;
-    v.get(mv);
-    ASSERT_EQUAL(mv[value("a")], value(amqp_int(1)));
-    mv[value("b")] = amqp_binary("xyz");
-    mv.erase(value("c"));
-    v = value(mv);
-    ASSERT_EQUAL("{\"a\"=1, \"b\"=b\"xyz\"}",  str(v));
+    ASSERT_EQUAL(MAP, v.type());
+    T m2(get<T>(v));
+    ASSERT_EQUAL(m.size(), m2.size());
+    ASSERT_EQUAL(m, m2);
+}
 
-    std::vector<std::pair<string, value> > vec;
-    v.get_pairs(vec);
-    ASSERT_EQUAL(2, vec.size());
-    ASSERT_EQUAL(std::make_pair(std::string("a"), value(1)), vec[0]);
-    ASSERT_EQUAL(std::make_pair(std::string("b"), value(amqp_binary("xyz"))), vec[1]);
 }
 
 int main(int, char**) {
     int failed = 0;
-    RUN_TEST(failed, value_test(false, BOOLEAN, "false", true));
-    RUN_TEST(failed, value_test(amqp_ubyte(42), UBYTE, "42", amqp_ubyte(50)));
-    RUN_TEST(failed, value_test(amqp_byte(-42), BYTE, "-42", amqp_byte(-40)));
-    RUN_TEST(failed, value_test(amqp_ushort(4242), USHORT, "4242", amqp_ushort(5252)));
-    RUN_TEST(failed, value_test(amqp_short(-4242), SHORT, "-4242", amqp_short(3)));
-    RUN_TEST(failed, value_test(amqp_uint(4242), UINT, "4242", amqp_uint(5252)));
-    RUN_TEST(failed, value_test(amqp_int(-4242), INT, "-4242", amqp_int(3)));
-    RUN_TEST(failed, value_test(amqp_ulong(4242), ULONG, "4242", amqp_ulong(5252)));
-    RUN_TEST(failed, value_test(amqp_long(-4242), LONG, "-4242", amqp_long(3)));
-    RUN_TEST(failed, value_test(amqp_float(1.234), FLOAT, "1.234", amqp_float(2.345)));
-    RUN_TEST(failed, value_test(amqp_double(11.2233), DOUBLE, "11.2233", amqp_double(12)));
-    RUN_TEST(failed, value_test(amqp_string("aaa"), STRING, "aaa", amqp_string("aaaa")));
-    RUN_TEST(failed, value_test(std::string("xxx"), STRING, "xxx", std::string("yyy")));
-    RUN_TEST(failed, value_test(amqp_symbol("aaa"), SYMBOL, "aaa", amqp_symbol("aaaa")));
-    RUN_TEST(failed, value_test(amqp_binary("aaa"), BINARY, "b\"aaa\"", amqp_binary("aaaa")));
-    RUN_TEST(failed, map_test());
+    scalar_test_group<value>(failed);
+
+    // Sequence tests
+    RUN_TEST(failed, sequence_test<std::list<bool> >(ARRAY, many<bool>() + false + true));
+    RUN_TEST(failed, sequence_test<std::vector<int> >(ARRAY, many<int>() + -1 + 2));
+    RUN_TEST(failed, sequence_test<std::deque<std::string> >(ARRAY, many<std::string>() + "a" + "b"));
+    RUN_TEST(failed, sequence_test<std::deque<symbol> >(ARRAY, many<symbol>() + "a" + "b"));
+    RUN_TEST(failed, sequence_test<std::vector<value> >(LIST, many<value>() + value(0) + value("a")));
+    RUN_TEST(failed, sequence_test<std::vector<scalar> >(LIST, many<scalar>() + scalar(0) + scalar("a")));
+
+    // // Map tests
+    typedef std::pair<std::string, uint64_t> pair;
+    many<pair> pairs;
+    pairs << pair("a", 0) << pair("b", 1) << pair("c", 2);
+
+    RUN_TEST(failed, (map_test<std::map<std::string, uint64_t> >(pairs)));
+    RUN_TEST(failed, (map_test<std::vector<pair> >(pairs)));
+
+    many<std::pair<value,value> > value_pairs(pairs);
+    RUN_TEST(failed, (map_test<std::map<value, value> >(value_pairs)));
+
+    many<std::pair<scalar,scalar> > scalar_pairs(pairs);
+    RUN_TEST(failed, (map_test<std::map<scalar, scalar> >(scalar_pairs)));
+
+    annotation_key ak(pairs[0].first);
+    std::pair<annotation_key, message_id> p(pairs[0]);
+    many<std::pair<annotation_key, message_id> > restricted_pairs(pairs);
+    RUN_TEST(failed, (map_test<std::map<annotation_key, message_id> >(restricted_pairs)));
+
+#if PN_CPP_HAS_CPP11
+    RUN_TEST(failed, sequence_test<std::forward_list<binary> >(ARRAY, many<binary>() + binary("xx") + binary("yy")));
+    RUN_TEST(failed, (map_test<std::unordered_map<std::string, uint64_t> >(pairs)));
+#endif
     return failed;
 }

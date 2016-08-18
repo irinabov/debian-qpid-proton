@@ -2,7 +2,7 @@ Source: qpid-proton
 Section: libs
 Priority: optional
 Maintainer: Debian Middleware Maintainers <pkg-middleware-maintainers@lists.alioth.debian.org>
-Uploaders: Darryl L. Pierce <mcpierce@gmail.com>, Daniel Pocock <daniel@pocock.pro>
+Uploaders: Irina Boverman <iboverma@redhat.com>, Daniel Pocock <daniel@pocock.pro>
 Build-Depends: debhelper (>= 9.0.0~),
                dh-python,
                cmake,
@@ -16,24 +16,12 @@ Build-Depends: debhelper (>= 9.0.0~),
 	       python-epydoc,
 	       python (>=2.6.6-3~),
 	       python-dev (>=2.6.6-3~)
-Standards-Version: 3.9.6
+Standards-Version: 3.9.5
 Homepage: http://qpid.apache.org/proton
 Vcs-Browser: http://git.debian.org/?p=pkg-middleware/qpid-proton.git
 Vcs-Git: git://git.debian.org/git/pkg-middleware/qpid-proton.git
 
-Package: qpid-proton-dump
-Architecture: any
-Depends: libqpid-proton6 (>= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
-Description: Qpid Proton messaging tools
- Qpid Proton is a high-performance, lightweight messaging library. It can be
- used in the widest range of messaging applications, including brokers, client
- libraries, routers, bridges, proxies, and more. Proton makes it trivial to
- integrate with the AMQP 1.0 ecosystem from any platform, environment, or
- language.
- .
- This package provides the Qpid Proton dump tool.
-
-Package: libqpid-proton6
+Package: libqpid-proton7
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Pre-Depends: ${misc:Pre-Depends}
@@ -47,13 +35,13 @@ Description: C libraries for Qpid Proton
  .
  This package provides the shared libraries for Qpid Proton.
 
-Package: libqpid-proton6-dev
+Package: libqpid-proton7-dev
 Provides: libqpid-proton-dev
 Replaces: libqpid-proton-dev
 Conflicts: libqpid-proton-dev
 Architecture: any
 Section: libdevel
-Depends: libqpid-proton6 (= ${binary:Version}), ${misc:Depends}
+Depends: libqpid-proton7 (= ${binary:Version}), ${misc:Depends}
 Multi-Arch: same
 Description: Development libraries for writing messaging apps with Qpid Proton
  Qpid Proton is a high-performance, lightweight messaging library. It can be
@@ -64,13 +52,13 @@ Description: Development libraries for writing messaging apps with Qpid Proton
  .
  This package provides the C development libraries for Qpid Proton.
 
-Package: libqpid-proton6-dev-examples
+Package: libqpid-proton7-dev-examples
 Provides: libqpid-proton-dev-examples
 Replaces: libqpid-proton-dev-examples
 Conflicts: libqpid-proton-dev-examples
 Architecture: all
 Section: libdevel
-Depends: libqpid-proton6-dev (>= ${binary:Version}), ${misc:Depends}
+Depends: libqpid-proton7-dev (>= ${binary:Version}), ${misc:Depends}
 Description: Example applications for writign messaging apps with Qpid Proton
  Qpid Proton is a high-performance, lightweight messaging library. It can be
  used in the widest range of messaging applications, including brokers, client
@@ -80,7 +68,7 @@ Description: Example applications for writign messaging apps with Qpid Proton
  .
  This package provides C language examples for Qpid Proton.
 
-Package: libqpid-proton6-dev-doc
+Package: libqpid-proton7-dev-doc
 Provides: libqpid-proton-dev-doc
 Replaces: libqpid-proton-dev-doc
 Conflicts: libqpid-proton-dev-doc
@@ -99,7 +87,7 @@ Description: Developer documentation for Qpid Proton
 Package: python-qpid-proton
 Architecture: any
 Section: python
-Depends: libqpid-proton6,
+Depends: libqpid-proton7,
          ${python:Depends5H},
          python (>= 2.6),
          ${shlibs:Depends}, ${misc:Depends}

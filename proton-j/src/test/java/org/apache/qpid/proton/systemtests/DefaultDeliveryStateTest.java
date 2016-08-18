@@ -19,14 +19,14 @@
 package org.apache.qpid.proton.systemtests;
 
 import static java.util.EnumSet.of;
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertFalse;
-import static junit.framework.Assert.assertTrue;
 import static org.apache.qpid.proton.engine.EndpointState.ACTIVE;
 import static org.apache.qpid.proton.engine.EndpointState.CLOSED;
 import static org.apache.qpid.proton.engine.EndpointState.UNINITIALIZED;
 import static org.apache.qpid.proton.systemtests.TestLoggingHelper.bold;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -45,7 +45,6 @@ import org.apache.qpid.proton.engine.Delivery;
 import org.apache.qpid.proton.engine.Sender;
 import org.apache.qpid.proton.message.Message;
 import org.junit.Test;
-
 
 public class DefaultDeliveryStateTest extends EngineTestBase
 {
@@ -74,15 +73,11 @@ public class DefaultDeliveryStateTest extends EngineTestBase
         getServer().connection = Proton.connection();
         getServer().transport.bind(getServer().connection);
 
-
-
         LOGGER.fine(bold("======== About to open connections"));
         getClient().connection.open();
         getServer().connection.open();
 
         doOutputInputCycle();
-
-
 
         LOGGER.fine(bold("======== About to open sessions"));
         getClient().session = getClient().connection.session();
@@ -98,7 +93,6 @@ public class DefaultDeliveryStateTest extends EngineTestBase
 
         pumpServerToClient();
         assertEndpointState(getClient().session, ACTIVE, ACTIVE);
-
 
         LOGGER.fine(bold("======== About to create reciever"));
 
@@ -121,7 +115,6 @@ public class DefaultDeliveryStateTest extends EngineTestBase
         assertEndpointState(getClient().receiver, ACTIVE, UNINITIALIZED);
 
         pumpClientToServer();
-
 
         LOGGER.fine(bold("======== About to set up implicitly created sender"));
 

@@ -20,44 +20,58 @@
 find_package(ProtonCpp REQUIRED)
 
 include_directories(${ProtonCpp_INCLUDE_DIRS})
+link_libraries(${ProtonCpp_LIBRARIES})
+add_definitions(${CXX_WARNING_FLAGS})
 
-set(examples
-  broker
-  helloworld
-  helloworld_direct
-  simple_recv
-  simple_send
-  direct_recv
-  direct_send
-  client
-  server
-  server_direct
-  recurring_timer
-  connection_options
-  queue_browser
-  selected_recv
-  ssl
-  ssl_client_cert
-  encode_decode)
-
-foreach(example ${examples})
+# Single-threaded examples.
+foreach(example
+    broker
+    helloworld
+    helloworld_direct
+    simple_recv
+    simple_send
+    direct_recv
+    direct_send
+    client
+    server
+    server_direct
+    connection_options
+    queue_browser
+    selected_recv
+    flow_control
+    ssl
+    ssl_client_cert
+    encode_decode)
   add_executable(${example} ${example}.cpp)
-  target_link_libraries(${example} ${ProtonCpp_LIBRARIES})
-  set_source_files_properties(${example}.cpp PROPERTIES COMPILE_FLAGS "${CXX_WARNING_FLAGS}")
 endforeach()
 
-set(env_py "${CMAKE_SOURCE_DIR}/proton-c/env.py")
-set(test_bin_dir "$<TARGET_FILE_DIR:broker>")
-if (WIN32)
-  # Ignore existing path (usualy containting spaces, escape chars).
-  # Choose just enough path for Windows, ';' separated.
-  set(test_path "${test_bin_dir}" "$<TARGET_FILE_DIR:qpid-proton>" "$<TARGET_FILE_DIR:qpid-proton-cpp>")
-else(WIN32)
-  # ':' separated path with test_bin_dir first.
-  set(test_path "${test_bin_dir}:$ENV{PATH}")
-endif(WIN32)
+# Python test runner
+set(env_py ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/proton-c/env.py)
 
-add_test(NAME cpp_example_test
-  COMMAND ${PYTHON_EXECUTABLE} ${env_py} -- "PATH=${test_path}" ${VALGRIND_ENV} ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v)
+function(set_test_path dir)
+  if (WIN32)
+    set(test_path "${dir}" "$<TARGET_FILE_DIR:qpid-proton>" "$<TARGET_FILE_DIR:qpid-proton-cpp>" PARENT_SCOPE)
+  else(WIN32)
+    set(test_path "${dir}:$ENV{PATH}" PARENT_SCOPE)
+  endif(WIN32)
+endfunction()
 
-add_subdirectory(engine)
+set_test_path("$<TARGET_FILE_DIR:broker>")
+
+add_test(NAME cpp_container_example_test
+  COMMAND ${env_py} -- "PATH=${test_path}" ${VALGRIND_ENV} ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v ContainerExampleTest)
+
+# TODO aconway 2016-04-26: need portable MT and IO examples.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAS_CPP11)
+  set(container_src mt/epoll_container.cpp)
+  foreach(example broker)       # More coming
+    add_executable(mt_${example} mt/${example}.cpp ${container_src})
+    target_link_libraries(mt_${example} pthread)
+  endforeach()
+
+  add_test(NAME cpp_mt_example_test
+    COMMAND ${env_py} -- "PATH=${test_path}" ${VALGRIND_ENV} ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v MtBrokerTest)
+endif()
+
+
+

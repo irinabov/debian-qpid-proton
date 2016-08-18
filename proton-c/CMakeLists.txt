@@ -23,31 +23,12 @@ include(CheckSymbolExists)
 
 include(soversion.cmake)
 
-if(WIN32 AND NOT CYGWIN)
-  # linking against Windows native libraries, including mingw
-  set (PN_WINAPI TRUE)
-  set (PLATFORM_LIBS ws2_32 Rpcrt4)
-  list(APPEND PLATFORM_DEFINITIONS "PN_WINAPI")
-endif(WIN32 AND NOT CYGWIN)
-
-# Can't use ${CMAKE_VERSION) as it is not available in all versions of cmake 2.6
-if ("${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}.${CMAKE_PATCH_VERSION}" VERSION_LESS "2.8.0")
-  # OPTIONAL does not exist in install before 2.8 so always make docs and install
-  set (OPTIONAL_ARG "")
-  add_custom_target(docs ALL)
-  # There are bugs in the OpenSSL detection that mean -lcrypto is missed from the link line
-  # so turn off unknown symbol warnings
-  set (NOENABLE_UNDEFINED_ERROR ON)
-  set (OLD_ADD_TEST_COMMAND ON)
-else()
-  set (OPTIONAL_ARG OPTIONAL)
-  add_custom_target(docs)
-endif()
+add_custom_target(docs)
 add_custom_target(doc DEPENDS docs)
 
 # Set the default SSL/TLS implementation
 find_package(OpenSSL)
-find_package (PythonInterp REQUIRED)
+find_package(PythonInterp REQUIRED)
 find_package(SWIG)
 # FindSwig.cmake "forgets" make its outputs advanced like a good citizen
 mark_as_advanced(SWIG_DIR SWIG_EXECUTABLE SWIG_VERSION)
@@ -61,6 +42,11 @@ mark_as_advanced(CYRUS_SASL_LIBRARY CYRUS_SASL_INCLUDE_DIR)
 # Find saslpasswd2 executable to generate test config
 find_program(SASLPASSWD_EXE saslpasswd2 DOC "Program used to make SASL user db for testing")
 mark_as_advanced(SASLPASSWD_EXE)
+
+if(WIN32 AND NOT CYGWIN)
+  # linking against Windows native libraries, including mingw
+  set (PN_WINAPI TRUE)
+endif(WIN32 AND NOT CYGWIN)
 
 set(ssl_impl, none)
 if(PN_WINAPI)
@@ -80,7 +66,7 @@ if (CYRUSSASL_FOUND)
 else ()
   set (sasl_impl none)
 endif ()
-set(SASL_IMPL ${sasl_impl} CACHE STRING "Library to use for SSL/TLS support. Valid values: ${sasl_providers}")
+set(SASL_IMPL ${sasl_impl} CACHE STRING "Library to use for SASL support. Valid values: ${sasl_providers}")
 
 configure_file (
   "${CMAKE_CURRENT_SOURCE_DIR}/include/proton/version.h.in"
@@ -91,10 +77,6 @@ include_directories ("${CMAKE_CURRENT_BINARY_DIR}/src")
 include_directories ("${CMAKE_CURRENT_BINARY_DIR}/include")
 include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/src")
 include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/include")
-
-# TODO: This is only needed because the proton executable can use getopt on windows
-# if/when this executable gets sorted out remove
-include_directories ("${CMAKE_SOURCE_DIR}/examples/c/include")
 
 set (env_py ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/env.py)
 
@@ -123,7 +105,7 @@ endif(PN_WINAPI)
 if (SASL_IMPL STREQUAL cyrus)
   set(pn_sasl_impl src/sasl/sasl.c src/sasl/cyrus_sasl.c)
   include_directories (${CYRUS_SASL_INCLUDE_DIR})
-  set(SASL_LIB ${CYRUS_SASL_LIBRARY})
+  set(SASL_LIB ${CYRUS_SASL_LIBRARY} -lpthread)
 elseif (SASL_IMPL STREQUAL none)
   set(pn_sasl_impl src/sasl/sasl.c src/sasl/none_sasl.c)
 endif ()
@@ -188,6 +170,11 @@ else (C99_ATOLL)
   endif (WINAPI_ATOI64)
 endif (C99_ATOLL)
 
+if (PN_WINAPI)
+  set (PLATFORM_LIBS ws2_32 Rpcrt4)
+  list(APPEND PLATFORM_DEFINITIONS "PN_WINAPI")
+endif (PN_WINAPI)
+
 # Try to keep any platform specific overrides together here:
 
 # MacOS has a bunch of differences in build tools and process and so we have to turn some things
@@ -198,19 +185,24 @@ if (APPLE)
   set (NOENABLE_UNDEFINED_ERROR ON)
 endif (APPLE)
 
+# Make LTO default to off until we can figure out the valgrind issues
+set (NOENABLE_LINKTIME_OPTIMIZATION ON)
+
 # Add options here called <whatever> they will turn into "ENABLE_<whatever" and can be
 # overridden on a platform specific basis above by NOENABLE_<whatever>
-set (OPTIONS WARNING_ERROR UNDEFINED_ERROR)
+set (OPTIONS WARNING_ERROR UNDEFINED_ERROR LINKTIME_OPTIMIZATION HIDE_UNEXPORTED_SYMBOLS)
 
 foreach (OPTION ${OPTIONS})
-  if (NOT "NOENABLE_${OPTION}")
+  if (NOT NOENABLE_${OPTION})
     set ("DEFAULT_${OPTION}" ON)
-  endif (NOT "NOENABLE_${OPTION}")
+  endif ()
 endforeach (OPTION)
 
 # And add the option here too with help text
 option(ENABLE_WARNING_ERROR "Consider compiler warnings to be errors" ${DEFAULT_WARNING_ERROR})
 option(ENABLE_UNDEFINED_ERROR "Check for unresolved library symbols" ${DEFAULT_UNDEFINED_ERROR})
+option(ENABLE_LINKTIME_OPTIMIZATION "Perform link time optimization" ${DEFAULT_LINKTIME_OPTIMIZATION})
+option(ENABLE_HIDE_UNEXPORTED_SYMBOLS "Only export library symbols that are explicitly requested" ${DEFAULT_HIDE_UNEXPORTED_SYMBOLS})
 
 # Set any additional compiler specific flags
 if (CMAKE_COMPILER_IS_GNUCC)
@@ -241,6 +233,15 @@ if (CMAKE_COMPILER_IS_GNUCC)
     set (CATCH_UNDEFINED "-Wl,--no-undefined")
     set (ALLOW_UNDEFINED "-Wl,--allow-shlib-undefined")
   endif (ENABLE_UNDEFINED_ERROR)
+
+  if (ENABLE_LINKTIME_OPTIMIZATION)
+    set (LTO "-flto")
+  endif (ENABLE_LINKTIME_OPTIMIZATION)
+
+  if (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
+  endif (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
 endif (CMAKE_COMPILER_IS_GNUCC)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -251,6 +252,10 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # some of these warnings.
   set (CXX_WARNING_FLAGS "${WERROR} -pedantic -Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-float-equal -Wno-padded -Wno-sign-conversion -Wno-switch-enum -Wno-weak-vtables -Wno-exit-time-destructors -Wno-global-constructors -Wno-shorten-64-to-32 -Wno-documentation -Wno-documentation-unknown-command -Wno-old-style-cast -Wno-missing-noreturn")
 endif()
+
+# Make CXX_WARNING_FLAGS visible to examples.
+set(CXX_WARNING_FLAGS "${CXX_WARNING_FLAGS}" PARENT_SCOPE)
+
 
 if (MSVC)
     set(CMAKE_DEBUG_POSTFIX "d")
@@ -280,7 +285,6 @@ pn_absolute_install_dir(INCLUDEDIR ${INCLUDE_INSTALL_DIR} ${CMAKE_INSTALL_PREFIX
 
 add_subdirectory(bindings)
 add_subdirectory(docs/api)
-add_subdirectory(docs/man)
 add_subdirectory(../tests/tools/apps/c ../tests/tools/apps/c)
 
 set (qpid-proton-platform
@@ -336,9 +340,9 @@ set (qpid-proton-core
   src/messenger/store.c
   src/messenger/transform.c
   src/selectable.c
+  )
 
-  src/config.h
-
+set (qpid-proton-extra-deps
   ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
   ${CMAKE_CURRENT_BINARY_DIR}/src/protocol.h
   )
@@ -381,15 +385,22 @@ source_group("API Header Files" FILES ${qpid-proton-include})
 set_source_files_properties (
   ${qpid-proton-core}
   PROPERTIES
-  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS}"
+  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS} ${LTO}"
   )
 
 set_source_files_properties (
   ${qpid-proton-platform}
   PROPERTIES
-  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_PLATFORM_FLAGS}"
+  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_PLATFORM_FLAGS} ${LTO}"
   COMPILE_DEFINITIONS "${PLATFORM_DEFINITIONS}"
   )
+
+if (BUILD_WITH_CXX)
+  set_source_files_properties (
+    ${qpid-proton-core} ${qpid-proton-platform}
+    PROPERTIES LANGUAGE CXX
+    )
+endif (BUILD_WITH_CXX)
 
 add_library (
   qpid-proton SHARED
@@ -397,6 +408,7 @@ add_library (
   ${qpid-proton-core}
   ${qpid-proton-platform}
   ${qpid-proton-include}
+  ${qpid-proton-extra-deps}
   )
 
 target_link_libraries (qpid-proton ${UUID_LIB} ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS})
@@ -406,7 +418,7 @@ set_target_properties (
   PROPERTIES
   VERSION   "${PN_LIB_SOMAJOR}.${PN_LIB_SOMINOR}"
   SOVERSION "${PN_LIB_SOMAJOR}"
-  LINK_FLAGS "${CATCH_UNDEFINED}"
+  LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
   )
 
 if (MSVC)
@@ -414,33 +426,7 @@ if (MSVC)
   include(WindowsC99CheckDef)
 endif(MSVC)
 
-add_executable (proton-dump src/proton-dump.c)
-target_link_libraries (proton-dump qpid-proton)
-
-set_target_properties (
-  proton-dump
-  PROPERTIES
-  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_PLATFORM_FLAGS}"
-  )
-
-macro(pn_c_files)
-  foreach (src_file ${ARGN})
-    if (${src_file} MATCHES "^.*[.]c$")
-      if (BUILD_WITH_CXX)
-        # tell CMake to use C++ for proton source files ending in ".c"
-        set_source_files_properties (${src_file} PROPERTIES LANGUAGE CXX)
-      endif (BUILD_WITH_CXX)
-    endif (${src_file} MATCHES "^.*[.]c$")
-  endforeach (src_file)
-endmacro(pn_c_files)
-
-pn_c_files (${qpid-proton-core} ${qpid-proton-platform} src/proton-dump.c)
-
 # Install executables and libraries
-install (TARGETS proton-dump
-  RUNTIME DESTINATION bin
-  ARCHIVE DESTINATION ${LIB_INSTALL_DIR}
-  LIBRARY DESTINATION ${LIB_INSTALL_DIR})
 install (TARGETS qpid-proton
   EXPORT  proton
   RUNTIME DESTINATION bin
@@ -449,13 +435,9 @@ install (TARGETS qpid-proton
 
 # Install windows qpid-proton pdb files
 if (MSVC)
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/Debug/qpid-proton${CMAKE_DEBUG_POSTFIX}.pdb
+  install(FILES $<TARGET_PDB_FILE:qpid-proton>
     DESTINATION bin
-    CONFIGURATIONS Debug
-    OPTIONAL)
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/RelWithDebInfo/qpid-proton.pdb
-    DESTINATION bin
-    CONFIGURATIONS RelWithDebInfo
+    CONFIGURATIONS RelWithDebInfo Debug
     OPTIONAL)
 endif (MSVC)
 
@@ -481,12 +463,15 @@ set(PROTONLIB ${CMAKE_SHARED_LIBRARY_PREFIX}qpid-proton${CMAKE_SHARED_LIBRARY_SU
 set(PROTONLIBDEBUG ${CMAKE_SHARED_LIBRARY_PREFIX}qpid-proton${CMAKE_DEBUG_POSTFIX}${CMAKE_SHARED_LIBRARY_SUFFIX})
 endif ()
 
+include(WriteBasicConfigVersionFile)
+
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ProtonConfig.cmake.in
   ${CMAKE_CURRENT_BINARY_DIR}/ProtonConfig.cmake @ONLY)
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/ProtonConfigVersion.cmake.in
-  ${CMAKE_CURRENT_BINARY_DIR}/ProtonConfigVersion.cmake @ONLY)
+write_basic_config_version_file(
+  ${CMAKE_CURRENT_BINARY_DIR}/ProtonConfigVersion.cmake
+  VERSION ${PN_VERSION}
+  COMPATIBILITY AnyNewerVersion)
 install (FILES
   ${CMAKE_CURRENT_BINARY_DIR}/ProtonConfig.cmake
   ${CMAKE_CURRENT_BINARY_DIR}/ProtonConfigVersion.cmake
@@ -524,28 +509,15 @@ if (BUILD_PYTHON)
   set (py_pythonpath ${py_root} ${py_src} ${py_bin} ${py_dll} $ENV{PYTHONPATH})
   to_native_path ("${py_pythonpath}" py_pythonpath)
 
-  if (NOT OLD_ADD_TEST_COMMAND)
-    to_native_path ("${py_path}" py_path)
-    add_test (NAME python-test
-              COMMAND ${env_py}
-                "PATH=${py_path}" "PYTHONPATH=${py_pythonpath}" "PKG_CONFIG_PATH=${pn_c_root}"
-                "CLASSPATH=${CMAKE_BINARY_DIR}/proton-j/proton-j.jar"
-                "SASLPASSWD=${SASLPASSWD_EXE}"
-                ${VALGRIND_ENV}
-                ${PYTHON_EXECUTABLE} "${py_root}/proton-test")
-    set_tests_properties(python-test PROPERTIES PASS_REGULAR_EXPRESSION "Totals: .* 0 failed")
-  else (NOT OLD_ADD_TEST_COMMAND)
-    list (APPEND py_path "${Proton_BINARY_DIR}/tests/tools/apps/c")
-    to_native_path ("${py_path}" py_path)
-    add_test (python-test
-                ${env_py}
-                "PATH=${py_path}" "PYTHONPATH=${py_pythonpath}" "PKG_CONFIG_PATH=${pn_c_root}"
-                "CLASSPATH=${CMAKE_BINARY_DIR}/proton-j/proton-j.jar"
-                "SASLPASSWD=${SASLPASSWD_EXE}"
-                ${VALGRIND_ENV}
-                ${PYTHON_EXECUTABLE} "${py_root}/proton-test")
-    set_tests_properties(python-test PROPERTIES PASS_REGULAR_EXPRESSION "Totals: .* 0 failed")
-  endif (NOT OLD_ADD_TEST_COMMAND)
+  to_native_path ("${py_path}" py_path)
+  add_test (NAME python-test
+            COMMAND ${env_py}
+              "PATH=${py_path}" "PYTHONPATH=${py_pythonpath}" "PKG_CONFIG_PATH=${pn_c_root}"
+              "CLASSPATH=${CMAKE_BINARY_DIR}/proton-j/proton-j.jar"
+              "SASLPASSWD=${SASLPASSWD_EXE}"
+              ${VALGRIND_ENV}
+              ${PYTHON_EXECUTABLE} "${py_root}/proton-test")
+  set_tests_properties(python-test PROPERTIES PASS_REGULAR_EXPRESSION "Totals: .* 0 failed")
 
   # Eventually, we'll get rid of this check when other
   # platforms will be supported. Since `setup.py` will skip

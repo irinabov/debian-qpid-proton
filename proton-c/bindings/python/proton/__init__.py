@@ -33,7 +33,7 @@ from __future__ import absolute_import
 
 from cproton import *
 from .wrapper import Wrapper
-from . import _compat
+from proton import _compat
 
 import weakref, socket, sys, threading
 
@@ -2214,7 +2214,6 @@ class Data:
     byte: put_byte,
     short: put_short,
     int32: put_int,
-    int: put_long,
     long: put_long,
     float32: put_float,
     float: put_double,
@@ -2497,7 +2496,14 @@ class Connection(Wrapper, Endpoint):
   def _set_hostname(self, name):
     return pn_connection_set_hostname(self._impl, unicode2utf8(name))
 
-  hostname = property(_get_hostname, _set_hostname)
+  hostname = property(_get_hostname, _set_hostname,
+                      doc="""
+Set the name of the host (either fully qualified or relative) to which this
+connection is connecting to.  This information may be used by the remote
+peer to determine the correct back-end service to connect the client to.
+This value will be sent in the Open performative, and will be used by SSL
+and SASL layers to identify the peer.
+""")
 
   def _get_user(self):
     return utf82unicode(pn_connection_get_user(self._impl))
