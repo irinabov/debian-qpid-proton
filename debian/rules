@@ -45,6 +45,7 @@ override_dh_auto_install:
 	mkdir -p debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)
 	# mv debian/tmp/usr/lib/lib*.so* debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)
 	mv debian/tmp/usr/share/proton-0.13.1 debian/tmp/usr/share/proton
+	chmod +x debian/tmp/usr/share/proton/examples/java/reactor/run
 	chmod +x debian/tmp/usr/share/proton/examples/engine/java/spout
 	chmod +x debian/tmp/usr/share/proton/examples/engine/java/drain
 	chmod +x debian/tmp/usr/share/proton/examples/engine/java/server
