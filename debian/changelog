@@ -1,4 +1,4 @@
-qpid-proton (0.13.1-1trusty+qpid1) trusty; urgency=medium
+qpid-proton (0.13.1-2trusty+qpid1) trusty; urgency=medium
 
   * Rebased on Proton 0.13.1
 
