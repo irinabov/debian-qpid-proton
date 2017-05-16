@@ -20,19 +20,16 @@
  * under the License.
  */
 
-#include "./internal/scalar_base.hpp"
+#include "./scalar_base.hpp"
+
+#include <proton/type_compat.h>
 
 namespace proton {
-
-namespace codec {
-class decoder;
-class encoder;
-}
 
 /// A holder for an instance of any scalar AMQP type.
 ///
 /// @see @ref types_page
-class scalar : public internal::scalar_base {
+class scalar : public scalar_base {
   public:
     /// Create an empty scalar.
     PN_CPP_EXTERN scalar() {}
@@ -42,9 +39,6 @@ class scalar : public internal::scalar_base {
 
     /// Assign from any scalar type.
     template <class T> scalar& operator=(const T& x) { put(x); return *this; }
-
-    /// True if type() == NULL_TYPE.
-    bool empty() const { return type() == NULL_TYPE; }
 
     /// Clear the scalar, making it empty().
     void clear() { *this = null(); }

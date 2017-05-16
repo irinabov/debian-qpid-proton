@@ -19,22 +19,23 @@
  *
  */
 
+#include "io.h"
+#include "reactor.h"
+#include "selectable.h"
+#include "platform/platform.h" // pn_i_now
+
 #include <proton/object.h>
 #include <proton/handlers.h>
-#include <proton/io.h>
 #include <proton/event.h>
 #include <proton/transport.h>
 #include <proton/connection.h>
 #include <proton/session.h>
 #include <proton/link.h>
 #include <proton/delivery.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-
-#include "reactor.h"
-#include "selectable.h"
-#include "platform.h"
 
 struct pn_reactor_t {
   pn_record_t *attachments;
@@ -51,6 +52,7 @@ struct pn_reactor_t {
   int selectables;
   int timeout;
   bool yield;
+  bool stop;
 };
 
 pn_timestamp_t pn_reactor_mark(pn_reactor_t *reactor) {
@@ -79,6 +81,7 @@ static void pn_reactor_initialize(pn_reactor_t *reactor) {
   reactor->selectables = 0;
   reactor->timeout = 0;
   reactor->yield = false;
+  reactor->stop = false;
   pn_reactor_mark(reactor);
 }
 
@@ -162,9 +165,14 @@ void pn_reactor_set_handler(pn_reactor_t *reactor, pn_handler_t *handler) {
   pn_incref(reactor->handler);
 }
 
-pn_io_t *pn_reactor_io(pn_reactor_t *reactor) {
+pn_io_t *pni_reactor_io(pn_reactor_t *reactor) {
   assert(reactor);
   return reactor->io;
+}
+
+pn_error_t *pn_reactor_error(pn_reactor_t *reactor) {
+  assert(reactor);
+  return pn_io_error(reactor->io);
 }
 
 pn_collector_t *pn_reactor_collector(pn_reactor_t *reactor) {
@@ -382,6 +390,16 @@ bool pn_reactor_quiesced(pn_reactor_t *reactor) {
   return pn_event_type(event) == PN_REACTOR_QUIESCED;
 }
 
+pn_handler_t *pn_event_root(pn_event_t *event)
+{
+  pn_handler_t *h = pn_record_get_handler(pn_event_attachments(event));
+  return h;
+}
+
+static void pni_event_set_root(pn_event_t *event, pn_handler_t *handler) {
+  pn_record_set_handler(pn_event_attachments(event), handler);
+}
+
 bool pn_reactor_process(pn_reactor_t *reactor) {
   assert(reactor);
   pn_reactor_mark(reactor);
@@ -406,14 +424,22 @@ bool pn_reactor_process(pn_reactor_t *reactor) {
       previous = reactor->previous = type;
       pn_decref(event);
       pn_collector_pop(reactor->collector);
-    } else if (pni_reactor_more(reactor)) {
+    } else if (!reactor->stop && pni_reactor_more(reactor)) {
       if (previous != PN_REACTOR_QUIESCED && reactor->previous != PN_REACTOR_FINAL) {
         pn_collector_put(reactor->collector, PN_OBJECT, reactor, PN_REACTOR_QUIESCED);
       } else {
         return true;
       }
     } else {
-      return false;
+      if (reactor->selectable) {
+        pn_selectable_terminate(reactor->selectable);
+        pn_reactor_update(reactor, reactor->selectable);
+        reactor->selectable = NULL;
+      } else {
+        if (reactor->previous != PN_REACTOR_FINAL)
+          pn_collector_put(reactor->collector, PN_OBJECT, reactor, PN_REACTOR_FINAL);
+        return false;
+      }
     }
   }
 }
@@ -458,19 +484,11 @@ void pn_reactor_start(pn_reactor_t *reactor) {
   assert(reactor);
   pn_collector_put(reactor->collector, PN_OBJECT, reactor, PN_REACTOR_INIT);
   reactor->selectable = pni_timer_selectable(reactor);
- }
+}
 
 void pn_reactor_stop(pn_reactor_t *reactor) {
   assert(reactor);
-  if (reactor->selectable) {
-    pn_selectable_terminate(reactor->selectable);
-    pn_reactor_update(reactor, reactor->selectable);
-    reactor->selectable = NULL;
-  }
-  pn_collector_put(reactor->collector, PN_OBJECT, reactor, PN_REACTOR_FINAL);
-  // XXX: should consider removing this from stop to avoid reentrance
-  pn_reactor_process(reactor);
-  pn_collector_release(reactor->collector);
+  reactor->stop = true;
 }
 
 void pn_reactor_run(pn_reactor_t *reactor) {
@@ -478,5 +496,6 @@ void pn_reactor_run(pn_reactor_t *reactor) {
   pn_reactor_set_timeout(reactor, 3141);
   pn_reactor_start(reactor);
   while (pn_reactor_process(reactor)) {}
-  pn_reactor_stop(reactor);
+  pn_reactor_process(reactor);
+  pn_collector_release(reactor->collector);
 }

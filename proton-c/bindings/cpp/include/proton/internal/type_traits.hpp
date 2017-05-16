@@ -22,14 +22,18 @@
  *
  */
 
-/// Type traits for mapping between AMQP and C++ types.
-///
-/// Also provides workarounds for missing type_traits classes on older
-/// C++ compilers.
+// Type traits for mapping between AMQP and C++ types.
+//
+// Also provides workarounds for missing type_traits classes on older
+// C++ compilers.
 
 #include "./config.hpp"
 #include "../types_fwd.hpp"
 #include "../type_id.hpp"
+
+#include <proton/type_compat.h>
+
+#include <limits>
 
 namespace proton {
 namespace internal {
@@ -47,7 +51,7 @@ template <class T> struct is_integral : public false_type {};
 template <class T> struct is_signed : public false_type {};
 
 template <> struct is_integral<char> : public true_type {};
-template <> struct is_signed<char> : public false_type {};
+template <> struct is_signed<char> { static const bool value = std::numeric_limits<char>::is_signed; };
 
 template <> struct is_integral<unsigned char> : public true_type {};
 template <> struct is_integral<unsigned short> : public true_type {};
@@ -152,7 +156,9 @@ struct known_integer : public integer_type<sizeof(T), is_signed<T>::value> {};
 struct sfinae {
     typedef char yes;
     typedef double no;
-    struct wildcard { wildcard(...); };
+    struct any_t {
+        template < typename T > any_t(T const&);
+    };
 };
 
 template <class From, class To> struct is_convertible : public sfinae {

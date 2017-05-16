@@ -22,26 +22,29 @@
  *
  */
 
-#include "./data.hpp"
+#include "../internal/data.hpp"
 #include "../internal/type_traits.hpp"
 #include "../types_fwd.hpp"
+#include "./common.hpp"
+
+#include <proton/type_compat.h>
 
 namespace proton {
+class scalar_base;
 
 namespace internal{
-class scalar_base;
 class value_base;
 }
 
 namespace codec {
 
-/// **Experimental** - Stream-like encoder from AMQP bytes to C++
-/// values.
+/// **Experimental** - Stream-like encoder from C++ values to AMQP
+/// bytes.
 ///
 /// For internal use only.
 ///
 /// @see @ref types_page for the recommended ways to manage AMQP data
-class encoder : public data {
+class encoder : public internal::data {
   public:
     /// Wrap Proton-C data object.
     explicit encoder(const data& d) : data(d) {}
@@ -89,7 +92,7 @@ class encoder : public data {
     PN_CPP_EXTERN encoder& operator<<(const std::string&);
     PN_CPP_EXTERN encoder& operator<<(const symbol&);
     PN_CPP_EXTERN encoder& operator<<(const binary&);
-    PN_CPP_EXTERN encoder& operator<<(const internal::scalar_base&);
+    PN_CPP_EXTERN encoder& operator<<(const scalar_base&);
     PN_CPP_EXTERN encoder& operator<<(const null&);
     /// @}
 
@@ -126,7 +129,7 @@ class encoder : public data {
     }
 
     template <class T> encoder& operator<<(const map_cref<T>& x) {
-        state_guard sg(*this);
+        internal::state_guard sg(*this);
         *this << start::map();
         for (typename T::const_iterator i = x.ref.begin(); i != x.ref.end(); ++i)
             *this << i->first << i->second;
@@ -135,7 +138,7 @@ class encoder : public data {
     }
 
     template <class T> encoder& operator<<(const list_cref<T>& x) {
-        state_guard sg(*this);
+        internal::state_guard sg(*this);
         *this << start::list();
         for (typename T::const_iterator i = x.ref.begin(); i != x.ref.end(); ++i)
             *this << *i;
@@ -144,7 +147,7 @@ class encoder : public data {
     }
 
     template <class T> encoder& operator<<(const array_cref<T>& x) {
-        state_guard sg(*this);
+        internal::state_guard sg(*this);
         *this << x.array_start;
         for (typename T::const_iterator i = x.ref.begin(); i != x.ref.end(); ++i)
             *this << *i;
@@ -169,19 +172,19 @@ operator<<(encoder& e, T i)  {
 }
 
 /// @cond INTERNAL
-    
-namespace is_encodable_impl {   // Protected the world from wildcard operator<<
+
+namespace is_encodable_impl {   // Protect the world from fallback operator<<
 
 using namespace internal;
 
-sfinae::no operator<<(sfinae::wildcard, sfinae::wildcard); // Fallback
+sfinae::no operator<<(encoder const&, const sfinae::any_t &); // Fallback
 
 template<typename T> struct is_encodable : public sfinae {
-    static yes test(encoder);
+    static yes test(encoder&);
     static no test(...);         // Failed test, no match.
-    static encoder &e;
-    static const T& t;
-    static bool const value = sizeof(test(e << t)) == sizeof(yes);
+    static encoder* e;
+    static const T* t;
+    static bool const value = sizeof(test(*e << *t)) == sizeof(yes);
 };
 
 // Avoid recursion

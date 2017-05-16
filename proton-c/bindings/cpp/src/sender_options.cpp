@@ -41,14 +41,6 @@ template <class T> struct option {
 };
 
 class sender_options::impl {
-    static void set_handler(sender l, proton_handler &h) {
-        pn_record_t *record = pn_link_attachments(unwrap(l));
-        // FIXME aconway 2016-05-04: container_impl specific, fix for engine.
-        internal::pn_ptr<pn_handler_t> chandler =
-            static_cast<container_impl&>(l.connection().container()).cpp_handler(&h);
-        pn_record_set_handler(record, chandler.get());
-    }
-
     static link_context& get_context(sender l) {
         return link_context::get(unwrap(l));
     }
@@ -68,7 +60,7 @@ class sender_options::impl {
     }
 
   public:
-    option<proton_handler*> handler;
+    option<messaging_handler*> handler;
     option<proton::delivery_mode> delivery_mode;
     option<bool> auto_settle;
     option<source_options> source;
@@ -77,7 +69,7 @@ class sender_options::impl {
     void apply(sender& s) {
         if (s.uninitialized()) {
             if (delivery_mode.set) set_delivery_mode(s, delivery_mode.value);
-            if (handler.set && handler.value) set_handler(s, *handler.value);
+            if (handler.set && handler.value) container::impl::set_handler(s, handler.value);
             if (auto_settle.set) get_context(s).auto_settle = auto_settle.value;
             if (source.set) {
                 proton::source local_s(make_wrapper<proton::source>(pn_link_source(unwrap(s))));
@@ -113,11 +105,11 @@ sender_options& sender_options::operator=(const sender_options& x) {
 
 void sender_options::update(const sender_options& x) { impl_->update(*x.impl_); }
 
-sender_options& sender_options::handler(class messaging_handler &h) { impl_->handler = h.messaging_adapter_.get(); return *this; }
+sender_options& sender_options::handler(class messaging_handler &h) { impl_->handler = &h; return *this; }
 sender_options& sender_options::delivery_mode(proton::delivery_mode m) {impl_->delivery_mode = m; return *this; }
 sender_options& sender_options::auto_settle(bool b) {impl_->auto_settle = b; return *this; }
-sender_options& sender_options::source(source_options &s) {impl_->source = s; return *this; }
-sender_options& sender_options::target(target_options &s) {impl_->target = s; return *this; }
+sender_options& sender_options::source(const source_options &s) {impl_->source = s; return *this; }
+sender_options& sender_options::target(const target_options &s) {impl_->target = s; return *this; }
 
 void sender_options::apply(sender& s) const { impl_->apply(s); }
 

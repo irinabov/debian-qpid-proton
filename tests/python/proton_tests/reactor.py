@@ -267,144 +267,6 @@ class ExceptionTest(Test):
             assert False, "expected barf to be cancelled"
 
 
-class HandlerDerivationTest(Test):
-    def setUp(self):
-        import platform
-        if platform.python_implementation() != "Jython":
-          # Exception propagation does not work currently for CPython
-          raise SkipTest()
-        self.reactor = Reactor()
-
-    def wrong_exception(self):
-        import sys
-        ex = sys.exc_info()
-        assert False, " Unexpected exception " + str(ex[1])
-    
-    def test_reactor_final_derived(self):
-        h = BarfOnFinalDerived()
-        self.reactor.global_handler = h
-        try:
-            self.reactor.run()
-            assert False, "expected to barf"
-        except Barf:
-            pass
-        except:
-            self.wrong_exception()
-
-    def test_reactor_final_py_child_py(self):
-        class APoorExcuseForAHandler:
-            def __init__(self):
-                self.handlers = [BarfOnFinal()]
-        self.reactor.global_handler = APoorExcuseForAHandler()
-        try:
-            self.reactor.run()
-            assert False, "expected to barf"
-        except Barf:
-            pass
-        except:
-            self.wrong_exception()
-
-    def test_reactor_final_py_child_derived(self):
-        class APoorExcuseForAHandler:
-            def __init__(self):
-                self.handlers = [BarfOnFinalDerived()]
-        self.reactor.global_handler = APoorExcuseForAHandler()
-        try:
-            self.reactor.run()
-            assert False, "expected to barf"
-        except Barf:
-            pass
-        except:
-            self.wrong_exception()
-
-    def test_reactor_final_derived_child_derived(self):
-        class APoorExcuseForAHandler(CHandshaker):
-            def __init__(self):
-                CHandshaker.__init__(self)
-                self.handlers = [BarfOnFinalDerived()]
-        self.reactor.global_handler = APoorExcuseForAHandler()
-        try:
-            self.reactor.run()
-            assert False, "expected to barf"
-        except Barf:
-            pass
-        except:
-            self.wrong_exception()
-
-    def test_reactor_final_derived_child_py(self):
-        class APoorExcuseForAHandler(CHandshaker):
-            def __init__(self):
-                CHandshaker.__init__(self)
-                self.handlers = [BarfOnFinal()]
-        self.reactor.global_handler = APoorExcuseForAHandler()
-        try:
-            self.reactor.run()
-            assert False, "expected to barf"
-        except Barf:
-            pass
-        except:
-            self.wrong_exception()
-
-    def test_reactor_init_derived(self):
-        h = BarfOnFinalDerived()
-        self.reactor.global_handler = h
-        try:
-            self.reactor.run()
-            assert False, "expected to barf"
-        except:
-            assert h.init, "excpected the init"
-
-    def test_reactor_init_py_child_py(self):
-        h = BarfOnFinal()
-        class APoorExcuseForAHandler:
-            def __init__(self):
-                self.handlers = [h]
-        self.reactor.global_handler = APoorExcuseForAHandler()
-        try:
-            self.reactor.run()
-            assert False, "expected to barf"
-        except:
-            assert h.init, "excpected the init"
-
-    def test_reactor_init_py_child_derived(self):
-        h = BarfOnFinalDerived()
-        class APoorExcuseForAHandler:
-            def __init__(self):
-                self.handlers = [h]
-        self.reactor.global_handler = APoorExcuseForAHandler()
-        try:
-            self.reactor.run()
-            assert False, "expected to barf"
-        except:
-            assert h.init, "excpected the init"
-
-    def test_reactor_init_derived_child_derived(self):
-        h = BarfOnFinalDerived()
-        class APoorExcuseForAHandler(CHandshaker):
-            def __init__(self):
-                CHandshaker.__init__(self)
-                self.handlers = [h]
-        self.reactor.global_handler = APoorExcuseForAHandler()
-        try:
-            self.reactor.run()
-            assert False, "expected to barf"
-        except:
-            assert h.init, "excpected the init"
-
-    def test_reactor_init_derived_child_py(self):
-        h = BarfOnFinal()
-        class APoorExcuseForAHandler(CHandshaker):
-            def __init__(self):
-                CHandshaker.__init__(self)
-                self.handlers = [h]
-        self.reactor.global_handler = APoorExcuseForAHandler()
-        try:
-            self.reactor.run()
-            assert False, "expected to barf"
-        except:
-            assert h.init, "excpected the init"
-
-
 class ApplicationEventTest(Test):
     """Test application defined events and handlers."""
 
@@ -571,6 +433,7 @@ class ContainerTest(Test):
             event.connection.close()
 
     def test_numeric_hostname(self):
+        ensureCanTestExtendedSASL()
         server_handler = ContainerTest._ServerHandler("127.0.0.1")
         client_handler = ContainerTest._ClientHandler()
         container = Container(server_handler)
@@ -584,6 +447,7 @@ class ContainerTest(Test):
         assert client_handler.server_addr.rsplit(':', 1)[1] == str(server_handler.port)
 
     def test_non_numeric_hostname(self):
+        ensureCanTestExtendedSASL()
         server_handler = ContainerTest._ServerHandler("localhost")
         client_handler = ContainerTest._ClientHandler()
         container = Container(server_handler)
@@ -597,6 +461,7 @@ class ContainerTest(Test):
         assert client_handler.server_addr.rsplit(':', 1)[1] == str(server_handler.port)
 
     def test_virtual_host(self):
+        ensureCanTestExtendedSASL()
         server_handler = ContainerTest._ServerHandler("localhost")
         container = Container(server_handler)
         conn = container.connect(url=Url(host="localhost",
@@ -608,12 +473,8 @@ class ContainerTest(Test):
 
     def test_no_virtual_host(self):
         # explicitly setting an empty virtual host should prevent the hostname
-        # field from being sent in the Open performative
-        if "java" in sys.platform:
-            # This causes Python Container to *not* set the connection virtual
-            # host, so when proton-j sets up the connection the virtual host
-            # seems to be unset and the URL's host is used (as expected).
-            raise SkipTest("Does not apply for proton-j");
+        # field from being sent in the Open performative when using the
+        # Python Container.
         server_handler = ContainerTest._ServerHandler("localhost")
         container = Container(server_handler)
         conn = container.connect(url=Url(host="localhost",

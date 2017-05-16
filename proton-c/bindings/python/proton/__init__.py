@@ -1842,6 +1842,14 @@ class Data:
     """
     self._check(pn_data_put_binary(self._data, b))
 
+  def put_memoryview(self, mv):
+    """Put a python memoryview object as an AMQP binary value"""
+    self.put_binary(mv.tobytes())
+
+  def put_buffer(self, buff):
+    """Put a python buffer object as an AMQP binary value"""
+    self.put_binary(bytes(buff))
+
   def put_string(self, s):
     """
     Puts a unicode value.
@@ -2235,8 +2243,12 @@ class Data:
   # for python 3.x, long is merely an alias for int, but for python 2.x
   # we need to add an explicit int since it is a different type
   if int not in put_mappings:
-      put_mappings[int] = put_int
-
+    put_mappings[int] = put_int
+  # Python >=3.0 has 'memoryview', <=2.5 has 'buffer', >=2.6 has both.
+  try: put_mappings[memoryview] = put_memoryview
+  except NameError: pass
+  try: put_mappings[buffer] = put_buffer
+  except NameError: pass
   get_mappings = {
     NULL: lambda s: None,
     BOOL: get_bool,
@@ -2569,6 +2581,9 @@ and SASL layers to identify the peer.
     """
     self._update_cond()
     pn_connection_close(self._impl)
+    if hasattr(self, '_session_policy'):
+      # break circular ref
+      del self._session_policy
 
   @property
   def state(self):
@@ -2862,6 +2877,16 @@ class Link(Wrapper, Endpoint):
 
   def drained(self):
     return pn_link_drained(self._impl)
+
+  @property
+  def remote_max_message_size(self):
+    return pn_link_remote_max_message_size(self._impl)
+
+  def _get_max_message_size(self):
+    return pn_link_max_message_size(self._impl)
+  def _set_max_message_size(self, mode):
+    pn_link_set_max_message_size(self._impl, mode)
+  max_message_size = property(_get_max_message_size, _set_max_message_size)
 
   def detach(self):
     return pn_link_detach(self._impl)
@@ -3890,7 +3915,10 @@ class Event(Wrapper, EventBase):
 
     event = Event(impl, number)
 
-    if isinstance(event.context, EventBase):
+    # check for an application defined ApplicationEvent and return that.  This
+    # avoids an expensive wrap operation invoked by event.context
+    if pn_event_class(impl) == PN_PYREF and \
+       isinstance(event.context, EventBase):
       return event.context
     else:
       return event

@@ -37,6 +37,10 @@ typedef unsigned long int uintptr_t;
 
 /* We cannot safely just wrap pn_bytes_t but each language binding must have a typemap for it - presumably to a string type */
 %ignore pn_bytes_t;
+%ignore pn_rwbytes_t;
+
+/* pn_event_batch_t is not used directly by bindings */
+%ignore pn_event_batch_t;
 
 /* There is no need to wrap pn_class_t aa it is an internal implementation detail and cannot be used outside the library */
 %ignore pn_class_t;
@@ -63,7 +67,8 @@ typedef unsigned long int uintptr_t;
 
 %ignore pn_error_format;
 %ignore pn_error_vformat;
-
+%ignore pn_condition_format;
+%ignore pn_condition_vformat;
 
 /* checks that ensure only allowed values are supplied or returned */
 %aggregate_check(int, check_error,
@@ -1011,8 +1016,6 @@ typedef unsigned long int uintptr_t;
 
 
 %include "proton/messenger.h"
-
-%include "proton/io.h"
 
 %include "proton/selectable.h"
 

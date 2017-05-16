@@ -21,15 +21,26 @@
 #include "mt_container.hpp"
 
 #include <proton/connection.hpp>
+#include <proton/connection_options.hpp>
+#include <proton/container.hpp>
 #include <proton/default_container.hpp>
 #include <proton/delivery.hpp>
-#include <proton/messaging_handler.hpp>
+#include <proton/error_condition.hpp>
 #include <proton/listen_handler.hpp>
+#include <proton/listener.hpp>
+#include <proton/message.hpp>
+#include <proton/messaging_handler.hpp>
+#include <proton/sender_options.hpp>
+#include <proton/source_options.hpp>
+#include <proton/target.hpp>
 #include <proton/thread_safe.hpp>
+#include <proton/tracker.hpp>
 
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <thread>
 
@@ -104,7 +115,7 @@ class queues {
 
     std::mutex lock_;
     queue_map queues_;
-    std::atomic<uint64_t> next_id_; // Use to generate unique queue IDs.
+    std::atomic<int> next_id_; // Use to generate unique queue IDs.
 };
 
 /// Broker connection handler. Things to note:
@@ -150,6 +161,7 @@ class broker_connection_handler : public proton::messaging_handler {
     void on_sender_open(proton::sender &sender) OVERRIDE {
         queue *q = sender.source().dynamic() ?
             queues_.dynamic() : queues_.get(sender.source().address());
+        sender.open(proton::sender_options().source((proton::source_options().address(q->name()))));
         std::cout << "sending from " << q->name() << std::endl;
     }
 
@@ -194,6 +206,9 @@ class broker_connection_handler : public proton::messaging_handler {
         erase_sender_if(range.first, range.second, predicate);
     }
 
+    void on_error(const proton::error_condition& e) OVERRIDE {
+        std::cerr << "error: " << e.what() << std::endl;
+    }
     // The container calls on_transport_close() last.
     void on_transport_close(proton::transport&) OVERRIDE {
         delete this;            // All done.

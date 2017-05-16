@@ -25,11 +25,13 @@
 #include "proton/container.hpp"
 #include "proton/error.hpp"
 #include "proton/event_loop.hpp"
+#include "proton/receiver_options.hpp"
+#include "proton/sender_options.hpp"
 #include "proton/session.hpp"
+#include "proton/session_options.hpp"
 #include "proton/transport.hpp"
 
 #include "connector.hpp"
-#include "container_impl.hpp"
 #include "contexts.hpp"
 #include "msg.hpp"
 #include "proton_bits.hpp"
@@ -51,24 +53,22 @@ void connection::open() {
 }
 
 void connection::open(const connection_options &opts) {
-    connector *connector = dynamic_cast<class connector*>(
-        connection_context::get(pn_object()).handler.get());
-    if (connector)
-        // connector has an internal copy of opts
-        connector->apply_options();
-    else
-        opts.apply(*this);
+    opts.apply_unbound(*this);
     pn_connection_open(pn_object());
 }
 
 void connection::close() { pn_connection_close(pn_object()); }
 
 std::string connection::virtual_host() const {
-    return str(pn_connection_get_hostname(pn_object()));
+    return str(pn_connection_remote_hostname(pn_object()));
 }
 
 std::string connection::container_id() const {
     return str(pn_connection_get_container(pn_object()));
+}
+
+std::string connection::user() const {
+    return str(pn_transport_get_user(pn_connection_transport(pn_object())));
 }
 
 container& connection::container() const {
@@ -162,9 +162,5 @@ uint16_t connection::max_sessions() const {
 uint32_t connection::idle_timeout() const {
     return pn_transport_get_remote_idle_timeout(pn_connection_transport(pn_object()));
 }
-
-void connection::user(const std::string &name) { pn_connection_set_user(pn_object(), name.c_str()); }
-
-void connection::password(const std::string &pass) { pn_connection_set_password(pn_object(), pass.c_str()); }
 
 }

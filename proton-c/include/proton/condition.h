@@ -31,12 +31,12 @@
 extern "C" {
 #endif
 
-/** @file
+/**
+ * @file
  *
- * The Condition API for the proton Engine.
+ * @copybrief condition
  *
- * @defgroup condition Condition
- * @ingroup connection
+ * @addtogroup condition
  * @{
  */
 
@@ -132,6 +132,16 @@ PN_EXTERN int pn_condition_set_description(pn_condition_t *condition, const char
 PN_EXTERN pn_data_t *pn_condition_info(pn_condition_t *condition);
 
 /**
+ * Set the name and printf-style formatted description.
+ */
+PN_EXTERN int pn_condition_vformat(pn_condition_t *, const char *name, const char *fmt, va_list ap);
+
+/**
+ * Set the name and printf-style formatted description.
+ */
+PN_EXTERN int pn_condition_format(pn_condition_t *, const char *name, const char *fmt, ...);
+
+/**
  * Returns true if the condition is a redirect.
  *
  * @param[in] condition the condition object
@@ -159,7 +169,23 @@ PN_EXTERN const char *pn_condition_redirect_host(pn_condition_t *condition);
  */
 PN_EXTERN int pn_condition_redirect_port(pn_condition_t *condition);
 
-/** @}
+/**
+ * Copy the src condition to the dst condition.
+ */
+PN_EXTERN int pn_condition_copy(pn_condition_t *dest, pn_condition_t *src);
+
+/**
+ * Create a condition object.
+ */
+PN_EXTERN pn_condition_t *pn_condition(void);
+
+/**
+ * Free a condition object.
+ */  
+PN_EXTERN void pn_condition_free(pn_condition_t *);
+
+/**
+ * @}
  */
 
 #ifdef __cplusplus

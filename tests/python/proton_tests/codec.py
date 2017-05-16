@@ -357,6 +357,32 @@ class DataTest(Test):
     copy = data.get_object()
     assert copy == obj, (copy, obj)
 
+  def testBuffer(self):
+    try:
+      self.data.put_object(buffer(str2bin("foo")))
+    except NameError:
+      # python >= 3.0 does not have `buffer`
+      return
+    data = Data()
+    data.decode(self.data.encode())
+    data.rewind()
+    assert data.next()
+    assert data.type() == Data.BINARY
+    assert data.get_object() == str2bin("foo")
+
+  def testMemoryView(self):
+    try:
+      self.data.put_object(memoryview(str2bin("foo")))
+    except NameError:
+      # python <= 2.6 does not have `memoryview`
+      return
+    data = Data()
+    data.decode(self.data.encode())
+    data.rewind()
+    assert data.next()
+    assert data.type() == Data.BINARY
+    assert data.get_object() == str2bin("foo")
+
   def testLookup(self):
     obj = {symbol("key"): str2unicode("value"),
            symbol("pi"): 3.14159,

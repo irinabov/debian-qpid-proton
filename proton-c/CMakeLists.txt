@@ -17,7 +17,6 @@
 # under the License.
 #
 
-include(CheckIncludeFiles)
 include(CheckLibraryExists)
 include(CheckSymbolExists)
 
@@ -82,8 +81,8 @@ set (env_py ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/env.py)
 
 add_custom_command (
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
-  COMMAND ${env_py} PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR} ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/src/codec/encodings.h.py > ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
-  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/codec/encodings.h.py
+  COMMAND ${env_py} PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR} ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/src/encodings.h.py > ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/encodings.h.py
   )
 
 add_custom_command (
@@ -92,13 +91,18 @@ add_custom_command (
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/protocol.h.py
   )
 
+add_custom_target(
+  generated_c_files
+  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/src/protocol.h ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
+  )
+
 # Select IO impl
 if(PN_WINAPI)
-  set (pn_io_impl src/windows/io.c src/windows/iocp.c src/windows/write_pipeline.c)
-  set (pn_selector_impl src/windows/selector.c)
+  set (pn_io_impl src/reactor/io/windows/io.c src/reactor/io/windows/iocp.c src/reactor/io/windows/write_pipeline.c)
+  set (pn_selector_impl src/reactor/io/windows/selector.c)
 else(PN_WINAPI)
-  set (pn_io_impl src/posix/io.c)
-  set (pn_selector_impl src/posix/selector.c)
+  set (pn_io_impl src/reactor/io/posix/io.c)
+  set (pn_selector_impl src/reactor/io/posix/selector.c)
 endif(PN_WINAPI)
 
 # Link in SASL if present
@@ -110,13 +114,22 @@ elseif (SASL_IMPL STREQUAL none)
   set(pn_sasl_impl src/sasl/sasl.c src/sasl/none_sasl.c)
 endif ()
 
+# Set Compiler extra flags for Solaris when using SunStudio
+if(CMAKE_CXX_COMPILER_ID STREQUAL "SunPro" )
+    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mt" )
+endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "SunPro" )
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mt")
+endif()
+
 # Link in openssl if present
 if (SSL_IMPL STREQUAL openssl)
   set (pn_ssl_impl src/ssl/openssl.c)
   include_directories (${OPENSSL_INCLUDE_DIR})
   set (SSL_LIB ${OPENSSL_LIBRARIES})
 elseif (SSL_IMPL STREQUAL schannel)
-  set (pn_ssl_impl src/windows/schannel.c)
+  set (pn_ssl_impl src/ssl/schannel.c)
   set (SSL_LIB Crypt32.lib Secur32.lib)
 else ()
   set (pn_ssl_impl src/ssl/ssl_stub.c)
@@ -176,6 +189,10 @@ if (PN_WINAPI)
 endif (PN_WINAPI)
 
 # Try to keep any platform specific overrides together here:
+
+# Until we can decide what to do with PHP support, turn it off by default
+# (We can't build with recent versions of PHP)
+set (NOBUILD_PHP ON)
 
 # MacOS has a bunch of differences in build tools and process and so we have to turn some things
 # off if building there:
@@ -242,7 +259,18 @@ if (CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
   endif (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "SunPro")
+  if (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -xldscope=hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -xldscope=hidden")
+  endif (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
 endif (CMAKE_COMPILER_IS_GNUCC)
+
+if (CMAKE_C_COMPILER_ID MATCHES "Clang")
+  if (ENABLE_WARNING_ERROR)
+    set (COMPILE_WARNING_FLAGS "-Werror -Wall -pedantic")
+  endif (ENABLE_WARNING_ERROR)
+endif()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   if (ENABLE_WARNING_ERROR)
@@ -253,8 +281,11 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set (CXX_WARNING_FLAGS "${WERROR} -pedantic -Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-float-equal -Wno-padded -Wno-sign-conversion -Wno-switch-enum -Wno-weak-vtables -Wno-exit-time-destructors -Wno-global-constructors -Wno-shorten-64-to-32 -Wno-documentation -Wno-documentation-unknown-command -Wno-old-style-cast -Wno-missing-noreturn")
 endif()
 
-# Make CXX_WARNING_FLAGS visible to examples.
+# Make flags visible to examples.
 set(CXX_WARNING_FLAGS "${CXX_WARNING_FLAGS}" PARENT_SCOPE)
+set(COMPILE_WARNING_FLAGS "${COMPILE_WARNING_FLAGS}" PARENT_SCOPE)
+set(COMPILE_LANGUAGE_FLAGS "${COMPILE_LANGUAGE_FLAGS}" PARENT_SCOPE)
+set(LINK_TIME_OPTIMIZATION "${LTO}" PARENT_SCOPE)
 
 
 if (MSVC)
@@ -265,6 +296,7 @@ if (MSVC)
         /wd4800
         /wd4996
     )
+    set (qpid-proton-platform src/compiler/msvc/snprintf.c)
 endif (MSVC)
 
 macro (pn_absolute_install_dir NAME VALUE PREFIX)
@@ -283,52 +315,118 @@ pn_absolute_install_dir(EXEC_PREFIX "." ${CMAKE_INSTALL_PREFIX})
 pn_absolute_install_dir(LIBDIR ${LIB_INSTALL_DIR} ${CMAKE_INSTALL_PREFIX})
 pn_absolute_install_dir(INCLUDEDIR ${INCLUDE_INSTALL_DIR} ${CMAKE_INSTALL_PREFIX})
 
-add_subdirectory(bindings)
 add_subdirectory(docs/api)
 add_subdirectory(../tests/tools/apps/c ../tests/tools/apps/c)
 
-set (qpid-proton-platform
+# for full source distribution:
+set (qpid-proton-platform-all
+  src/platform/platform.c
+  src/reactor/io/windows/io.c
+  src/reactor/io/windows/iocp.c
+  src/reactor/io/windows/write_pipeline.c
+  src/reactor/io/windows/selector.c
+  src/reactor/io/posix/io.c
+  src/reactor/io/posix/selector.c
+  )
+
+# platform specific library build:
+set (qpid-proton-platform-io
+  src/platform/platform.c
   ${pn_io_impl}
   ${pn_selector_impl}
-  src/platform.c
+  )
+
+# for full source distribution:
+set (qpid-proton-layers-all
+  src/sasl/sasl.c
+  src/sasl/cyrus_sasl.c
+  src/sasl/none_sasl.c
+  src/ssl/openssl.c
+  src/ssl/schannel.c
+  src/ssl/ssl_stub.c
+  )
+
+# for current build system's environment:
+set (qpid-proton-layers
   ${pn_sasl_impl}
   ${pn_ssl_impl}
   )
 
 set (qpid-proton-core
-  src/object/object.c
-  src/object/list.c
-  src/object/map.c
-  src/object/string.c
-  src/object/iterator.c
-  src/object/record.c
+  src/core/object/object.c
+  src/core/object/list.c
+  src/core/object/map.c
+  src/core/object/string.c
+  src/core/object/iterator.c
+  src/core/object/record.c
 
-  src/log.c
-  src/util.c
-  src/url.c
-  src/error.c
-  src/buffer.c
-  src/parser.c
-  src/scanner.c
-  src/types.c
+  src/core/log.c
+  src/core/util.c
+  src/core/error.c
+  src/core/buffer.c
+  src/core/types.c
 
-  src/framing/framing.c
+  src/core/framing.c
 
-  src/codec/codec.c
-  src/codec/decoder.c
-  src/codec/encoder.c
+  src/core/codec.c
+  src/core/decoder.c
+  src/core/encoder.c
 
-  src/dispatcher/dispatcher.c
-  src/engine/engine.c
-  src/events/event.c
-  src/transport/autodetect.c
-  src/transport/transport.c
-  src/message/message.c
+  src/core/dispatcher.c
+  src/core/connection_driver.c
+  src/core/engine.c
+  src/core/event.c
+  src/core/autodetect.c
+  src/core/transport.c
+  src/core/message.c
+  )
+
+set (qpid-proton-include-generated
+  ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
+  ${CMAKE_CURRENT_BINARY_DIR}/src/protocol.h
+  ${CMAKE_CURRENT_BINARY_DIR}/include/proton/version.h
+  )
+
+set (qpid-proton-private-includes
+  src/extra/scanner.h
+  src/messenger/store.h
+  src/messenger/subscription.h
+  src/messenger/messenger.h
+  src/messenger/transform.h
+  src/ssl/ssl-internal.h
+  src/sasl/sasl-internal.h
+  src/core/autodetect.h
+  src/core/log_private.h
+  src/core/config.h
+  src/core/encoder.h
+  src/core/dispatch_actions.h
+  src/core/engine-internal.h
+  src/core/transport.h
+  src/core/framing.h
+  src/core/buffer.h
+  src/core/util.h
+  src/core/dispatcher.h
+  src/core/data.h
+  src/core/decoder.h
+  src/reactor/io/windows/iocp.h
+  src/reactor/selector.h
+  src/reactor/io.h
+  src/reactor/reactor.h
+  src/reactor/selectable.h
+  src/platform/platform.h
+  src/platform/platform_fmt.h
+  )
+
+set (qpid-proton-extra
+  src/extra/parser.c
+  src/extra/scanner.c
+  src/extra/url.c
 
   src/reactor/reactor.c
   src/reactor/handler.c
   src/reactor/connection.c
   src/reactor/acceptor.c
+  src/reactor/selectable.c
   src/reactor/timer.c
 
   src/handlers/handshaker.c
@@ -339,12 +437,6 @@ set (qpid-proton-core
   src/messenger/subscription.c
   src/messenger/store.c
   src/messenger/transform.c
-  src/selectable.c
-  )
-
-set (qpid-proton-extra-deps
-  ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
-  ${CMAKE_CURRENT_BINARY_DIR}/src/protocol.h
   )
 
 set (qpid-proton-include
@@ -352,44 +444,52 @@ set (qpid-proton-include
   include/proton/codec.h
   include/proton/condition.h
   include/proton/connection.h
+  include/proton/connection_driver.h
   include/proton/delivery.h
   include/proton/disposition.h
   include/proton/engine.h
   include/proton/error.h
   include/proton/event.h
-  include/proton/handlers.h
   include/proton/import_export.h
-  include/proton/io.h
   include/proton/link.h
   include/proton/log.h
   include/proton/message.h
-  include/proton/messenger.h
   include/proton/object.h
-  include/proton/parser.h
-  include/proton/reactor.h
   include/proton/sasl.h
-  include/proton/scanner.h
-  include/proton/selectable.h
-  include/proton/selector.h
   include/proton/session.h
   include/proton/ssl.h
   include/proton/terminus.h
   include/proton/transport.h
   include/proton/type_compat.h
   include/proton/types.h
+)
+
+set (qpid-proton-include-extra
+  include/proton/handlers.h
+  include/proton/messenger.h
+  include/proton/parser.h
+  include/proton/reactor.h
+  include/proton/selectable.h
   include/proton/url.h
 )
 
-source_group("API Header Files" FILES ${qpid-proton-include})
+# note: process bindings after the source lists have been defined so
+# the bindings can reference them
+add_subdirectory(bindings)
+
+source_group("API Header Files" FILES ${qpid-proton-include} ${qpid-proton-include-extra})
 
 set_source_files_properties (
   ${qpid-proton-core}
+  ${qpid-proton-layers}
+  ${qpid-proton-extra}
   PROPERTIES
   COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS} ${LTO}"
   )
 
 set_source_files_properties (
   ${qpid-proton-platform}
+  ${qpid-proton-platform-io}
   PROPERTIES
   COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_PLATFORM_FLAGS} ${LTO}"
   COMPILE_DEFINITIONS "${PLATFORM_DEFINITIONS}"
@@ -397,19 +497,58 @@ set_source_files_properties (
 
 if (BUILD_WITH_CXX)
   set_source_files_properties (
-    ${qpid-proton-core} ${qpid-proton-platform}
+    ${qpid-proton-core}
+    ${qpid-proton-layers}
+    ${qpid-proton-extra}
+    ${qpid-proton-platform}
+    ${qpid-proton-platform-io}
     PROPERTIES LANGUAGE CXX
     )
 endif (BUILD_WITH_CXX)
 
 add_library (
-  qpid-proton SHARED
-
+  qpid-proton-core SHARED
   ${qpid-proton-core}
+  ${qpid-proton-layers}
   ${qpid-proton-platform}
   ${qpid-proton-include}
-  ${qpid-proton-extra-deps}
+  ${qpid-proton-include-generated}
   )
+add_dependencies(qpid-proton-core generated_c_files)
+
+target_link_libraries (qpid-proton-core ${UUID_LIB} ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS})
+
+set_target_properties (
+  qpid-proton-core
+  PROPERTIES
+  VERSION   "${PN_LIB_SOMAJOR}.${PN_LIB_SOMINOR}"
+  SOVERSION "${PN_LIB_SOMAJOR}"
+  LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
+  )
+
+add_library(
+  qpid-proton SHARED
+  # Proton Core
+  ${qpid-proton-core}
+  ${qpid-proton-layers}
+  ${qpid-proton-platform}
+  ${qpid-proton-include}
+  ${qpid-proton-include-generated}
+
+  # Proton Reactor/Messenger
+  ${qpid-proton-extra}
+  ${qpid-proton-platform-io}
+  ${qpid-proton-include-extra}
+  )
+add_dependencies(qpid-proton generated_c_files)
+
+if (MSVC)
+  # Add a phony dependency for Windows builds to serialize creation
+  # of generated files. See issue PROTON-1376.
+  # When a Windows build creates src/encodings.h and src/protocol.h
+  # only once then this can be removed.
+  add_dependencies(qpid-proton qpid-proton-core)
+endif (MSVC)
 
 target_link_libraries (qpid-proton ${UUID_LIB} ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS})
 
@@ -427,7 +566,7 @@ if (MSVC)
 endif(MSVC)
 
 # Install executables and libraries
-install (TARGETS qpid-proton
+install (TARGETS qpid-proton qpid-proton-core
   EXPORT  proton
   RUNTIME DESTINATION bin
   ARCHIVE DESTINATION ${LIB_INSTALL_DIR}
@@ -454,13 +593,24 @@ configure_file(
 install (FILES
   ${CMAKE_CURRENT_BINARY_DIR}/libqpid-proton.pc
   DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/libqpid-proton-core.pc.in
+  ${CMAKE_CURRENT_BINARY_DIR}/libqpid-proton-core.pc @ONLY)
+install (FILES
+  ${CMAKE_CURRENT_BINARY_DIR}/libqpid-proton-core.pc
+  DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
+
 
 if (DEFINED CMAKE_IMPORT_LIBRARY_PREFIX)
 set(PROTONLIB ${CMAKE_IMPORT_LIBRARY_PREFIX}qpid-proton${CMAKE_IMPORT_LIBRARY_SUFFIX})
 set(PROTONLIBDEBUG ${CMAKE_IMPORT_LIBRARY_PREFIX}qpid-proton${CMAKE_DEBUG_POSTFIX}${CMAKE_IMPORT_LIBRARY_SUFFIX})
+set(PROTONCORELIB ${CMAKE_IMPORT_LIBRARY_PREFIX}qpid-proton-core${CMAKE_IMPORT_LIBRARY_SUFFIX})
+set(PROTONCORELIBDEBUG ${CMAKE_IMPORT_LIBRARY_PREFIX}qpid-proton-core${CMAKE_DEBUG_POSTFIX}${CMAKE_IMPORT_LIBRARY_SUFFIX})
 else ()
 set(PROTONLIB ${CMAKE_SHARED_LIBRARY_PREFIX}qpid-proton${CMAKE_SHARED_LIBRARY_SUFFIX})
 set(PROTONLIBDEBUG ${CMAKE_SHARED_LIBRARY_PREFIX}qpid-proton${CMAKE_DEBUG_POSTFIX}${CMAKE_SHARED_LIBRARY_SUFFIX})
+set(PROTONCORELIB ${CMAKE_SHARED_LIBRARY_PREFIX}qpid-proton-core${CMAKE_SHARED_LIBRARY_SUFFIX})
+set(PROTONCORELIBDEBUG ${CMAKE_SHARED_LIBRARY_PREFIX}qpid-proton-core${CMAKE_DEBUG_POSTFIX}${CMAKE_SHARED_LIBRARY_SUFFIX})
 endif ()
 
 include(WriteBasicConfigVersionFile)
@@ -498,7 +648,6 @@ endif (CMAKE_SYSTEM_NAME STREQUAL Windows)
 
 # python test: tests/python/proton-test
 if (BUILD_PYTHON)
-  set (pn_c_root "${CMAKE_BINARY_DIR}/proton")
   set (py_root "${pn_test_root}/python")
   set (py_src "${CMAKE_CURRENT_SOURCE_DIR}/bindings/python")
   set (py_bin "${CMAKE_CURRENT_BINARY_DIR}/bindings/python")
@@ -508,11 +657,11 @@ if (BUILD_PYTHON)
   set (py_path ${py_bld} ${app_path} $ENV{PATH})
   set (py_pythonpath ${py_root} ${py_src} ${py_bin} ${py_dll} $ENV{PYTHONPATH})
   to_native_path ("${py_pythonpath}" py_pythonpath)
-
   to_native_path ("${py_path}" py_path)
+
   add_test (NAME python-test
             COMMAND ${env_py}
-              "PATH=${py_path}" "PYTHONPATH=${py_pythonpath}" "PKG_CONFIG_PATH=${pn_c_root}"
+              "PATH=${py_path}" "PYTHONPATH=${py_pythonpath}"
               "CLASSPATH=${CMAKE_BINARY_DIR}/proton-j/proton-j.jar"
               "SASLPASSWD=${SASLPASSWD_EXE}"
               ${VALGRIND_ENV}
@@ -525,27 +674,28 @@ if (BUILD_PYTHON)
   # to try to run them.
   option(TOX_TEST "Enable muti-version python testing with TOX" ON)
   if (CMAKE_SYSTEM_NAME STREQUAL Linux AND TOX_TEST)
-     find_program(TOX_EXE "tox")
-     if (TOX_EXE)
-       configure_file(
-         "${CMAKE_CURRENT_SOURCE_DIR}/tox.ini.in"
-         "${CMAKE_CURRENT_BINARY_DIR}/tox.ini")
-         to_native_path ("${py_path}" py_path)
-         add_test (NAME python-tox-test
-                   COMMAND ${env_py}
-		   "PATH=${py_path}" "QPID_PROTON_SRC=${CMAKE_CURRENT_SOURCE_DIR}/../"
-                   "CLASSPATH=${CMAKE_BINARY_DIR}/proton-j/proton-j.jar"
-                   "SASLPASSWD=${SASLPASSWD_EXE}"
-                   "SWIG=${SWIG_EXECUTABLE}"
-                   ${VALGRIND_ENV}
-                   ${TOX_EXE})
-         set_tests_properties(python-tox-test
-                              PROPERTIES
-                              PASS_REGULAR_EXPRESSION "Totals: .* ignored, 0 failed"
-                              FAIL_REGULAR_EXPRESSION "ERROR:[ ]+py[0-9]*: commands failed")
-     else (TOX_EXE)
-         message(STATUS "The tox tool is not available - skipping the python-tox-tests")
-     endif (TOX_EXE)
+    find_program(TOX_EXE "tox")
+    if (CMAKE_BUILD_TYPE MATCHES "Coverage")
+      message(STATUS "Building for coverage analysis; skipping the python-tox-tests")
+    elseif (TOX_EXE)
+      configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/tox.ini.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/tox.ini")
+      add_test (NAME python-tox-test
+                COMMAND ${env_py}
+                  "PATH=${py_path}"
+                  "CLASSPATH=${CMAKE_BINARY_DIR}/proton-j/proton-j.jar"
+                  "SASLPASSWD=${SASLPASSWD_EXE}"
+                  "SWIG=${SWIG_EXECUTABLE}"
+                  ${VALGRIND_ENV}
+                  ${TOX_EXE})
+      set_tests_properties(python-tox-test
+                           PROPERTIES
+                             PASS_REGULAR_EXPRESSION "Totals: .* ignored, 0 failed"
+                             FAIL_REGULAR_EXPRESSION "ERROR:[ ]+py[0-9]*: commands failed")
+    else (TOX_EXE)
+      message(STATUS "The tox tool is not available; skipping the python-tox-tests")
+    endif ()
   endif (CMAKE_SYSTEM_NAME STREQUAL Linux AND TOX_TEST)
 
   set (perf_pythonpath "${py_pythonpath}" "${CMAKE_SOURCE_DIR}/examples/cpp")

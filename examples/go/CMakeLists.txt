@@ -24,32 +24,30 @@ if(BUILD_GO)
 
   # Build example exes
   foreach(example ${examples})
-    set(source ${CMAKE_CURRENT_SOURCE_DIR}/${example}.go)
-    set(target ${CMAKE_CURRENT_BINARY_DIR}/${example})
-    add_custom_command(
-      OUTPUT ${target}
-      COMMAND ${GO_BUILD} ${GO_EXAMPLE_FLAGS} -o ${target} ${source}
-      DEPENDS  ${example_source} ${GO_TARGETS}
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-    list(APPEND example_exes ${target})
+    string(REPLACE / _ target ${example})
+    set(target "go_example_${target}")
+    set(output ${CMAKE_CURRENT_BINARY_DIR}/${example})
+    # Always run go_build, it will do nothing if there is nothing to do.
+    # Otherwise it's too hard to get the dependencies right.
+    add_custom_target(${target} ALL
+      COMMAND ${GO_BUILD} ${GO_EXAMPLE_FLAGS} -o ${output} ${CMAKE_CURRENT_SOURCE_DIR}/${example}.go
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+      DEPENDS go-build)
+    list(APPEND example_targets ${target})
   endforeach()
 
   # Build test driver exe
   set(test_exe ${CMAKE_CURRENT_BINARY_DIR}/example_test)
-  add_custom_command(
-    OUTPUT ${test_exe}
-    DEPENDS ${example_exes} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.go
+  add_custom_target(go_example_test ALL
     COMMAND ${GO_TEST} -c -o ${test_exe} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.go
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
-  add_custom_target(go-test-exe ALL DEPENDS ${test_exe})
-
   add_test(
-    NAME go_example_electron_test
+    NAME go-example-electron
     COMMAND ${GO_ENV} ${test_exe} -dir ${CMAKE_CURRENT_BINARY_DIR}/electron -broker broker)
 
   add_test(
-    NAME go_example_proton_test
+    NAME go-example-proton
     COMMAND ${GO_ENV} ${test_exe} -dir ${CMAKE_CURRENT_BINARY_DIR}/electron -broker ../proton/broker)
 
   list(APPEND ADDITIONAL_MAKE_CLEAN_FILES ${examples})

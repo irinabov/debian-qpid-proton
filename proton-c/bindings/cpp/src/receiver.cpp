@@ -18,9 +18,13 @@
  * under the License.
  *
  */
-#include "proton/link.hpp"
 #include "proton/receiver.hpp"
+
 #include "proton/error.hpp"
+#include "proton/link.hpp"
+#include "proton/receiver_options.hpp"
+#include "proton/source.hpp"
+#include "proton/target.hpp"
 
 #include "msg.hpp"
 #include "proton_bits.hpp"
@@ -73,12 +77,7 @@ void receiver::drain() {
             // Drain is already complete.  No state to communicate over the wire.
             // Create dummy flow event where "drain finish" can be detected.
             pn_connection_t *pnc = pn_session_connection(pn_link_session(pn_object()));
-            connection_context& cctx = connection_context::get(pnc);
-            // connection_engine collector is per connection.  Reactor collector is global.
-            pn_collector_t *coll = cctx.collector;
-            if (!coll)
-                coll = pn_reactor_collector(pn_object_reactor(pnc));
-            pn_collector_put(coll, PN_OBJECT, pn_object(), PN_LINK_FLOW);
+            pn_collector_put(pn_connection_collector(pnc), PN_OBJECT, pn_object(), PN_LINK_FLOW);
         }
     }
 }

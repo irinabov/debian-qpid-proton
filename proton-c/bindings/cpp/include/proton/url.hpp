@@ -22,12 +22,13 @@
  *
  */
 
-#include "./types_fwd.hpp"
+#include "./internal/pn_unique_ptr.hpp"
 #include "./error.hpp"
 
-#include <iosfwd>
+#include <proton/type_compat.h>
 
-struct pn_url_t;
+#include <iosfwd>
+#include <string>
 
 namespace proton {
 
@@ -40,7 +41,7 @@ PN_CPP_CLASS_EXTERN url_error : public error {
     /// @endcond
 };
 
-/// A Proton URL.
+/// A URL parser.
 ///
 ///  Proton URLs take the form
 /// `<scheme>://<username>:<password>@<host>:<port>/<path>`.
@@ -59,7 +60,7 @@ class url {
 
     // XXX No constructor for an empty URL?
     // XXX What is the default 'defaults' behavior?
-    
+
     /// Parse `url_str` as an AMQP URL.
     ///
     /// @note Converts automatically from string.
@@ -119,8 +120,12 @@ class url {
 
     /// @}
 
+    /// Return URL as a string.
+    friend PN_CPP_EXTERN std::string to_string(const url&);
+
   private:
-    pn_url_t* url_;
+    struct impl;
+    internal::pn_unique_ptr<impl> impl_;
 
     /// @cond INTERNAL
 

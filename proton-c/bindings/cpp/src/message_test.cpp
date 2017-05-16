@@ -29,7 +29,6 @@ namespace {
 
 using namespace std;
 using namespace proton;
-using namespace test;
 
 #define CHECK_STR(ATTR) \
     m.ATTR(#ATTR); \
@@ -38,6 +37,30 @@ using namespace test;
 #define CHECK_MESSAGE_ID(ATTR) \
     m.ATTR(#ATTR); \
     ASSERT_EQUAL(scalar(#ATTR), m.ATTR())
+
+void test_message_defaults() {
+    message m;
+    ASSERT(m.body().empty());
+    ASSERT(m.id().empty());
+    ASSERT(m.user().empty());
+    ASSERT(m.to().empty());
+    ASSERT(m.subject().empty());
+    ASSERT(m.reply_to().empty());
+    ASSERT(m.correlation_id().empty());
+    ASSERT(m.content_type().empty());
+    ASSERT(m.content_encoding().empty());
+    ASSERT(m.group_id().empty());
+    ASSERT(m.reply_to_group_id().empty());
+    ASSERT_EQUAL(0, m.expiry_time().milliseconds());
+    ASSERT_EQUAL(0, m.creation_time().milliseconds());
+
+    ASSERT_EQUAL(false, m.inferred());
+    ASSERT_EQUAL(false, m.durable());
+    ASSERT_EQUAL(0, m.ttl().milliseconds());
+    ASSERT_EQUAL(message::default_priority, m.priority());
+    ASSERT_EQUAL(false, m.first_acquirer());
+    ASSERT_EQUAL(0u, m.delivery_count());
+}
 
 void test_message_properties() {
     message m("hello");
@@ -58,6 +81,10 @@ void test_message_properties() {
     ASSERT_EQUAL(m.expiry_time().milliseconds(), 42);
     m.creation_time(timestamp(4242));
     ASSERT_EQUAL(m.creation_time().milliseconds(), 4242);
+    m.ttl(duration(30));
+    ASSERT_EQUAL(m.ttl().milliseconds(), 30);
+    m.priority(3);
+    ASSERT_EQUAL(m.priority(), 3);
 
     message m2(m);
     ASSERT_EQUAL("hello", get<std::string>(m2.body()));
@@ -110,30 +137,30 @@ void test_message_maps() {
     ASSERT(m.message_annotations().empty());
     ASSERT(m.delivery_annotations().empty());
 
-    m.properties()["foo"] = 12;
-    m.delivery_annotations()["bar"] = "xyz";
+    m.properties().put("foo", 12);
+    m.delivery_annotations().put("bar", "xyz");
 
-    m.message_annotations()[23] = "23";
-    ASSERT_EQUAL(m.properties()["foo"], scalar(12));
-    ASSERT_EQUAL(m.delivery_annotations()["bar"], scalar("xyz"));
-    ASSERT_EQUAL(m.message_annotations()[23], scalar("23"));
+    m.message_annotations().put(23, "23");
+    ASSERT_EQUAL(m.properties().get("foo"), scalar(12));
+    ASSERT_EQUAL(m.delivery_annotations().get("bar"), scalar("xyz"));
+    ASSERT_EQUAL(m.message_annotations().get(23), scalar("23"));
 
     message m2(m);
 
-    ASSERT_EQUAL(m2.properties()["foo"], scalar(12));
-    ASSERT_EQUAL(m2.delivery_annotations()["bar"], scalar("xyz"));
-    ASSERT_EQUAL(m2.message_annotations()[23], scalar("23"));
+    ASSERT_EQUAL(m2.properties().get("foo"), scalar(12));
+    ASSERT_EQUAL(m2.delivery_annotations().get("bar"), scalar("xyz"));
+    ASSERT_EQUAL(m2.message_annotations().get(23), scalar("23"));
 
-    m.properties()["foo"] = "newfoo";
-    m.delivery_annotations()[24] = 1000;
+    m.properties().put("foo","newfoo");
+    m.delivery_annotations().put(24, 1000);
     m.message_annotations().erase(23);
 
     m2 = m;
     ASSERT_EQUAL(1u, m2.properties().size());
-    ASSERT_EQUAL(m2.properties()["foo"], scalar("newfoo"));
+    ASSERT_EQUAL(m2.properties().get("foo"), scalar("newfoo"));
     ASSERT_EQUAL(2u, m2.delivery_annotations().size());
-    ASSERT_EQUAL(m2.delivery_annotations()["bar"], scalar("xyz"));
-    ASSERT_EQUAL(m2.delivery_annotations()[24], scalar(1000));
+    ASSERT_EQUAL(m2.delivery_annotations().get("bar"), scalar("xyz"));
+    ASSERT_EQUAL(m2.delivery_annotations().get(24), scalar(1000));
     ASSERT(m2.message_annotations().empty());
 }
 
@@ -142,6 +169,7 @@ void test_message_maps() {
 int main(int, char**) {
     int failed = 0;
     RUN_TEST(failed, test_message_properties());
+    RUN_TEST(failed, test_message_defaults());
     RUN_TEST(failed, test_message_body());
     RUN_TEST(failed, test_message_maps());
     return failed;

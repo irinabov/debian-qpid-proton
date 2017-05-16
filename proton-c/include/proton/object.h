@@ -33,6 +33,10 @@
 extern "C" {
 #endif
 
+/**
+ * @cond INTERNAL
+ */
+
 typedef void* pn_handle_t;
 typedef intptr_t pn_shandle_t;
 
@@ -159,19 +163,55 @@ PREFIX ## _t *PREFIX ## _new(void) {                                      \
     PREFIX ## _inspect                          \
 }
 
+/* Class to identify a plain C struct in a pn_event_t. No refcounting or memory management. */
+#define PN_STRUCT_CLASSDEF(PREFIX, CID)                                 \
+  const pn_class_t *PREFIX ## __class(void);                            \
+  static const pn_class_t *PREFIX ## _reify(void *p) { return PREFIX ## __class(); } \
+  const pn_class_t *PREFIX  ##  __class(void) {                         \
+  static const pn_class_t clazz = {                                     \
+    #PREFIX,                                                            \
+    CID,                                                                \
+    NULL, /*_new*/                                                      \
+    NULL, /*_initialize*/                                               \
+    pn_void_incref,                                                     \
+    pn_void_decref,                                                     \
+    pn_void_refcount,                                                   \
+    NULL, /* _finalize */                                               \
+    NULL, /* _free */                                                   \
+    PREFIX ## _reify,                                                   \
+    pn_void_hashcode,                                                   \
+    pn_void_compare,                                                    \
+    pn_void_inspect                                                     \
+    };                                                                  \
+  return &clazz;                                                        \
+  }
+
 PN_EXTERN pn_cid_t pn_class_id(const pn_class_t *clazz);
 PN_EXTERN const char *pn_class_name(const pn_class_t *clazz);
 PN_EXTERN void *pn_class_new(const pn_class_t *clazz, size_t size);
+
+/* pn_incref, pn_decref and pn_refcount are for internal use by the proton
+   library, the should not be called by application code. Application code
+   should use the appropriate pn_*_free function (pn_link_free, pn_session_free
+   etc.) when it is finished with a proton value. Proton values should only be
+   used when handling a pn_event_t that refers to them.
+*/
 PN_EXTERN void *pn_class_incref(const pn_class_t *clazz, void *object);
 PN_EXTERN int pn_class_refcount(const pn_class_t *clazz, void *object);
 PN_EXTERN int pn_class_decref(const pn_class_t *clazz, void *object);
+
 PN_EXTERN void pn_class_free(const pn_class_t *clazz, void *object);
+
 PN_EXTERN const pn_class_t *pn_class_reify(const pn_class_t *clazz, void *object);
 PN_EXTERN uintptr_t pn_class_hashcode(const pn_class_t *clazz, void *object);
 PN_EXTERN intptr_t pn_class_compare(const pn_class_t *clazz, void *a, void *b);
 PN_EXTERN bool pn_class_equals(const pn_class_t *clazz, void *a, void *b);
 PN_EXTERN int pn_class_inspect(const pn_class_t *clazz, void *object, pn_string_t *dst);
 
+PN_EXTERN void *pn_void_new(const pn_class_t *clazz, size_t size);
+PN_EXTERN void pn_void_incref(void *object);
+PN_EXTERN void pn_void_decref(void *object);
+PN_EXTERN int pn_void_refcount(void *object);
 PN_EXTERN uintptr_t pn_void_hashcode(void *object);
 PN_EXTERN intptr_t pn_void_compare(void *a, void *b);
 PN_EXTERN int pn_void_inspect(void *object, pn_string_t *dst);
@@ -293,6 +333,10 @@ PN_EXTERN bool pn_record_has(pn_record_t *record, pn_handle_t key);
 PN_EXTERN void *pn_record_get(pn_record_t *record, pn_handle_t key);
 PN_EXTERN void pn_record_set(pn_record_t *record, pn_handle_t key, void *value);
 PN_EXTERN void pn_record_clear(pn_record_t *record);
+
+/**
+ * @endcond
+ */
 
 #ifdef __cplusplus
 }

@@ -34,10 +34,9 @@ extern "C" {
 /**
  * @file
  *
- * Transport API for the proton Engine.
+ * @copybrief transport
  *
- * @defgroup transport Transport
- * @ingroup engine
+ * @addtogroup transport
  * @{
  */
 
@@ -52,6 +51,7 @@ extern "C" {
  * - ::PN_TRACE_RAW
  * - ::PN_TRACE_FRM
  * - ::PN_TRACE_DRV
+ * - ::PN_TRACE_EVT
  *
  */
 typedef int pn_trace_t;
@@ -80,6 +80,11 @@ typedef void (*pn_tracer_t)(pn_transport_t *transport, const char *message);
  * Log driver related events, e.g. initialization, end of stream, etc.
  */
 #define PN_TRACE_DRV (4)
+
+/**
+ * Log events
+ */
+#define PN_TRACE_EVT (8)
 
 /**
  * Factory for creating a transport.
@@ -120,29 +125,34 @@ PN_EXTERN void pn_transport_set_server(pn_transport_t *transport);
  */
 PN_EXTERN void pn_transport_free(pn_transport_t *transport);
 
-/** Retrieve the authenticated user
+/**
+ * Retrieve the authenticated user.
  *
- * This is usually used at the the server end to find the name of the authenticated user.
- * On the client it will merely return whatever user was passed in to the
- * pn_connection_set_user() API of the bound connection.
+ * This is usually used at the the server end to find the name of the
+ * authenticated user.  On the client it will merely return whatever
+ * user was passed in to the pn_connection_set_user() API of the bound
+ * connection.
  *
- * The returned value is only reliable after the PN_TRANSPORT_AUTHENTICATED event has been received.
+ * The returned value is only reliable after the
+ * PN_TRANSPORT_AUTHENTICATED event has been received.
  *
  * @param[in] transport the transport
  *
- * @return
- * If a the user is anonymous (either no SASL layer is negotiated or the SASL ANONYMOUS mechanism is used)
- * then the user will be "anonymous"
- * Otherwise a string containing the user is returned.
+ * @return If a the user is anonymous (either no SASL layer is
+ * negotiated or the SASL ANONYMOUS mechanism is used) then the user
+ * will be "anonymous" Otherwise a string containing the user is
+ * returned.
  */
 PN_EXTERN const char *pn_transport_get_user(pn_transport_t *transport);
 
 /**
- * Set whether a non authenticated transport connection is allowed
+ * Set whether a non-authenticated transport connection is allowed.
  *
- * There are several ways within the AMQP protocol suite to get unauthenticated connections:
+ * There are several ways within the AMQP protocol suite to get
+ * unauthenticated connections:
+ *
  * - Use no SASL layer (with either no TLS or TLS without client certificates)
- * - Use an SASL layer but the ANONYMOUS mechanism
+ * - Use a SASL layer but the ANONYMOUS mechanism
  *
  * The default if this option is not set is to allow unauthenticated connections.
  *
@@ -166,8 +176,8 @@ PN_EXTERN bool pn_transport_is_authenticated(pn_transport_t *transport);
  * Set whether a non encrypted transport connection is allowed
  *
  * There are several ways within the AMQP protocol suite to get encrypted connections:
- * - Use TLS/SSL
- * - Use an SASL with a mechanism that supports saecurity layers
+ * - Use TLS
+ * - Use a SASL with a mechanism that supports saecurity layers
  *
  * The default if this option is not set is to allow unencrypted connections.
  *
@@ -204,7 +214,7 @@ PN_EXTERN pn_condition_t *pn_transport_condition(pn_transport_t *transport);
 /**
  * @deprecated
  */
-PN_EXTERN  pn_error_t *pn_transport_error(pn_transport_t *transport);
+PN_EXTERN pn_error_t *pn_transport_error(pn_transport_t *transport);
 
 /**
  * Binds the transport to an AMQP connection.
@@ -228,6 +238,8 @@ PN_EXTERN int pn_transport_unbind(pn_transport_t *transport);
  *
  * @param[in] transport a transport object
  * @param[in] trace the trace flags
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN void pn_transport_trace(pn_transport_t *transport, pn_trace_t trace);
 
@@ -240,18 +252,24 @@ PN_EXTERN void pn_transport_trace(pn_transport_t *transport, pn_trace_t trace);
  *
  * @param[in] transport a transport object
  * @param[in] tracer the tracing function
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN void pn_transport_set_tracer(pn_transport_t *transport, pn_tracer_t tracer);
 
 /**
- * Get the tracning function used by a transport.
+ * Get the tracing function used by a transport.
  *
  * @param[in] transport a transport object
  * @return the tracing function used by a transport
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN pn_tracer_t pn_transport_get_tracer(pn_transport_t *transport);
 
 /**
+ * @deprecated
+ *
  * Get the application context that is associated with a transport object.
  *
  * The application context for a transport may be set using
@@ -264,6 +282,7 @@ PN_EXTERN void *pn_transport_get_context(pn_transport_t *transport);
 
 /**
  * @deprecated
+ *
  * Set a new application context for a transport object.
  *
  * The application context for a transport object may be retrieved using
@@ -290,6 +309,8 @@ PN_EXTERN pn_record_t *pn_transport_attachments(pn_transport_t *transport);
  *
  * @param[in] transport a transport object
  * @param[in] message the message to be logged
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN void pn_transport_log(pn_transport_t *transport, const char *message);
 
@@ -303,6 +324,8 @@ PN_EXTERN void pn_transport_log(pn_transport_t *transport, const char *message);
  * @param[in] transport a transport object
  * @param[in] fmt the printf formatted message to be logged
  * @param[in] ap a vector containing the format arguments
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN void pn_transport_vlogf(pn_transport_t *transport, const char *fmt, va_list ap);
 
@@ -315,29 +338,33 @@ PN_EXTERN void pn_transport_vlogf(pn_transport_t *transport, const char *fmt, va
  *
  * @param[in] transport a transport object
  * @param[in] fmt the printf formatted message to be logged
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN void pn_transport_logf(pn_transport_t *transport, const char *fmt, ...);
 
 /**
  * Get the maximum allowed channel for a transport.
- * This will be the minimum of 
+ * This will be the minimum of
  *   1. limit imposed by this proton implementation
  *   2. limit imposed by remote peer
  *   3. limit imposed by this application, using pn_transport_set_channel_max()
  *
  * @param[in] transport a transport object
  * @return the maximum allowed channel
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN uint16_t pn_transport_get_channel_max(pn_transport_t *transport);
 
 /**
  * Set the maximum allowed channel number for a transport.
- * Note that this is the maximum channel number allowed, giving a 
- * valid channel number range of [0..channel_max]. Therefore the 
- * maximum number of simultaineously active channels will be 
+ * Note that this is the maximum channel number allowed, giving a
+ * valid channel number range of [0..channel_max]. Therefore the
+ * maximum number of simultaineously active channels will be
  * channel_max plus 1.
  * You can call this function more than once to raise and lower
- * the limit your application imposes on max channels for this 
+ * the limit your application imposes on max channels for this
  * transport.  However, smaller limits may be imposed by this
  * library, or by the remote peer.
  * After the OPEN frame has been sent to the remote peer,
@@ -346,6 +373,8 @@ PN_EXTERN uint16_t pn_transport_get_channel_max(pn_transport_t *transport);
  * @param[in] transport a transport object
  * @param[in] channel_max the maximum allowed channel
  * @return PN_OK, or PN_STATE_ERR if it is too late to change channel_max
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN int pn_transport_set_channel_max(pn_transport_t *transport, uint16_t channel_max);
 
@@ -354,6 +383,8 @@ PN_EXTERN int pn_transport_set_channel_max(pn_transport_t *transport, uint16_t c
  *
  * @param[in] transport a transport object
  * @return the maximum allowed channel of the transport's remote peer
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN uint16_t pn_transport_remote_channel_max(pn_transport_t *transport);
 
@@ -362,6 +393,8 @@ PN_EXTERN uint16_t pn_transport_remote_channel_max(pn_transport_t *transport);
  *
  * @param[in] transport a transport object
  * @return the maximum frame size of the transport object
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN uint32_t pn_transport_get_max_frame(pn_transport_t *transport);
 
@@ -370,6 +403,8 @@ PN_EXTERN uint32_t pn_transport_get_max_frame(pn_transport_t *transport);
  *
  * @param[in] transport a transport object
  * @param[in] size the maximum frame size for the transport object
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN void pn_transport_set_max_frame(pn_transport_t *transport, uint32_t size);
 
@@ -378,6 +413,8 @@ PN_EXTERN void pn_transport_set_max_frame(pn_transport_t *transport, uint32_t si
  *
  * @param[in] transport a transport object
  * @return the maximum frame size of the transport's remote peer
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN uint32_t pn_transport_get_remote_max_frame(pn_transport_t *transport);
 
@@ -388,6 +425,8 @@ PN_EXTERN uint32_t pn_transport_get_remote_max_frame(pn_transport_t *transport);
  *
  * @param[in] transport a transport object
  * @return the transport's idle timeout
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN pn_millis_t pn_transport_get_idle_timeout(pn_transport_t *transport);
 
@@ -398,6 +437,8 @@ PN_EXTERN pn_millis_t pn_transport_get_idle_timeout(pn_transport_t *transport);
  *
  * @param[in] transport a transport object
  * @param[in] timeout the idle timeout for the transport object
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN void pn_transport_set_idle_timeout(pn_transport_t *transport, pn_millis_t timeout);
 
@@ -408,6 +449,8 @@ PN_EXTERN void pn_transport_set_idle_timeout(pn_transport_t *transport, pn_milli
  *
  * @param[in] transport a transport object
  * @return the idle timeout for the transport's remote peer
+ *
+ * @internal XXX Deprecate!
  */
 PN_EXTERN pn_millis_t pn_transport_get_remote_idle_timeout(pn_transport_t *transport);
 
@@ -415,6 +458,7 @@ PN_EXTERN pn_millis_t pn_transport_get_remote_idle_timeout(pn_transport_t *trans
  * @deprecated
  */
 PN_EXTERN ssize_t pn_transport_input(pn_transport_t *transport, const char *bytes, size_t available);
+
 /**
  * @deprecated
  */
@@ -610,7 +654,8 @@ PN_EXTERN uint64_t pn_transport_get_frames_output(const pn_transport_t *transpor
  */
 PN_EXTERN uint64_t pn_transport_get_frames_input(const pn_transport_t *transport);
 
-/** Access the AMQP Connection associated with the transport.
+/**
+ * Access the AMQP Connection associated with the transport.
  *
  * @param[in] transport a transport object
  * @return the connection context for the transport, or NULL if
@@ -622,7 +667,8 @@ PN_EXTERN pn_connection_t *pn_transport_connection(pn_transport_t *transport);
 }
 #endif
 
-/** @}
+/**
+ * @}
  */
 
 #endif /* transport.h */

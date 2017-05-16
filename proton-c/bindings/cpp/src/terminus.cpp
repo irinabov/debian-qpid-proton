@@ -21,10 +21,10 @@
 
 #include "proton/terminus.hpp"
 
-#include "proton_bits.hpp"
+#include "proton/duration.hpp"
+#include "proton/value.hpp"
 
-#include "proton/link.hpp"
-#include <proton/link.h>
+#include "proton_bits.hpp"
 
 namespace proton {
 
@@ -49,8 +49,7 @@ bool terminus::dynamic() const {
 }
 
 value terminus::node_properties() const {
-    value x(make_wrapper(pn_terminus_properties(object_)));
-    return x;
+    return internal::value_ref(pn_terminus_properties(object_));
 }
 
 }

@@ -19,10 +19,10 @@
  *
  */
 
-#include "config.h"
+#include "core/config.h"
+#include "core/engine-internal.h"
 #include "sasl-internal.h"
 
-#include "engine/engine-internal.h"
 
 #include <sasl/sasl.h>
 #include <pthread.h>
@@ -40,12 +40,15 @@ static const char *amqp_service = "amqp";
 
 static bool pni_check_sasl_result(sasl_conn_t *conn, int r, pn_transport_t *logger)
 {
-    if (r!=SASL_OK) {
-        if (logger->trace & PN_TRACE_DRV)
-          pn_transport_logf(logger, "sasl error: %s", conn ? sasl_errdetail(conn) : sasl_errstring(r, NULL, NULL));
-        return false;
-    }
-    return true;
+    if (r==SASL_OK) return true;
+
+    const char* err = conn ? sasl_errdetail(conn) : sasl_errstring(r, NULL, NULL);
+    if (logger->trace & PN_TRACE_DRV)
+        pn_transport_logf(logger, "sasl error: %s", err);
+    pn_condition_t* c = pn_transport_condition(logger);
+    pn_condition_set_name(c, "proton:io:sasl_error");
+    pn_condition_set_description(c, err);
+    return false;
 }
 
 // Cyrus wrappers
@@ -105,8 +108,9 @@ static const sasl_callback_t pni_user_callbacks[] = {
 
 // Machinery to initialise the cyrus library only once even in a multithreaded environment
 // Relies on pthreads.
+static const char * const default_config_name = "proton-server";
 static char *pni_cyrus_config_dir = NULL;
-static const char *pni_cyrus_config_name = "proton-server";
+static char *pni_cyrus_config_name = NULL;
 static pthread_mutex_t pni_cyrus_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool pni_cyrus_client_started = false;
 static bool pni_cyrus_server_started = false;
@@ -116,6 +120,8 @@ static void pni_cyrus_finish(void) {
   pthread_mutex_lock(&pni_cyrus_mutex);
   if (pni_cyrus_client_started) sasl_client_done();
   if (pni_cyrus_server_started) sasl_server_done();
+  free(pni_cyrus_config_dir);
+  free(pni_cyrus_config_name);
   pthread_mutex_unlock(&pni_cyrus_mutex);
 }
 
@@ -142,7 +148,7 @@ static void pni_cyrus_server_once(void) {
     result = sasl_set_path(SASL_PATH_TYPE_CONFIG, pni_cyrus_config_dir);
   }
   if (result==SASL_OK) {
-    result = sasl_server_init(NULL, pni_cyrus_config_name);
+    result = sasl_server_init(NULL, pni_cyrus_config_name ? pni_cyrus_config_name : default_config_name);
   }
   pni_cyrus_server_started = true;
   pni_cyrus_server_init_rc = result;
@@ -163,8 +169,10 @@ bool pni_init_client(pn_transport_t* transport) {
   int result;
   sasl_conn_t *cyrus_conn = NULL;
   do {
-    if (sasl->config_dir) {
-      pni_cyrus_config_dir = sasl->config_dir;
+    // If pni_cyrus_config_dir already set then we already called pni_cyrus_client_start or pni_cyrus_server_start
+    // and the directory is already fixed - don't change
+    if (sasl->config_dir && !pni_cyrus_config_dir) {
+      pni_cyrus_config_dir = pn_strdup(sasl->config_dir);
     }
 
     pni_cyrus_client_start();
@@ -301,12 +309,16 @@ bool pni_init_server(pn_transport_t* transport)
   int result;
   sasl_conn_t *cyrus_conn = NULL;
   do {
-    if (sasl->config_dir) {
-      pni_cyrus_config_dir = sasl->config_dir;
+    // If pni_cyrus_config_dir already set then we already called pni_cyrus_client_start or pni_cyrus_server_start
+    // and the directory is already fixed - don't change
+    if (sasl->config_dir && !pni_cyrus_config_dir) {
+      pni_cyrus_config_dir = pn_strdup(sasl->config_dir);
     }
 
-    if (sasl->config_name) {
-      pni_cyrus_config_name = sasl->config_name;
+    // If pni_cyrus_config_name already set then we already called pni_cyrus_server_start
+    // and the name is already fixed - don't change
+    if (sasl->config_name && !pni_cyrus_config_name) {
+      pni_cyrus_config_name = pn_strdup(sasl->config_name);
     }
 
     pni_cyrus_server_start();
@@ -485,12 +497,10 @@ ssize_t pni_sasl_impl_encode(pn_transport_t *transport, pn_bytes_t in, pn_bytes_
   unsigned int outlen;
   int r = sasl_encode(cyrus_conn, in.start, in.size, &output, &outlen);
   if (outlen==0) return 0;
-  if ( r==SASL_OK ) {
+  if ( pni_check_sasl_result(cyrus_conn, r, transport) ) {
     *out = pn_bytes(outlen, output);
     return outlen;
   }
-  if (transport->trace & PN_TRACE_DRV)
-    pn_transport_logf(transport, "SASL encode error: %s", sasl_errdetail(cyrus_conn));
   return PN_ERR;
 }
 
@@ -502,12 +512,10 @@ ssize_t pni_sasl_impl_decode(pn_transport_t *transport, pn_bytes_t in, pn_bytes_
   unsigned int outlen;
   int r = sasl_decode(cyrus_conn, in.start, in.size, &output, &outlen);
   if (outlen==0) return 0;
-  if ( r==SASL_OK ) {
+  if ( pni_check_sasl_result(cyrus_conn, r, transport) ) {
     *out = pn_bytes(outlen, output);
     return outlen;
   }
-  if (transport->trace & PN_TRACE_DRV)
-    pn_transport_logf(transport, "SASL decode error: %s", sasl_errdetail(cyrus_conn));
   return PN_ERR;
 }
 

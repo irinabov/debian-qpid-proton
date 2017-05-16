@@ -22,14 +22,14 @@ include(cpp.cmake) # Compiler checks
 include_directories(
   "${CMAKE_SOURCE_DIR}/proton-c/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/include")
 
 add_definitions(${CXX_WARNING_FLAGS})
 
 set(qpid-proton-cpp-source
-  src/acceptor.cpp
   src/binary.cpp
   src/byte_array.cpp
+  src/cached_map.cpp
   src/connection.cpp
   src/connection_options.cpp
   src/connector.cpp
@@ -47,7 +47,8 @@ set(qpid-proton-cpp-source
   src/error_condition.cpp
   src/event_loop.cpp
   src/handler.cpp
-  src/io/connection_engine.cpp
+  src/io/connection_driver.cpp
+  src/io/link_namer.cpp
   src/link.cpp
   src/listener.cpp
   src/message.cpp
@@ -71,7 +72,6 @@ set(qpid-proton-cpp-source
   src/ssl.cpp
   src/ssl_domain.cpp
   src/target.cpp
-  src/task.cpp
   src/terminus.cpp
   src/timestamp.cpp
   src/tracker.cpp
@@ -162,20 +162,21 @@ macro(add_cpp_test test)
   add_executable (${test} src/${test}.cpp)
   target_link_libraries (${test} qpid-proton qpid-proton-cpp)
   if (CMAKE_SYSTEM_NAME STREQUAL Windows)
-    add_test (NAME cpp_${test}
+    add_test (NAME cpp-${test}
       COMMAND ${env_py}
       "PATH=$<TARGET_FILE_DIR:qpid-proton>"
       $<TARGET_FILE:${test}> ${ARGN})
   else ()
-    add_test (NAME cpp_${test} COMMAND ${memcheck-cmd} ${CMAKE_CURRENT_BINARY_DIR}/${test} ${ARGN})
+    add_test (NAME cpp-${test} COMMAND ${memcheck-cmd} ${CMAKE_CURRENT_BINARY_DIR}/${test} ${ARGN})
   endif ()
 endmacro(add_cpp_test)
 
 add_cpp_test(codec_test)
-add_cpp_test(engine_test)
+#add_cpp_test(engine_test)
 add_cpp_test(thread_safe_test)
 add_cpp_test(interop_test ${CMAKE_SOURCE_DIR}/tests)
 add_cpp_test(message_test)
 add_cpp_test(scalar_test)
 add_cpp_test(value_test)
 add_cpp_test(container_test)
+add_cpp_test(url_test)

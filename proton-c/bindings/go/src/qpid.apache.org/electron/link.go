@@ -182,31 +182,19 @@ func makeLocalLink(sn *session, isSender bool, setting ...LinkOption) (linkSetti
 	return l, nil
 }
 
-type incomingLink struct {
-	incoming
-	linkSettings
-	pLink proton.Link
-	sn    *session
-}
-
-// Set up a link from an incoming proton.Link.
-func makeIncomingLink(sn *session, pLink proton.Link) incomingLink {
-	l := incomingLink{
-		incoming: makeIncoming(pLink),
-		linkSettings: linkSettings{
-			isSender:  pLink.IsSender(),
-			source:    pLink.RemoteSource().Address(),
-			target:    pLink.RemoteTarget().Address(),
-			linkName:  pLink.Name(),
-			sndSettle: SndSettleMode(pLink.RemoteSndSettleMode()),
-			rcvSettle: RcvSettleMode(pLink.RemoteRcvSettleMode()),
-			capacity:  1,
-			prefetch:  false,
-			pLink:     pLink,
-			session:   sn,
-		},
+func makeIncomingLinkSettings(pLink proton.Link, sn *session) linkSettings {
+	return linkSettings{
+		isSender:  pLink.IsSender(),
+		source:    pLink.RemoteSource().Address(),
+		target:    pLink.RemoteTarget().Address(),
+		linkName:  pLink.Name(),
+		sndSettle: SndSettleMode(pLink.RemoteSndSettleMode()),
+		rcvSettle: RcvSettleMode(pLink.RemoteRcvSettleMode()),
+		capacity:  1,
+		prefetch:  false,
+		pLink:     pLink,
+		session:   sn,
 	}
-	return l
 }
 
 // Not part of Link interface but use by Sender and Receiver.
@@ -225,7 +213,7 @@ func (l *link) Credit() (credit int, err error) {
 func (l *link) Capacity() int { return l.capacity }
 
 func (l *link) Close(err error) {
-	l.engine().Inject(func() {
+	_ = l.engine().Inject(func() {
 		if l.Error() == nil {
 			localClose(l.pLink, err)
 		}

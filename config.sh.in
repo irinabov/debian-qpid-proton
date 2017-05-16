@@ -32,18 +32,15 @@ PROTON_HOME=@CMAKE_SOURCE_DIR@
 PROTON_BUILD=@CMAKE_BINARY_DIR@
 
 PROTON_BINDINGS=$PROTON_BUILD/proton-c/bindings
-PROTON_JARS=$PROTON_BUILD/proton-j/proton-j.jar
 
 PYTHON_BINDINGS=$PROTON_BINDINGS/python
 PHP_BINDINGS=$PROTON_BINDINGS/php
 RUBY_BINDINGS=$PROTON_BINDINGS/ruby
 PERL_BINDINGS=$PROTON_BINDINGS/perl
 
-# Python & Jython
-COMMON_PYPATH=$PROTON_HOME/tests/python:$PROTON_HOME/proton-c/bindings/python
+# Python
+COMMON_PYPATH=$PROTON_HOME/tests/python:$PROTON_HOME/proton-c/bindings/python:$PROTON_HOME/examples
 export PYTHONPATH=$COMMON_PYPATH:$PYTHON_BINDINGS
-export JYTHONPATH=$COMMON_PYPATH:$PROTON_HOME/proton-j/src/main/resources:$PROTON_JARS
-export CLASSPATH=$PROTON_JARS
 
 # PHP
 if [ -d $PHP_BINDINGS ]; then
@@ -73,7 +70,7 @@ export LD_LIBRARY_PATH="$(merge_paths $PROTON_BUILD/proton-c $LD_LIBRARY_PATH)"
 export PATH="$(merge_paths $PATH $PROTON_BUILD/tests/tools/apps/c $PROTON_HOME/tests/tools/apps/python $PROTON_HOME/tests/python)"
 
 # can the test harness use valgrind?
-if [[ -x "$(type -p valgrind)" && "@ENABLE_VALGRIND" == "ON" ]] ; then
+if [[ -x "$(type -p valgrind)" && "@ENABLE_VALGRIND@" == "ON" ]] ; then
     export VALGRIND=$(type -p valgrind)
 fi
 
@@ -81,3 +78,6 @@ fi
 if [[ -x "$(type -p saslpasswd2)" ]] ; then
     export SASLPASSWD=$(type -p saslpasswd2)
 fi
+
+# Location of interop test files.
+export PN_INTEROP_DIR=$PROTON_HOME/tests/interop
