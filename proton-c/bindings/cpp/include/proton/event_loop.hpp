@@ -22,30 +22,18 @@
  *
  */
 
+#include "./fwd.hpp"
 #include "./internal/config.hpp"
+#include "./internal/export.hpp"
+#include "./internal/pn_unique_ptr.hpp"
 
 #include <functional>
-
-#if PN_CPP_HAS_CPP11
-#include <future>
-#include <type_traits>
-#endif
 
 struct pn_connection_t;
 struct pn_session_t;
 struct pn_link_t;
 
 namespace proton {
-
-/// **Experimental** - A handler for injected code.
-class inject_handler {
-  public:
-    virtual ~inject_handler() {}
-
-    // XXX bad name, should be operator()() to be idiomatic and consistent with C++11.
-    /// Called when the injected code is executed.
-    virtual void on_inject() = 0;
-};
 
 /// **Experimental** - A serial execution context.
 ///
@@ -54,31 +42,48 @@ class inject_handler {
 /// and have it executed in the same sequence.
 ///
 class PN_CPP_CLASS_EXTERN event_loop {
+    /// @cond internal
+    class impl;
+    event_loop& operator=(impl* i);
+    /// @endcond
+
   public:
-    virtual ~event_loop() {}
+    /// Create event_loop
+    PN_CPP_EXTERN event_loop();
+
+    PN_CPP_EXTERN ~event_loop();
+
+#if PN_CPP_HAS_EXPLICIT_CONVERSIONS
+    /// When using C++11 (or later) you can use event_loop in a bool context
+    /// to indicate if there is an event loop set.
+    PN_CPP_EXTERN explicit operator bool() const { return bool(impl_); }
+#endif
+
+    /// No event loop set.
+    PN_CPP_EXTERN bool operator !() const { return !impl_; }
 
     /// Arrange to have f() called in the event_loop's sequence: possibly
     /// deferred, possibly in another thread.
     ///
     /// @return true if f() has or will be called, false if the event_loop is ended
     /// and f() cannot be injected.
-    virtual bool inject(inject_handler& f) = 0;
+    PN_CPP_EXTERN bool inject(void_function0& f);
 
-#if PN_CPP_HAS_CPP11
-    /// @copydoc inject(inject_handler&)
-    virtual bool inject(std::function<void()> f) = 0;
+#if PN_CPP_HAS_STD_FUNCTION
+    /// @copydoc inject(void_function0&)
+    PN_CPP_EXTERN bool inject(std::function<void()> f);
 #endif
 
-  protected:
-    event_loop() {}
-
   private:
-    PN_CPP_EXTERN static event_loop* get(pn_connection_t*);
-    PN_CPP_EXTERN static event_loop* get(pn_session_t*);
-    PN_CPP_EXTERN static event_loop* get(pn_link_t*);
+    PN_CPP_EXTERN static event_loop& get(pn_connection_t*);
+    PN_CPP_EXTERN static event_loop& get(pn_session_t*);
+    PN_CPP_EXTERN static event_loop& get(pn_link_t*);
+
+    internal::pn_unique_ptr<impl> impl_;
 
     /// @cond INTERNAL
-  friend class connection;
+  friend class container;
+  friend class io::connection_driver;
   template <class T> friend class thread_safe;
     /// @endcond
 };

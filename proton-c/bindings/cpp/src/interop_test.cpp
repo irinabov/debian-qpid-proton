@@ -32,8 +32,13 @@ namespace {
 
 using namespace std;
 using namespace proton;
-using namespace proton::codec;
-using namespace test;
+
+using proton::codec::encoder;
+using proton::codec::decoder;
+
+using proton::internal::data;
+
+using test::str;
 
 std::string tests_dir;
 
@@ -72,7 +77,7 @@ void test_decoder_primitves_exact() {
     ASSERT_EQUAL(12345u, get< ::uint64_t>(d));
     ASSERT_EQUAL(-12345, get< ::int64_t>(d));
     try { get<double>(d); FAIL("got float as double"); } catch(conversion_error){}
-    ASSERT_EQUAL(0.125, get<float>(d));
+    ASSERT_EQUAL(0.125f, get<float>(d));
     try { get<float>(d); FAIL("got double as float"); } catch(conversion_error){}
     ASSERT_EQUAL(0.125, get<double>(d));
     ASSERT(!d.more());
@@ -88,7 +93,7 @@ void test_encoder_primitives() {
     e << ::uint32_t(12345) << ::int32_t(-12345);
     e << ::uint64_t(12345) << ::int64_t(-12345);
     e << float(0.125) << double(0.125);
-    ASSERT_EQUAL("true, false, 42, 42, -42, 12345, -12345, 12345, -12345, 0.125, 0.125", str(str(e)));
+    ASSERT_EQUAL("true, false, 42, 42, -42, 12345, -12345, 12345, -12345, 0.125, 0.125", str(e));
     std::string data = e.encode();
     ASSERT_EQUAL(read("primitives"), data);
 }

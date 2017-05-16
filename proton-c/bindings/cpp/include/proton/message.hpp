@@ -22,25 +22,23 @@
  *
  */
 
-#include "./annotation_key.hpp"
-#include "./codec/map.hpp"
-#include "./duration.hpp"
+#include "./fwd.hpp"
 #include "./internal/export.hpp"
-#include "./message_id.hpp"
-#include "./internal/pn_unique_ptr.hpp"
+#include "./duration.hpp"
+#include "./timestamp.hpp"
 #include "./value.hpp"
+
+#include "./internal/cached_map.hpp"
+#include "./internal/pn_unique_ptr.hpp"
+
+#include <proton/type_compat.h>
 
 #include <string>
 #include <vector>
-#include <utility>
 
 struct pn_message_t;
 
 namespace proton {
-
-class delivery;
-class message_id;
-class annotation_key;
 
 /// An AMQP message.
 ///
@@ -50,11 +48,11 @@ class message {
   public:
     /// **Experimental** - A map of string keys and AMQP scalar
     /// values.
-    typedef std::map<std::string, scalar> property_map;
+    class property_map : public internal::cached_map<std::string, scalar> {};
 
     /// **Experimental** - A map of AMQP annotation keys and AMQP
     /// values.
-    typedef std::map<annotation_key, value> annotation_map;
+    class annotation_map : public internal::cached_map<annotation_key, value> {};
 
     /// Create an empty message.
     PN_CPP_EXTERN message();
@@ -132,7 +130,7 @@ class message {
 
     /// Get the address for replies.
     PN_CPP_EXTERN std::string reply_to() const;
-    
+
     /// Set the ID for matching related messages.
     PN_CPP_EXTERN void correlation_id(const message_id&);
 
@@ -228,6 +226,8 @@ class message {
     /// The priority of a message impacts ordering guarantees. Within
     /// a given ordered context, higher priority messages may jump
     /// ahead of lower priority messages.
+    ///
+    /// The default value set on newly constructed messages is message::default_priority.
     PN_CPP_EXTERN uint8_t priority() const;
 
     /// Set the priority.
@@ -316,12 +316,15 @@ class message {
 
     /// @}
 
+    /// Default priority assigned to new messages.
+    PN_CPP_EXTERN static const uint8_t default_priority;
+
     /// @cond INTERNAL
   private:
     pn_message_t *pn_msg() const;
 
     mutable pn_message_t *pn_msg_;
-    mutable value body_;
+    mutable internal::value_ref body_;
     mutable property_map application_properties_;
     mutable annotation_map message_annotations_;
     mutable annotation_map delivery_annotations_;

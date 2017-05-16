@@ -18,21 +18,23 @@
  */
 
 #include "proton_bits.hpp"
-#include "proton/codec/data.hpp"
+#include "proton/internal/data.hpp"
 #include "proton/value.hpp"
 #include "proton/types.hpp"
 #include "proton/scalar.hpp"
 #include "proton/error.hpp"
 
 #include <ostream>
+#include <sstream>
 
 namespace proton {
 
-using namespace codec;
+using codec::decoder;
+using codec::encoder;
+using codec::start;
 
 value::value() {}
 value::value(const value& x) { *this = x; }
-value::value(const codec::data& x) { if (!x.empty()) data().copy(x); }
 #if PN_CPP_HAS_RVALUE_REFERENCES
 value::value(value&& x) { swap(*this, x); }
 value& value::operator=(value&& x) { swap(*this, x); return *this; }
@@ -43,7 +45,7 @@ value& value::operator=(const value& x) {
         if (x.empty())
             clear();
         else
-            data().copy(x.data());
+            data().copy(x.data_);
     }
     return *this;
 }
@@ -54,20 +56,20 @@ void value::clear() { if (!!data_) data_.clear(); }
 
 namespace internal {
 
-type_id value_base::type() const {
-    return (!data_ || data_.empty()) ? NULL_TYPE : codec::decoder(*this).next_type();
-}
-
-bool value_base::empty() const { return type() == NULL_TYPE; }
-
 // On demand
-codec::data& value_base::data() const {
+internal::data& value_base::data() {
     if (!data_)
-        data_ = codec::data::create();
+        data_ = internal::data::create();
     return data_;
 }
 
 }
+
+type_id value::type() const {
+    return (!data_ || data_.empty()) ? NULL_TYPE : codec::decoder(*this).next_type();
+}
+
+bool value::empty() const { return type() == NULL_TYPE; }
 
 namespace {
 
@@ -139,13 +141,21 @@ int compare_next(decoder& a, decoder& b) {
       case STRING: return compare_simple<std::string>(a, b);
       case SYMBOL: return compare_simple<symbol>(a, b);
     }
+// Avoid unreached diagnostic from clang
+#if defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunreachable-code"
+#endif    
     // Invalid but equal type_id, treat as equal.
     return 0;
+#if defined(__clang__)
+#pragma GCC diagnostic pop
+#endif    
 }
 
 int compare(const value& x, const value& y) {
     decoder a(x), b(y);
-    state_guard s1(a), s2(b);
+    internal::state_guard s1(a), s2(b);
     a.rewind();
     b.rewind();
     while (a.more() && b.more()) {
@@ -171,27 +181,30 @@ bool operator<(const value& x, const value& y) {
     return compare(x, y) < 0;
 }
 
-namespace internal {
-std::ostream& operator<<(std::ostream& o, const internal::value_base& x) {
-    if (x.empty())
-        return o << "<null>";
+std::ostream& operator<<(std::ostream& o, const value& x) {
+    if (type_id_is_scalar(x.type()) || x.empty())
+        return o << proton::get<scalar>(x); // Print as a scalar
+    // Use pn_inspect for complex types.
     proton::decoder d(x);
-    // Print the following types with operator<<() consistent with C++.
-    switch (d.next_type()) {
-      case BOOLEAN: return o << get<bool>(d); // Respect std::boolalpha settings.
-      case STRING: return o << get<std::string>(d);
-      case SYMBOL: return o << get<symbol>(d);
-      case DECIMAL32: return o << get<decimal32>(d);
-      case DECIMAL64: return o << get<decimal64>(d);
-      case DECIMAL128: return o << get<decimal128>(d);
-      case UUID: return o << get<uuid>(d);
-      case TIMESTAMP: return o << get<timestamp>(d);
-      case CHAR: return o << get<wchar_t>(d);
-      default:
-        // Use pn_inspect for other types.
-        return o << d;
-    }
-}
+    return o << d;
 }
 
+namespace internal {
+value_ref::value_ref(pn_data_t* p) { refer(p); }
+value_ref::value_ref(const internal::data& d) { refer(d); }
+value_ref::value_ref(const value_base& v) { refer(v); }
+
+void value_ref::refer(pn_data_t* p) { data_ = make_wrapper(p); }
+void value_ref::refer(const internal::data& d) { data_ = d; }
+void value_ref::refer(const value_base& v) { data_ = v.data_; }
+
+void value_ref::reset() { refer(0); }
+} // namespace internal
+
+std::string to_string(const value& x) {
+    std::ostringstream os;
+    os << std::boolalpha << x;
+    return os.str();
 }
+
+} // namespace proton

@@ -28,11 +28,12 @@
 #include "proton/sender.hpp"
 #include "proton/timestamp.hpp"
 
-#include <proton/message.h>
-
 #include "msg.hpp"
 #include "proton_bits.hpp"
 #include "types_internal.hpp"
+
+#include <proton/delivery.h>
+#include <proton/message.h>
 
 #include <string>
 #include <algorithm>
@@ -54,7 +55,8 @@ message& message::operator=(message&& m) {
 message::message(const value& x) : pn_msg_(0) { body() = x; }
 
 message::~message() {
-    body_.data_ = codec::data();      // Must release body before pn_message_free
+    // Workaround proton bug: Must release all refs to body before calling pn_message_free()
+    body_.reset();
     pn_message_free(pn_msg_);
 }
 
@@ -69,7 +71,7 @@ void swap(message& x, message& y) {
 
 pn_message_t *message::pn_msg() const {
     if (!pn_msg_) pn_msg_ = pn_message();
-    body_.data_ = make_wrapper(pn_message_body(pn_msg_));
+    body_.refer(pn_message_body(pn_msg_));
     return pn_msg_;
 }
 
@@ -142,9 +144,7 @@ std::string message::reply_to() const {
 }
 
 void message::correlation_id(const message_id& id) {
-    value v;
-    v.data_ = make_wrapper(pn_message_correlation_id(pn_msg()));
-    v = id;
+    internal::value_ref(pn_message_correlation_id(pn_msg())) = id;
 }
 
 message_id message::correlation_id() const {
@@ -216,7 +216,7 @@ value& message::body() { pn_msg(); return body_; }
 // empty, the non-empty one is the authority.
 
 // Decode a map on demand
-template<class M> M& get_map(pn_message_t* msg, pn_data_t* (*get)(pn_message_t*), M& map) {
+template<class M, class F> M& get_map(pn_message_t* msg, F get, M& map) {
     codec::decoder d(make_wrapper(get(msg)));
     if (map.empty() && !d.empty()) {
         d.rewind();
@@ -227,7 +227,7 @@ template<class M> M& get_map(pn_message_t* msg, pn_data_t* (*get)(pn_message_t*)
 }
 
 // Encode a map if necessary.
-template<class M> M& put_map(pn_message_t* msg, pn_data_t* (*get)(pn_message_t*), M& map) {
+template<class M, class F> M& put_map(pn_message_t* msg, F get, M& map) {
     codec::encoder e(make_wrapper(get(msg)));
     if (e.empty() && !map.empty()) {
         e << map;
@@ -329,5 +329,7 @@ void message::delivery_count(uint32_t d) { pn_message_set_delivery_count(pn_msg(
 
 int32_t message::group_sequence() const { return pn_message_get_group_sequence(pn_msg()); }
 void message::group_sequence(int32_t d) { pn_message_set_group_sequence(pn_msg(), d); }
+
+const uint8_t message::default_priority = PN_DEFAULT_PRIORITY;
 
 }

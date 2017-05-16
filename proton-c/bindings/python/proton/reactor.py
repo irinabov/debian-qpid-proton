@@ -132,10 +132,13 @@ class Reactor(Wrapper):
         self.start()
         while self.process(): pass
         self.stop()
+        self.process()
+        self.global_handler = None
+        self.handler = None
 
     def wakeup(self):
         n = pn_reactor_wakeup(self._impl)
-        if n: raise IOError(pn_error_text(pn_io_error(pn_reactor_io(self._impl))))
+        if n: raise IOError(pn_error_text(pn_reactor_error(self._impl)))
 
     def start(self):
         pn_reactor_start(self._impl)
@@ -159,8 +162,6 @@ class Reactor(Wrapper):
     def stop(self):
         pn_reactor_stop(self._impl)
         self._check_errors()
-        self.global_handler = None
-        self.handler = None
 
     def schedule(self, delay, task):
         impl = _chandler(task, self.on_error)
@@ -175,7 +176,7 @@ class Reactor(Wrapper):
         if aimpl:
             return Acceptor(aimpl)
         else:
-            raise IOError("%s (%s:%s)" % (pn_error_text(pn_io_error(pn_reactor_io(self._impl))), host, port))
+            raise IOError("%s (%s:%s)" % pn_error_text(pn_reactor_error(self._impl)), host, port)
 
     def connection(self, handler=None):
         """Deprecated: use connection_to_host() instead
@@ -493,12 +494,7 @@ class SessionPerConnection(object):
     def session(self, connection):
         if not self._default_session:
             self._default_session = _create_session(connection)
-            self._default_session.context = self
         return self._default_session
-
-    def on_session_remote_close(self, event):
-        event.connection.close()
-        self._default_session = None
 
 class GlobalOverrides(object):
     """
@@ -533,6 +529,7 @@ class Connector(Handler):
         self.user = None
         self.password = None
         self.virtual_host = None
+        self.ssl_sni = None
 
     def _connect(self, connection, reactor):
         assert(reactor is not None)
@@ -564,7 +561,7 @@ class Connector(Handler):
             if not self.ssl_domain:
                 raise SSLUnavailable("amqps: SSL libraries not found")
             self.ssl = SSL(transport, self.ssl_domain)
-            self.ssl.peer_hostname = url.host
+            self.ssl.peer_hostname = self.ssl_sni or self.virtual_host or url.host
 
     def on_connection_local_open(self, event):
         self._connect(event.connection, event.reactor)
@@ -723,6 +720,7 @@ class Container(Reactor):
         if connector.virtual_host:
             # only set hostname if virtual-host is a non-empty string
             conn.hostname = connector.virtual_host
+        connector.ssl_sni = kwargs.get('sni')
 
         conn._overrides = connector
         if url: connector.address = Urls([url])

@@ -37,10 +37,9 @@ extern "C" {
 /**
  * @file
  *
- * Link API for the proton Engine.
+ * @copybrief link
  *
- * @defgroup link Link
- * @ingroup engine
+ * @addtogroup link
  * @{
  */
 
@@ -85,6 +84,7 @@ PN_EXTERN void pn_link_free(pn_link_t *link);
 
 /**
  * @deprecated
+ *
  * Get the application context that is associated with a link object.
  *
  * The application context for a link may be set using
@@ -97,6 +97,7 @@ PN_EXTERN void *pn_link_get_context(pn_link_t *link);
 
 /**
  * @deprecated
+ *
  * Set a new application context for a link object.
  *
  * The application context for a link object may be retrieved using
@@ -148,6 +149,8 @@ PN_EXTERN bool pn_link_is_receiver(pn_link_t *link);
 PN_EXTERN pn_state_t pn_link_state(pn_link_t *link);
 
 /**
+ * @deprecated
+ *
  * Get additional error information associated with the link.
  *
  * Whenever a link operation fails (i.e. returns an error code),
@@ -565,11 +568,6 @@ PN_EXTERN pn_delivery_t *pn_unsettled_head(pn_link_t *link);
 PN_EXTERN pn_delivery_t *pn_unsettled_next(pn_delivery_t *delivery);
 
 /**
- * @defgroup sender Sender
- * @{
- */
-
-/**
  * Signal the availability of deliveries for a link.
  *
  * @param[in] sender a sender link object
@@ -589,14 +587,6 @@ PN_EXTERN void pn_link_offered(pn_link_t *sender, int credit);
 PN_EXTERN ssize_t pn_link_send(pn_link_t *sender, const char *bytes, size_t n);
 
 //PN_EXTERN void pn_link_abort(pn_sender_t *sender);
-
-/** @} */
-
-// receiver
-/**
- * @defgroup receiver Receiver
- * @{
- */
 
 /**
  * Grant credit for incoming deliveries on a receiver.
@@ -656,9 +646,38 @@ PN_EXTERN ssize_t pn_link_recv(pn_link_t *receiver, char *bytes, size_t n);
  */
 PN_EXTERN bool pn_link_draining(pn_link_t *receiver);
 
-/** @} */
+/**
+ * **Experimental** - Get the maximum message size for a link.
+ *
+ * A zero maximum message size means the size is unlimited.
+ *
+ * @param[in] link a link object
+ * @return the maximum message size for a link.
+ */
+PN_EXTERN uint64_t pn_link_max_message_size(pn_link_t *link);
 
-/** @}
+/**
+ * **Experimental** - Set the maximum message size for a link.
+ *
+ * A zero maximum message size means the size is unlimited.
+ *
+ * @param[in] link a link object
+ * @param[in] size the maximum message size for the link
+ */
+PN_EXTERN void pn_link_set_max_message_size(pn_link_t *link, uint64_t size);
+
+/**
+ * **Experimental** - Get the remote view of the maximum message size for a link.
+ *
+ * A zero maximum message size means the size is unlimited.
+ *
+ * @param[in] link a link object
+ * @return the remote view of the maximum message size for a link
+ */
+PN_EXTERN uint64_t pn_link_remote_max_message_size(pn_link_t *link);
+
+/**
+ * @}
  */
 
 #ifdef __cplusplus

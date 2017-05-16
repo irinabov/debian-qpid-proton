@@ -38,6 +38,9 @@ class Wrapper(object):
         if callable(impl_or_constructor):
             # we are constructing a new object
             impl = impl_or_constructor()
+            if impl is None:
+                from proton import ProtonException
+                raise ProtonException("Wrapper failed to create wrapped object. Check for file descriptor or memory exhaustion.")
             init = True
         else:
             # we are wrapping an existing object
@@ -102,10 +105,5 @@ class Wrapper(object):
                                                id(self), addressof(self._impl))
 
 
-if pn_py2void(Wrapper) is Wrapper:
-    PYCTX = Wrapper
-    import java.lang.System
-    addressof = java.lang.System.identityHashCode
-else:
-    PYCTX = int(pn_py2void(Wrapper))
-    addressof = int
+PYCTX = int(pn_py2void(Wrapper))
+addressof = int

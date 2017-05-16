@@ -22,12 +22,14 @@
  *
  */
 
+#include "./fwd.hpp"
+#include "./types_fwd.hpp"
 #include "./internal/config.hpp"
 #include "./internal/export.hpp"
-#include "./duration.hpp"
 #include "./internal/pn_unique_ptr.hpp"
-#include "./reconnect_timer.hpp"
-#include "./types_fwd.hpp"
+#include "./duration.hpp"
+
+#include <proton/type_compat.h>
 
 #include <vector>
 #include <string>
@@ -35,13 +37,6 @@
 struct pn_connection_t;
 
 namespace proton {
-
-class proton_handler;
-class connection;
-
-namespace io {
-class connection_engine;
-}
 
 /// Options for creating a connection.
 ///
@@ -100,8 +95,24 @@ class connection_options {
     /// Set the container ID.
     PN_CPP_EXTERN connection_options& container_id(const std::string &id);
 
-    /// Set the virtual host name.
+    /// Set the virtual host name for the connection. If making a
+    /// client connection by SSL/TLS, this name is also used for
+    /// certificate verification and Server Name Indication.  For
+    /// client connections, it defaults to the host name used to set
+    /// up the connection.  It is not set by default for server
+    /// connections.
     PN_CPP_EXTERN connection_options& virtual_host(const std::string &name);
+
+    /// Set the user name used to authenticate the connection.
+    ///
+    /// This will override any user name that is specified in the url
+    /// used for container::connect.
+    /// It will be ignored if the connection is created by container::listen as
+    /// a listening connection has no user name.
+    PN_CPP_EXTERN connection_options& user(const std::string& user);
+
+    /// Set the password used to authenticate the connection
+    PN_CPP_EXTERN connection_options& password(const std::string& pass);
 
     /// @cond INTERNAL
     // XXX settle questions about reconnect_timer - consider simply
@@ -137,17 +148,16 @@ class connection_options {
     PN_CPP_EXTERN connection_options& update(const connection_options& other);
 
   private:
-    void apply(connection&) const;
-    proton_handler* handler() const;
-    bool is_virtual_host_set() const;
+    void apply_unbound(connection&) const;
+    void apply_bound(connection&) const;
+    messaging_handler* handler() const;
 
     class impl;
     internal::pn_unique_ptr<impl> impl_;
 
     /// @cond INTERNAL
-  friend class container_impl;
-  friend class connector;
-  friend class io::connection_engine;
+  friend class container;
+  friend class io::connection_driver;
   friend class connection;
     /// @endcond
 };

@@ -17,24 +17,40 @@
  * under the License.
  */
 
+#include "proton/event_loop.hpp"
+
 #include "contexts.hpp"
+#include "event_loop_impl.hpp"
 
 #include <proton/session.h>
 #include <proton/link.h>
 
-#include "proton/event_loop.hpp"
-
 namespace proton {
 
-event_loop* event_loop::get(pn_connection_t* c) {
-    return connection_context::get(c).event_loop.get();
+event_loop::event_loop() {}
+event_loop::~event_loop() {}
+
+event_loop& event_loop::operator=(impl* i) { impl_.reset(i); return *this; }
+
+bool event_loop::inject(void_function0& f) {
+    return impl_->inject(f);
 }
 
-event_loop* event_loop::get(pn_session_t* s) {
+#if PN_CPP_HAS_STD_FUNCTION
+bool event_loop::inject(std::function<void()> f) {
+    return impl_->inject(f);
+}
+#endif
+
+event_loop& event_loop::get(pn_connection_t* c) {
+    return connection_context::get(c).event_loop_;
+}
+
+event_loop& event_loop::get(pn_session_t* s) {
     return get(pn_session_connection(s));
 }
 
-event_loop* event_loop::get(pn_link_t* l) {
+event_loop& event_loop::get(pn_link_t* l) {
     return get(pn_link_session(l));
 }
 

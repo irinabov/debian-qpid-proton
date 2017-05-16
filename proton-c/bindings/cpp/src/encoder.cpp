@@ -17,17 +17,17 @@
  * under the License.
  */
 
+#include "proton/codec/encoder.hpp"
+
 #include "proton_bits.hpp"
 #include "types_internal.hpp"
 #include "msg.hpp"
 
 #include "proton/annotation_key.hpp"
 #include "proton/binary.hpp"
-#include "proton/codec/encoder.hpp"
-#include "proton/codec/data.hpp"
 #include "proton/decimal.hpp"
 #include "proton/message_id.hpp"
-#include "proton/internal/scalar_base.hpp"
+#include "proton/scalar_base.hpp"
 #include "proton/symbol.hpp"
 #include "proton/timestamp.hpp"
 #include "proton/value.hpp"
@@ -51,7 +51,7 @@ encoder::encoder(internal::value_base& v) : data(v.data()) {
 }
 
 bool encoder::encode(char* buffer, size_t& size) {
-    state_guard sg(*this); // In case of error
+    internal::state_guard sg(*this); // In case of error
     ssize_t result = pn_data_encode(pn_object(), buffer, size);
     if (result == PN_OVERFLOW) {
         result = pn_data_encoded_size(pn_object());
@@ -117,7 +117,7 @@ int pn_data_put_amqp_symbol(pn_data_t *d, const symbol& x) { return pn_data_put_
 
 template <class T, class U>
 encoder& encoder::insert(const T& x, int (*put)(pn_data_t*, U)) {
-    state_guard sg(*this);         // Save state in case of error.
+    internal::state_guard sg(*this);         // Save state in case of error.
     check(put(pn_object(), coerce<U>(x)));
     sg.cancel();                // Don't restore state, all is good.
     return *this;
@@ -145,15 +145,14 @@ encoder& encoder::operator<<(const symbol& x) { return insert(x, pn_data_put_amq
 encoder& encoder::operator<<(const binary& x) { return insert(x, pn_data_put_amqp_binary); }
 encoder& encoder::operator<<(const null&) { pn_data_put_null(pn_object()); return *this; }
 
-encoder& encoder::operator<<(const internal::scalar_base& x) { return insert(x.atom_, pn_data_put_atom); }
+encoder& encoder::operator<<(const scalar_base& x) { return insert(x.atom_, pn_data_put_atom); }
 
 encoder& encoder::operator<<(const internal::value_base& x) {
-    if (*this == x.data_)
+    data d = x.data_;
+    if (*this == d)
         throw conversion_error("cannot insert into self");
-    if (x.empty()) {
+    if (!d || d.empty())
         return *this << null();
-    }
-    data d = x.data();
     d.rewind();
     check(append(d));
     return *this;

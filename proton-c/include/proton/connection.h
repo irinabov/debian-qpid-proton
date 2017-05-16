@@ -38,10 +38,9 @@ extern "C" {
 /**
  * @file
  *
- * Connection API for the proton Engine.
+ * @copybrief connection
  *
- * @defgroup connection Connection
- * @ingroup engine
+ * @addtogroup connection
  * @{
  */
 
@@ -49,22 +48,28 @@ extern "C" {
  * The local @link pn_state_t endpoint state @endlink is uninitialized.
  */
 #define PN_LOCAL_UNINIT (1)
+
 /**
  * The local @link pn_state_t endpoint state @endlink is active.
  */
+
 #define PN_LOCAL_ACTIVE (2)
+
 /**
  * The local @link pn_state_t endpoint state @endlink is closed.
  */
 #define PN_LOCAL_CLOSED (4)
+
 /**
  * The remote @link pn_state_t endpoint state @endlink is uninitialized.
  */
 #define PN_REMOTE_UNINIT (8)
+
 /**
  * The remote @link pn_state_t endpoint state @endlink is active.
  */
 #define PN_REMOTE_ACTIVE (16)
+
 /**
  * The remote @link pn_state_t endpoint state @endlink is closed.
  */
@@ -81,6 +86,8 @@ extern "C" {
  * bits of an endpoint's state.
  */
 #define PN_REMOTE_MASK (PN_REMOTE_UNINIT | PN_REMOTE_ACTIVE | PN_REMOTE_CLOSED)
+
+PN_EXTERN pn_connection_t *pn_connection(void);
 
 /**
  * Factory to construct a new Connection.
@@ -112,6 +119,8 @@ PN_EXTERN void pn_connection_free(pn_connection_t *connection);
 PN_EXTERN void pn_connection_release(pn_connection_t *connection);
 
 /**
+ * @deprecated
+ *
  * Get additional error information associated with the connection.
  *
  * Whenever a connection operation fails (i.e. returns an error code),
@@ -148,7 +157,14 @@ PN_EXTERN pn_error_t *pn_connection_error(pn_connection_t *connection);
 PN_EXTERN void pn_connection_collect(pn_connection_t *connection, pn_collector_t *collector);
 
 /**
+ * Get the collector set with pn_connection_collect()
+ * @return NULL if pn_connection_collect() has not been called.
+*/
+PN_EXTERN pn_collector_t* pn_connection_collector(pn_connection_t *connection);
+
+/**
  * @deprecated
+ *
  * Get the application context that is associated with a connection
  * object.
  *
@@ -162,6 +178,7 @@ PN_EXTERN void *pn_connection_get_context(pn_connection_t *connection);
 
 /**
  * @deprecated
+ *
  * Set a new application context for a connection object.
  *
  * The application context for a connection object may be retrieved
@@ -194,7 +211,7 @@ PN_EXTERN pn_state_t pn_connection_state(pn_connection_t *connection);
  * Once this operation has completed, the PN_LOCAL_ACTIVE state flag
  * will be set.
  *
- * @param[in] connection a connection object
+ * @param[in] connection the connection object
  */
 PN_EXTERN void pn_connection_open(pn_connection_t *connection);
 
@@ -206,7 +223,7 @@ PN_EXTERN void pn_connection_open(pn_connection_t *connection);
  * ::pn_connection_open, in this case it is equivalent to calling
  * ::pn_connection_open followed by ::pn_connection_close.
  *
- * @param[in] connection a connection object
+ * @param[in] connection the connection object
  */
 PN_EXTERN void pn_connection_close(pn_connection_t *connection);
 
@@ -216,7 +233,7 @@ PN_EXTERN void pn_connection_close(pn_connection_t *connection);
  * Note that this does *not* remove any contained ::pn_session_t,
  * ::pn_link_t, and ::pn_delivery_t objects.
  *
- * @param[in] connection a connection object
+ * @param[in] connection the connection object
  */
 PN_EXTERN void pn_connection_reset(pn_connection_t *connection);
 
@@ -477,7 +494,8 @@ PN_EXTERN pn_data_t *pn_connection_remote_properties(pn_connection_t *connection
  */
 PN_EXTERN pn_transport_t *pn_connection_transport(pn_connection_t *connection);
 
-/** @}
+/**
+ * @}
  */
 
 #ifdef __cplusplus

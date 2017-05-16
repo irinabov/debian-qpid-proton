@@ -23,13 +23,25 @@ include_directories(${ProtonCpp_INCLUDE_DIRS})
 link_libraries(${ProtonCpp_LIBRARIES})
 add_definitions(${CXX_WARNING_FLAGS})
 
-# Single-threaded examples.
+# Add a test with the correct environment to find test executables and valgrind.
+macro(add_cpp_test name)
+  if(WIN32)
+    set(test_path "$<TARGET_FILE_DIR:broker>;$<TARGET_FILE_DIR:qpid-proton>;$<TARGET_FILE_DIR:qpid-proton-cpp>")
+  else(WIN32)
+    set(test_path "$<TARGET_FILE_DIR:broker>:$ENV{PATH}")
+  endif(WIN32)
+  set(run_env ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/proton-c/env.py)
+  add_test(NAME ${name} COMMAND ${run_env} "PATH=${test_path}" ${VALGRIND_ENV} -- ${ARGN})
+endmacro()
+
+# Single-threaded examples that work on C++03
 foreach(example
     broker
     helloworld
     helloworld_direct
     simple_recv
     simple_send
+    scheduled_send_03
     direct_recv
     direct_send
     client
@@ -41,37 +53,31 @@ foreach(example
     flow_control
     ssl
     ssl_client_cert
+    service_bus
     encode_decode)
   add_executable(${example} ${example}.cpp)
 endforeach()
 
-# Python test runner
-set(env_py ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/proton-c/env.py)
-
-function(set_test_path dir)
-  if (WIN32)
-    set(test_path "${dir}" "$<TARGET_FILE_DIR:qpid-proton>" "$<TARGET_FILE_DIR:qpid-proton-cpp>" PARENT_SCOPE)
-  else(WIN32)
-    set(test_path "${dir}:$ENV{PATH}" PARENT_SCOPE)
-  endif(WIN32)
-endfunction()
-
-set_test_path("$<TARGET_FILE_DIR:broker>")
-
-add_test(NAME cpp_container_example_test
-  COMMAND ${env_py} -- "PATH=${test_path}" ${VALGRIND_ENV} ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v ContainerExampleTest)
-
-# TODO aconway 2016-04-26: need portable MT and IO examples.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAS_CPP11)
-  set(container_src mt/epoll_container.cpp)
-  foreach(example broker)       # More coming
-    add_executable(mt_${example} mt/${example}.cpp ${container_src})
-    target_link_libraries(mt_${example} pthread)
+if(HAS_CPP11)
+  # Single-threaded examples that require C++11
+  foreach(example
+      scheduled_send)
+    add_executable(${example} ${example}.cpp)
   endforeach()
 
-  add_test(NAME cpp_mt_example_test
-    COMMAND ${env_py} -- "PATH=${test_path}" ${VALGRIND_ENV} ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v MtBrokerTest)
+  # Linux-only multi-threaded examples (TODO make these portable)
+#   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+#     set(container_src mt/epoll_container.cpp)
+#     foreach(example
+#         broker)
+#       add_executable(mt_${example} mt/${example}.cpp ${container_src})
+#       target_link_libraries(mt_${example} pthread)
+#     endforeach()
+#     add_cpp_test(cpp-example-mt ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v MtBrokerTest)
+#   endif()
 endif()
+
+add_cpp_test(cpp-example-container ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v ContainerExampleTest)
 
 
 

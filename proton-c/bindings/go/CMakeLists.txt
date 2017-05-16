@@ -22,14 +22,13 @@ execute_process(COMMAND ${GO_EXE} version OUTPUT_VARIABLE go_ver OUTPUT_STRIP_TR
 message(STATUS "Found Go: ${GO_EXE} (${go_ver})")
 
 set(GO_BUILD_FLAGS "" CACHE STRING "Flags for 'go build'")
+set(GO_TEST_FLAGS "-v" CACHE STRING "Flags for 'go test'")
 
 # Flags that differ for golang go and gcc go.
 if (go_ver MATCHES "gccgo")
   # TODO aconway 2015-10-08: import cycles with -race under gccgo, investigate.
-  set(GO_TEST_FLAGS "-v" CACHE STRING "Flags for 'go test'")
   set(GO_RPATH_FLAGS -gccgoflags "-Wl,-rpath=${CMAKE_BINARY_DIR}/proton-c")
 else()
-  set(GO_TEST_FLAGS "-v -race" CACHE STRING "Flags for 'go test'")
   set(GO_RPATH_FLAGS -ldflags "-r ${CMAKE_BINARY_DIR}/proton-c")
 endif()
 
@@ -41,6 +40,7 @@ set(GO_ENV ${env_py} --
   "GOPATH=${CMAKE_CURRENT_SOURCE_DIR}"
   "CGO_CFLAGS=-I${CMAKE_SOURCE_DIR}/proton-c/include -I${CMAKE_BINARY_DIR}/proton-c/include"
   "CGO_LDFLAGS=-L${CMAKE_BINARY_DIR}/proton-c"
+  "PN_INTEROP_DIR=${CMAKE_SOURCE_DIR}/tests/interop"
   CACHE INTERNAL "Run a command with Go environment variables")
 
 set(GO ${GO_ENV} ${GO_EXE} CACHE INTERNAL "Run go with environment set")
@@ -57,7 +57,7 @@ set(GO_TEST ${GO} test ${GO_BUILD_FLAGS} ${GO_RPATH_FLAGS} ${GO_TEST_FLAGS} CACH
 # done.
 add_custom_target(go-build ALL
   COMMAND ${GO_INSTALL} qpid.apache.org/...
-  DEPENDS qpid-proton
+  DEPENDS qpid-proton-core
   WORKING_DIRECTORY $ENV{PWD})
 
 add_test(

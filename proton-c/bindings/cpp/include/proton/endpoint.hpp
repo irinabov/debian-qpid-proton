@@ -22,10 +22,10 @@
  *
  */
 
-#include "./internal/config.hpp"
+#include "./fwd.hpp"
 #include "./error_condition.hpp"
+#include "./internal/config.hpp"
 #include "./internal/export.hpp"
-#include "./internal/comparable.hpp"
 
 namespace proton {
 
@@ -63,13 +63,14 @@ PN_CPP_CLASS_EXTERN endpoint {
 
 #if PN_CPP_HAS_DEFAULTED_FUNCTIONS
     // Make everything explicit for C++11 compilers
-    
+
+    /// @cond INTERNAL
     endpoint() = default;
     endpoint& operator=(const endpoint&) = default;
     endpoint& operator=(endpoint&&) = default;
-
     endpoint(const endpoint&) = default;
     endpoint(endpoint&&) = default;
+    /// @endcond
 #endif
 };
 
