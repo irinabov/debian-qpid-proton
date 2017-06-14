@@ -19,13 +19,12 @@
 
 #include "test_bits.hpp"
 
-#include "proton/codec/data.hpp"
+#include "proton/internal/data.hpp"
 #include "proton/internal/config.hpp"
 #include "proton/types.hpp"
 
 namespace {
 
-using namespace test;
 using namespace proton;
 
 template <class T> void  simple_type_test(const T& x) {
@@ -99,8 +98,7 @@ int main(int, char**) {
 
     // value and scalar types, more tests in value_test and scalar_test.
     RUN_TEST(failed, simple_type_test(value("foo")));
-    value v(23);                // Make sure we can take a non-const ref also
-    RUN_TEST(failed, simple_type_test(v));
+    RUN_TEST(failed, value v(23); simple_type_test(v));
     RUN_TEST(failed, simple_type_test(scalar(23)));
     RUN_TEST(failed, simple_type_test(annotation_key(42)));
     RUN_TEST(failed, simple_type_test(message_id(42)));
@@ -109,7 +107,7 @@ int main(int, char**) {
     RUN_TEST(failed, (uncodable_type_test<std::pair<int, float> >()));
     RUN_TEST(failed, (uncodable_type_test<std::pair<scalar, value> >()));
     RUN_TEST(failed, (uncodable_type_test<std::basic_string<wchar_t> >()));
-    RUN_TEST(failed, (uncodable_type_test<codec::data>()));
+    RUN_TEST(failed, (uncodable_type_test<internal::data>()));
     RUN_TEST(failed, (uncodable_type_test<pn_data_t*>()));
 
     return failed;

@@ -103,7 +103,7 @@ func (r *receiver) flow(credit int) {
 // Inject flow check per-caller call when prefetch is off.
 // Called with inc=1 at start of call, inc = -1 at end
 func (r *receiver) caller(inc int) {
-	r.engine().Inject(func() {
+	_ = r.engine().Inject(func() {
 		r.callers += inc
 		need := r.callers - (len(r.buffer) + r.pLink.Credit())
 		max := r.maxFlow()
@@ -117,37 +117,39 @@ func (r *receiver) caller(inc int) {
 // Inject flow top-up if prefetch is enabled
 func (r *receiver) flowTopUp() {
 	if r.prefetch {
-		r.engine().Inject(func() { r.flow(r.maxFlow()) })
+		_ = r.engine().Inject(func() { r.flow(r.maxFlow()) })
 	}
 }
 
-// Not claled
 func (r *receiver) Receive() (rm ReceivedMessage, err error) {
 	return r.ReceiveTimeout(Forever)
 }
 
-func (r *receiver) ReceiveTimeout(timeout time.Duration) (ReceivedMessage, error) {
+func (r *receiver) ReceiveTimeout(timeout time.Duration) (rm ReceivedMessage, err error) {
 	assert(r.buffer != nil, "Receiver is not open: %s", r)
-	select { // Check for immediate availability
-	case rm := <-r.buffer:
-		r.flowTopUp()
-		return rm, nil
-	default:
-	}
 	if !r.prefetch { // Per-caller flow control
-		r.caller(+1)
-		defer r.caller(-1)
+		select { // Check for immediate availability, avoid caller() inject
+		case rm2, ok := <-r.buffer:
+			if ok {
+				rm = rm2
+			} else {
+				err = r.Error()
+			}
+			return
+		default: // Not immediately available, inject caller() counts
+			r.caller(+1)
+			defer r.caller(-1)
+		}
 	}
 	rmi, err := timedReceive(r.buffer, timeout)
 	switch err {
 	case nil:
 		r.flowTopUp()
-		return rmi.(ReceivedMessage), err
+		rm = rmi.(ReceivedMessage)
 	case Closed:
-		return ReceivedMessage{}, r.Error()
-	default:
-		return ReceivedMessage{}, err
+		err = r.Error()
 	}
+	return
 }
 
 // Called in proton goroutine on MMessage event.
@@ -174,10 +176,11 @@ func (r *receiver) message(delivery proton.Delivery) {
 }
 
 func (r *receiver) closed(err error) error {
+	e := r.link.closed(err)
 	if r.buffer != nil {
 		close(r.buffer)
 	}
-	return r.link.closed(err)
+	return e
 }
 
 // ReceivedMessage contains an amqp.Message and allows the message to be acknowledged.
@@ -210,7 +213,15 @@ func (rm *ReceivedMessage) Release() error { return rm.acknowledge(proton.Releas
 // IncomingReceiver is sent on the Connection.Incoming() channel when there is
 // an incoming request to open a receiver link.
 type IncomingReceiver struct {
-	incomingLink
+	incoming
+	linkSettings
+}
+
+func newIncomingReceiver(sn *session, pLink proton.Link) *IncomingReceiver {
+	return &IncomingReceiver{
+		incoming:     makeIncoming(pLink),
+		linkSettings: makeIncomingLinkSettings(pLink, sn),
+	}
 }
 
 // SetCapacity sets the capacity of the incoming receiver, call before Accept()

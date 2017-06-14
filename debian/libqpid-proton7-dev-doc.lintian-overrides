@@ -1,3 +1,0 @@
-# this is not from the source tarball
-libqpid-proton7-dev-doc: embedded-javascript-library usr/share/proton/docs/api-c/jquery.js
-libqpid-proton7-dev-doc: script-not-executable usr/share/proton/docs/api-c/installdox

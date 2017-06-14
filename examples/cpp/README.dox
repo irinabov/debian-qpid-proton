@@ -123,7 +123,7 @@ subscribe.
 /** @example mt/epoll_container.cpp
 
 An example implementation of the proton::container API that shows how
-to use the proton::io::connection_engine SPI to adapt the proton API
+to use the proton::io::connection_driver SPI to adapt the proton API
 to native IO, in this case using a multithreaded Linux epoll poller as
 the implementation.
 
@@ -136,5 +136,28 @@ __Requires C++11__
 A multithreaded broker, that will work on any multi-threaded container. See @ref mt/epoll_container.cpp for an example of a multi-threaded container.
 
 __Requires C++11__
+
+*/
+
+/** @example scheduled_send.cpp
+
+Shows how to use proton::container::schedule to schedule a timed callback.
+This version uses std::function and so requires C++11 or better. For a C++03 compatible
+approach see @ref scheduled_send_03.cpp.
+
+*/
+
+/** @example scheduled_send_03.cpp
+
+Shows how to use proton::container::schedule to schedule a timed callback in a
+C++03 compatible way. See @ref scheduled_send.cpp for a more convenient approach
+using std::function if you have C++11.
+
+*/
+
+/** @example service_bus.cpp
+
+A working example for accessing Service Bus session-enabled queues.
+Also provides some general notes on Service Bus usage.
 
 */

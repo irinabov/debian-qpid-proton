@@ -22,11 +22,63 @@
 import unittest
 import os, sys, socket, time, re, inspect
 from  random import randrange
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import Popen, PIPE, STDOUT, call
 from copy import copy
 import platform
 from os.path import dirname as dirname
 from threading import Thread, Event
+from string import Template
+
+createdSASLDb = False
+
+def findfileinpath(filename, searchpath):
+    """Find filename in the searchpath
+        return absolute path to the file or None
+    """
+    paths = searchpath.split(os.pathsep)
+    for path in paths:
+        if os.path.exists(os.path.join(path, filename)):
+            return os.path.abspath(os.path.join(path, filename))
+    return None
+
+def _cyrusSetup(conf_dir):
+  """Write out simple SASL config.
+  """
+  saslpasswd = ""
+  if 'SASLPASSWD' in os.environ:
+    saslpasswd = os.environ['SASLPASSWD']
+  else:
+    saslpasswd = findfileinpath('saslpasswd2', os.getenv('PATH')) or ""
+  if os.path.exists(saslpasswd):
+    t = Template("""sasldb_path: ${db}
+mech_list: EXTERNAL DIGEST-MD5 SCRAM-SHA-1 CRAM-MD5 PLAIN ANONYMOUS
+""")
+    abs_conf_dir = os.path.abspath(conf_dir)
+    call(args=['rm','-rf',abs_conf_dir])
+    os.mkdir(abs_conf_dir)
+    db = os.path.join(abs_conf_dir,'proton.sasldb')
+    conf = os.path.join(abs_conf_dir,'proton-server.conf')
+    f = open(conf, 'w')
+    f.write(t.substitute(db=db))
+    f.close()
+
+    cmd_template = Template("echo password | ${saslpasswd} -c -p -f ${db} -u proton user")
+    cmd = cmd_template.substitute(db=db, saslpasswd=saslpasswd)
+    call(args=cmd, shell=True)
+
+    os.environ['PN_SASL_CONFIG_PATH'] = abs_conf_dir
+    global createdSASLDb
+    createdSASLDb = True
+
+# Globally initialize Cyrus SASL configuration
+#if SASL.extended():
+_cyrusSetup('sasl_conf')
+
+def ensureCanTestExtendedSASL():
+#  if not SASL.extended():
+#    raise Skipped('Extended SASL not supported')
+  if not createdSASLDb:
+    raise Skipped("Can't Test Extended SASL: Couldn't create auth db")
 
 def pick_addr():
     """Pick a new host:port address."""
@@ -64,8 +116,9 @@ class Proc(Popen):
         if not skip_valgrind:
             args = self.env_args + args
         try:
-            Popen.__init__(self, args, stdout=PIPE, stderr=STDOUT, **kwargs)
-        except Exception, e:
+            Popen.__init__(self, args, stdout=PIPE, stderr=STDOUT,
+                           universal_newlines=True,  **kwargs)
+        except Exception as e:
             raise ProcError(self, str(e))
         # Start reader thread.
         self.pattern = ready
@@ -84,16 +137,17 @@ class Proc(Popen):
             while True:
                 l = self.stdout.readline()
                 if not l: break
-                self.out += l.translate(None, "\r")
+                self.out += l
                 if self.pattern is not None:
                     if re.search(self.pattern, l):
                         self.ready_set = True
                         self.ready.set()
             if self.wait() != 0:
                 raise ProcError(self)
-        except Exception, e:
-            self.error = sys.exc_info()
+        except Exception as e:
+            self.error = e
         finally:
+            self.stdout.close()
             self.ready_set = True
             self.ready.set()
 
@@ -107,9 +161,7 @@ class Proc(Popen):
 
     def check_(self):
         if self.error:
-            if isinstance(self.error, Exception):
-                raise self.error
-            raise self.error[0], self.error[1], self.error[2] # with traceback
+            raise self.error
 
     def wait_ready(self):
         """Wait for ready to appear in output"""
@@ -145,7 +197,7 @@ else:
                 type(self)._setup_class_count = len(
                     inspect.getmembers(
                         type(self),
-                        predicate=lambda(m): inspect.ismethod(m) and m.__name__.startswith('test_')))
+                        predicate=lambda m: inspect.ismethod(m) and m.__name__.startswith('test_')))
                 type(self).setUpClass()
 
         def tearDown(self):
@@ -259,13 +311,12 @@ class ContainerExampleTest(BrokerTestCase):
                          self.proc(["client", "-a", addr+"/examples"]).wait_exit())
 
     def test_flow_control(self):
-        return
         want="""success: Example 1: simple credit
 success: Example 2: basic drain
 success: Example 3: drain without credit
 success: Exmaple 4: high/low watermark
 """
-        self.assertEqual(want, self.proc(["flow_control", pick_addr(), "-quiet"]).wait_exit())
+        self.assertEqual(want, self.proc(["flow_control", "--address", pick_addr(), "--quiet"]).wait_exit())
 
     def test_encode_decode(self):
         want="""
@@ -288,8 +339,8 @@ map{int(4):string(four), string(five):int(5)}
 
 == Insert with stream operators.
 array<int>[int(1), int(2), int(3)]
-list[int(42), boolean(false), symbol(x)]
-map{string(k1):int(42), symbol(k2):boolean(false)}
+list[int(42), boolean(0), symbol(x)]
+map{string(k1):int(42), symbol(k2):boolean(0)}
 """
         self.maxDiff = None
         self.assertEqual(want, self.proc(["encode_decode"]).wait_exit())
@@ -300,14 +351,31 @@ map{string(k1):int(42), symbol(k2):boolean(false)}
         return os.path.join(pn_root, "examples/cpp/ssl_certs")
 
     def test_ssl(self):
-        # SSL without SASL
+        # SSL without SASL, VERIFY_PEER_NAME
         addr = "amqps://" + pick_addr() + "/examples"
         # Disable valgrind when using OpenSSL
-        out = self.proc(["ssl", addr, self.ssl_certs_dir()], skip_valgrind=True).wait_exit()
+        out = self.proc(["ssl", "-a", addr, "-c", self.ssl_certs_dir()], skip_valgrind=True).wait_exit()
         expect = "Outgoing client connection connected via SSL.  Server certificate identity CN=test_server\nHello World!"
         expect_found = (out.find(expect) >= 0)
         self.assertEqual(expect_found, True)
 
+    def test_ssl_no_name(self):
+        # VERIFY_PEER
+        addr = "amqps://" + pick_addr() + "/examples"
+        # Disable valgrind when using OpenSSL
+        out = self.proc(["ssl", "-a", addr, "-c", self.ssl_certs_dir(), "-v", "noname"], skip_valgrind=True).wait_exit()
+        expect = "Outgoing client connection connected via SSL.  Server certificate identity CN=test_server\nHello World!"
+        expect_found = (out.find(expect) >= 0)
+        self.assertEqual(expect_found, True)
+
+    def test_ssl_bad_name(self):
+        # VERIFY_PEER
+        addr = "amqps://" + pick_addr() + "/examples"
+        # Disable valgrind when using OpenSSL
+        out = self.proc(["ssl", "-a", addr, "-c", self.ssl_certs_dir(), "-v", "fail"], skip_valgrind=True).wait_exit()
+        expect = "Expected failure of connection with wrong peer name"
+        expect_found = (out.find(expect) >= 0)
+        self.assertEqual(expect_found, True)
 
     def test_ssl_client_cert(self):
         # SSL with SASL EXTERNAL
@@ -320,6 +388,20 @@ Hello World!
         out = self.proc(["ssl_client_cert", addr, self.ssl_certs_dir()], skip_valgrind=True).wait_exit()
         expect_found = (out.find(expect) >= 0)
         self.assertEqual(expect_found, True)
+
+    def test_scheduled_send_03(self):
+        # Output should be a bunch of "send" lines but can't guarantee exactly how many.
+        out = self.proc(["scheduled_send_03", "-a", self.addr+"scheduled_send", "-t", "0.1", "-i", "0.001"]).wait_exit().split()
+        self.assertTrue(len(out) > 0);
+        self.assertEqual(["send"]*len(out), out)
+
+    def test_scheduled_send(self):
+        try:
+            out = self.proc(["scheduled_send", "-a", self.addr+"scheduled_send", "-t", "0.1", "-i", "0.001"]).wait_exit().split()
+            self.assertTrue(len(out) > 0);
+            self.assertEqual(["send"]*len(out), out)
+        except ProcError:       # File not found, not a C++11 build.
+            pass
 
 
 class EngineTestCase(BrokerTestCase):
@@ -361,14 +443,6 @@ class EngineTestCase(BrokerTestCase):
         self.assertEqual(CLIENT_EXPECT,
                          self.proc(["client", "-a", self.addr]).wait_exit())
 
-    def test_flow_control(self):
-        return
-        want="""success: Example 1: simple credit
-success: Example 2: basic drain
-success: Example 3: drain without credit
-success: Exmaple 4: high/low watermark
-"""
-        self.assertEqual(want, self.proc(["flow_control", pick_addr(), "-quiet"]).wait_exit())
 
 class MtBrokerTest(EngineTestCase):
     broker_exe = "mt_broker"

@@ -189,9 +189,6 @@ class SslTest(common.Test):
         if os.name=="nt":
             raise Skipped("Windows support for certificate fingerprint and subfield not implemented yet")
 
-        if "java" in sys.platform:
-            raise Skipped("Not yet implemented in Proton-J")
-
         self.server_domain.set_credentials(self._testpath("server-certificate.pem"),
                                            self._testpath("server-private-key.pem"),
                                            "server-password")
@@ -808,6 +805,30 @@ class SslTest(common.Test):
         del server
         self.tearDown()
 
+    def test_server_hostname_authentication_2(self):
+        """Initially separated from test_server_hostname_authentication
+        above to force Windows checking and sidestep PROTON-1057 exclusion.
+        """
+
+        # Fail for a null peer name.
+        self.server_domain.set_credentials(self._testpath("server-wc-certificate.pem"),
+                                    self._testpath("server-wc-private-key.pem"),
+                                    "server-password")
+        self.client_domain.set_trusted_ca_db(self._testpath("ca-certificate.pem"))
+        self.client_domain.set_peer_authentication( SSLDomain.VERIFY_PEER_NAME )
+
+        server = SslTest.SslTestConnection( self.server_domain, mode=Transport.SERVER )
+        client = SslTest.SslTestConnection( self.client_domain )
+
+        # Next line results in an eventual pn_ssl_set_peer_hostname(client.ssl._ssl, None)
+        client.ssl.peer_hostname = None
+        self._do_handshake( client, server )
+        assert client.transport.closed
+        assert server.transport.closed
+        assert client.connection.state & Endpoint.REMOTE_UNINIT
+        assert server.connection.state & Endpoint.REMOTE_UNINIT
+        self.tearDown()
+
     def test_defaults_messenger_app(self):
         """ Test an SSL connection using the Messenger apps (no certificates)
         """
@@ -943,9 +964,6 @@ class MessengerSSLTests(common.Test):
                                 password="server-password",
                                 exception=None):
         import sys
-        # java doesn't do validation in the same way (yet)
-        if exception and "java" in sys.platform:
-            raise Skipped()
         self.server.certificate = _testpath(cert)
         self.server.private_key = _testpath(key)
         self.server.password = password

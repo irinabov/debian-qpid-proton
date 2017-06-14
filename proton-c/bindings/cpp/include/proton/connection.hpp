@@ -22,27 +22,19 @@
  *
  */
 
+#include "./fwd.hpp"
 #include "./internal/export.hpp"
-#include "./endpoint.hpp"
 #include "./internal/object.hpp"
+#include "./endpoint.hpp"
 #include "./session.hpp"
 
-#include <proton/types.h>
+#include <proton/type_compat.h>
 
 #include <string>
 
 struct pn_connection_t;
 
 namespace proton {
-
-class messaging_handler;
-class connection_options;
-class sender;
-class sender_options;
-class receiver;
-class receiver_options;
-class container;
-template <class T> class thread_safe;
 
 /// A connection to a remote AMQP peer.
 class
@@ -75,6 +67,10 @@ PN_CPP_CLASS_EXTERN connection : public internal::object<pn_connection_t>, publi
 
     /// Return the container ID for the connection.
     PN_CPP_EXTERN std::string container_id() const;
+
+    /// Return authenticated user for the connection
+    /// Note: The value returned is not stable until the on_transport_open event is received
+    PN_CPP_EXTERN std::string user() const;
 
     /// Open the connection.
     ///
@@ -134,13 +130,9 @@ PN_CPP_CLASS_EXTERN connection : public internal::object<pn_connection_t>, publi
     /// @see @ref connection_options::idle_timeout
     PN_CPP_EXTERN uint32_t idle_timeout() const;
 
-  private:
-    void user(const std::string &);
-    void password(const std::string &);
-
     /// @cond INTERNAL
   friend class internal::factory<connection>;
-  friend class connector;
+  friend class container;
   friend class proton::thread_safe<connection>;
     /// @endcond
 };

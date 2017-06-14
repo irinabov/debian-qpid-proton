@@ -21,21 +21,16 @@
 
 #include "sasl-internal.h"
 
-#include "dispatch_actions.h"
-#include "engine/engine-internal.h"
+#include "core/autodetect.h"
+#include "core/dispatch_actions.h"
+#include "core/engine-internal.h"
+#include "core/util.h"
 #include "protocol.h"
+
 #include "proton/ssl.h"
 #include "proton/types.h"
-#include "util.h"
-#include "transport/autodetect.h"
 
 #include <assert.h>
-
-static inline pn_transport_t *get_transport_internal(pn_sasl_t *sasl)
-{
-  // The external pn_sasl_t is really a pointer to the internal pni_transport_t
-  return ((pn_transport_t *)sasl);
-}
 
 static inline pni_sasl_t *get_sasl_internal(pn_sasl_t *sasl)
 {
@@ -125,7 +120,9 @@ static bool pni_sasl_is_final_input_state(pni_sasl_t *sasl)
 static bool pni_sasl_is_final_output_state(pni_sasl_t *sasl)
 {
   enum pni_sasl_state last_state = sasl->last_state;
-  return last_state==SASL_RECVED_OUTCOME_SUCCEED
+  enum pni_sasl_state desired_state = sasl->desired_state;
+  return (desired_state==SASL_RECVED_OUTCOME_SUCCEED && last_state>=SASL_POSTED_INIT)
+      || last_state==SASL_RECVED_OUTCOME_SUCCEED
       || last_state==SASL_RECVED_OUTCOME_FAIL
       || last_state==SASL_ERROR
       || last_state==SASL_POSTED_OUTCOME;
@@ -214,7 +211,8 @@ static void pni_post_sasl_frame(pn_transport_t *transport)
       pn_post_frame(transport, SASL_FRAME_TYPE, 0, "DL[B]", SASL_OUTCOME, sasl->outcome);
       pni_emit(transport);
       if (sasl->outcome!=PN_SASL_OK) {
-        pn_do_error(transport, "amqp:unauthorized-access", "Failed to authenticate client [mech=%s]", transport->sasl->selected_mechanism);
+        pn_do_error(transport, "amqp:unauthorized-access", "Failed to authenticate client [mech=%s]",
+		    transport->sasl->selected_mechanism ? transport->sasl->selected_mechanism : "none");
         desired_state = SASL_ERROR;
       }
       break;
@@ -225,7 +223,8 @@ static void pni_post_sasl_frame(pn_transport_t *transport)
       }
       break;
     case SASL_RECVED_OUTCOME_FAIL:
-      pn_do_error(transport, "amqp:unauthorized-access", "Authentication failed [mech=%s]", transport->sasl->selected_mechanism);
+      pn_do_error(transport, "amqp:unauthorized-access", "Authentication failed [mech=%s]",
+		  transport->sasl->selected_mechanism ? transport->sasl->selected_mechanism : "none");
       desired_state = SASL_ERROR;
       break;
     case SASL_ERROR:

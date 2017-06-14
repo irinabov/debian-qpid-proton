@@ -84,7 +84,7 @@ def consumeAllOuput(t):
   stops = 0
   while stops<1:
     out = t.peek(1024)
-    l = len(out)
+    l = len(out) if out else 0
     t.pop(l)
     if l <= 0:
       stops += 1
@@ -103,11 +103,38 @@ class SaslTest(Test):
 
   # We have to generate the client frames manually because proton does not
   # generate pipelined SASL and AMQP frames together
-  def testPipelinedClient(self):
-    # TODO: When PROTON-1136 is fixed then remove this test
-    if "java" in sys.platform:
-      raise Skipped("Proton-J does not support pipelined client input")
+  def testIllegalProtocolLayering(self):
+    # Server
+    self.s2.allowed_mechs('ANONYMOUS')
 
+    c2 = Connection()
+    self.t2.bind(c2)
+
+    assert self.s2.outcome is None
+
+    # Push client bytes into server
+    self.t2.push(str2bin(
+        # SASL
+        'AMQP\x03\x01\x00\x00'
+        # @sasl-init(65) [mechanism=:ANONYMOUS, initial-response=b"anonymous@fuschia"]
+        '\x00\x00\x002\x02\x01\x00\x00\x00SA\xd0\x00\x00\x00"\x00\x00\x00\x02\xa3\x09ANONYMOUS\xa0\x11anonymous@fuschia'
+        # SASL (again illegally)
+        'AMQP\x03\x01\x00\x00'
+        # @sasl-init(65) [mechanism=:ANONYMOUS, initial-response=b"anonymous@fuschia"]
+        '\x00\x00\x002\x02\x01\x00\x00\x00SA\xd0\x00\x00\x00"\x00\x00\x00\x02\xa3\x09ANONYMOUS\xa0\x11anonymous@fuschia'
+        # AMQP
+        'AMQP\x00\x01\x00\x00'
+        # @open(16) [container-id="", channel-max=1234]
+        '\x00\x00\x00!\x02\x00\x00\x00\x00S\x10\xd0\x00\x00\x00\x11\x00\x00\x00\x0a\xa1\x00@@`\x04\xd2@@@@@@'
+        ))
+
+    consumeAllOuput(self.t2)
+
+    assert self.t2.condition
+    assert self.t2.closed
+    assert not c2.state & Endpoint.REMOTE_ACTIVE
+
+  def testPipelinedClient(self):
     # Server
     self.s2.allowed_mechs('ANONYMOUS')
 
@@ -130,6 +157,7 @@ class SaslTest(Test):
 
     consumeAllOuput(self.t2)
 
+    assert not self.t2.condition
     assert self.s2.outcome == SASL.OK
     assert c2.state & Endpoint.REMOTE_ACTIVE
 
@@ -164,9 +192,6 @@ class SaslTest(Test):
     assert c1.state & Endpoint.REMOTE_ACTIVE
 
   def testPipelined2(self):
-    if "java" in sys.platform:
-      raise Skipped("Proton-J does not support client pipelining")
-
     out1 = self.t1.peek(1024)
     self.t1.pop(len(out1))
     self.t2.push(out1)
@@ -255,8 +280,6 @@ class SaslTest(Test):
     assert self.t1.condition != None
 
   def testMechNotFound(self):
-    if "java" in sys.platform:
-      raise Skipped("Proton-J does not support checking authentication state")
     self.c1 = Connection()
     self.c1.open()
     self.t1.bind(self.c1)
@@ -361,8 +384,6 @@ class SSLSASLTest(Test):
     self.c2 = Connection()
 
   def testSSLPlainSimple(self):
-    if "java" in sys.platform:
-      raise Skipped("Proton-J does not support SSL with SASL")
     if not SASL.extended():
       raise Skipped("Simple SASL server does not support PLAIN")
     common.ensureCanTestExtendedSASL()
@@ -380,8 +401,6 @@ class SSLSASLTest(Test):
     _testSaslMech(self, mech, encrypted=True)
 
   def testSSLPlainSimpleFail(self):
-    if "java" in sys.platform:
-      raise Skipped("Proton-J does not support SSL with SASL")
     if not SASL.extended():
       raise Skipped("Simple SASL server does not support PLAIN")
     common.ensureCanTestExtendedSASL()
@@ -399,9 +418,6 @@ class SSLSASLTest(Test):
     _testSaslMech(self, mech, clientUser='usr@proton', encrypted=True, authenticated=False)
 
   def testSSLExternalSimple(self):
-    if "java" in sys.platform:
-      raise Skipped("Proton-J does not support SSL with SASL")
-
     if os.name=="nt":
       extUser = 'O=Client, CN=127.0.0.1'
     else:
@@ -426,9 +442,6 @@ class SSLSASLTest(Test):
     _testSaslMech(self, mech, clientUser=None, authUser=extUser, encrypted=True)
 
   def testSSLExternalSimpleFail(self):
-    if "java" in sys.platform:
-      raise Skipped("Proton-J does not support SSL with SASL")
-
     mech = 'EXTERNAL'
 
     self.server_domain.set_credentials(_sslCertpath("server-certificate.pem"),

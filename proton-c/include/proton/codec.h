@@ -36,14 +36,13 @@ extern "C" {
 /**
  * @file
  *
- * Data API for proton.
- *
- * @defgroup data Data
- * @{
+ * @copybrief codec
  */
 
 /**
  * Identifies an AMQP type.
+ *
+ * @ingroup amqp_types
  */
 typedef enum {
 
@@ -186,6 +185,7 @@ typedef enum {
 /**
  * Return a string name for an AMQP type.
  *
+ * @ingroup amqp_types
  * @param type an AMQP type
  * @return the string name of the given type
  */
@@ -195,6 +195,8 @@ PN_EXTERN const char *pn_type_name(pn_type_t type);
  * A descriminated union that holds any scalar AMQP value. The type
  * field indicates the AMQP type of the value, and the union may be
  * used to access the value for a given type.
+ *
+ * @ingroup api_types
  */
 typedef struct {
   /**
@@ -300,6 +302,11 @@ typedef struct {
 } pn_atom_t;
 
 /**
+ * @addtogroup data
+ * @{
+ */
+
+/**
  * An AMQP Data object.
  *
  * A pn_data_t object provides an interface for decoding, extracting,
@@ -395,10 +402,16 @@ PN_EXTERN int pn_data_errno(pn_data_t *data);
  */
 PN_EXTERN pn_error_t *pn_data_error(pn_data_t *data);
 
+/**
+ * @cond INTERNAL
+ */
 PN_EXTERN int pn_data_vfill(pn_data_t *data, const char *fmt, va_list ap);
 PN_EXTERN int pn_data_fill(pn_data_t *data, const char *fmt, ...);
 PN_EXTERN int pn_data_vscan(pn_data_t *data, const char *fmt, va_list ap);
 PN_EXTERN int pn_data_scan(pn_data_t *data, const char *fmt, ...);
+/**
+ * @endcond
+ */
 
 /**
  * Clears a pn_data_t object.
@@ -471,7 +484,13 @@ PN_EXTERN bool pn_data_enter(pn_data_t *data);
  */
 PN_EXTERN bool pn_data_exit(pn_data_t *data);
 
+/**
+ * @cond INTERNAL
+ */
 PN_EXTERN bool pn_data_lookup(pn_data_t *data, const char *name);
+/**
+ * @endcond
+ */
 
 /**
  * Access the type of the current node. Returns PN_INVALID if there is no
@@ -1265,7 +1284,8 @@ PN_EXTERN bool pn_data_restore(pn_data_t *data, pn_handle_t point);
  */
 PN_EXTERN void pn_data_dump(pn_data_t *data);
 
-/** @}
+/**
+ * @}
  */
 
 #ifdef __cplusplus

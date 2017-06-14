@@ -34,10 +34,9 @@ extern "C" {
 /**
  * @file
  *
- * Disposition API for the proton Engine.
+ * Delivery state
  *
- * @defgroup disposition Disposition
- * @ingroup delivery
+ * @addtogroup delivery
  * @{
  */
 
@@ -221,7 +220,8 @@ PN_EXTERN void pn_disposition_set_undeliverable(pn_disposition_t *disposition, b
  */
 PN_EXTERN pn_data_t *pn_disposition_annotations(pn_disposition_t *disposition);
 
-/** @}
+/**
+ * @}
  */
 
 #ifdef __cplusplus

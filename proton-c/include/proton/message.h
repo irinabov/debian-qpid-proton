@@ -32,10 +32,12 @@
 extern "C" {
 #endif
 
-/** @file
- * Message API for encoding/decoding AMQP Messages.
+/**
+ * @file
  *
- * @defgroup message Message
+ * @copybrief message
+ *
+ * @addtogroup message
  * @{
  */
 
@@ -727,7 +729,7 @@ PN_EXTERN int pn_message_decode(pn_message_t *msg, const char *bytes, size_t siz
  *
  * If the buffer space provided is insufficient to store the content
  * held in the message, the operation will fail and return a
- * ::PN_OVERFLOW error code.
+ * PN_OVERFLOW error code.
  *
  * @param[in] msg a message object
  * @param[in] bytes the start of empty buffer space

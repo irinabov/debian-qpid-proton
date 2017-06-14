@@ -22,22 +22,12 @@
  *
  */
 
-#include "./internal/config.hpp"
+#include "./fwd.hpp"
 #include "./internal/export.hpp"
 #include "./internal/pn_unique_ptr.hpp"
-#include "./types.hpp"
 #include "./delivery_mode.hpp"
-#include "./terminus.hpp"
-
-#include <vector>
-#include <string>
 
 namespace proton {
-
-class proton_handler;
-class sender;
-class source_options;
-class target_options;
 
 /// Options for creating a sender.
 ///
@@ -90,10 +80,10 @@ class sender_options {
     PN_CPP_EXTERN sender_options& auto_settle(bool);
 
     /// Options for the source node of the sender.
-    PN_CPP_EXTERN sender_options& source(source_options &);
+    PN_CPP_EXTERN sender_options& source(const source_options &);
 
     /// Options for the receiver node of the receiver.
-    PN_CPP_EXTERN sender_options& target(target_options &);
+    PN_CPP_EXTERN sender_options& target(const target_options &);
 
     /// @cond INTERNAL
   private:

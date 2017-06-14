@@ -19,36 +19,23 @@
  *
  */
 
-#include "container_impl.hpp"
-
 #include "proton/container.hpp"
-#include "proton/connection.hpp"
-#include "proton/sender_options.hpp"
-#include "proton/receiver_options.hpp"
-#include "proton/session.hpp"
-#include "proton/error.hpp"
-#include "proton/receiver.hpp"
-#include "proton/receiver_options.hpp"
-#include "proton/sender.hpp"
-#include "proton/sender_options.hpp"
-#include "proton/task.hpp"
-#include "proton/url.hpp"
+#include "proton/error_condition.hpp"
+
+#include "proton/error_condition.hpp"
+#include "proton/listen_handler.hpp"
+#include "proton/listener.hpp"
+#include "proton/thread_safe.hpp"
 
 #include "container_impl.hpp"
-#include "connector.hpp"
-#include "contexts.hpp"
-#include "messaging_adapter.hpp"
-
-#include <proton/connection.h>
-#include <proton/session.h>
 
 namespace proton {
 
+container::container(messaging_handler& h, const std::string& id) :
+    impl_(new impl(*this, id, &h)) {}
+container::container(const std::string& id) :
+    impl_(new impl(*this, id)) {}
 container::~container() {}
-
-/// Functions defined here are convenience overrides that can be triviall
-/// defined in terms of other pure virtual functions on container. Don't make
-/// container implementers wade thru all this boiler-plate.
 
 returned<connection> container::connect(const std::string &url) {
     return connect(url, connection_options());
@@ -62,12 +49,20 @@ returned<sender> container::open_sender(const std::string &url, const proton::se
     return open_sender(url, lo, connection_options());
 }
 
+returned<sender> container::open_sender(const std::string &url, const proton::connection_options &co) {
+    return open_sender(url, sender_options(), co);
+}
+
 returned<receiver> container::open_receiver(const std::string &url) {
     return open_receiver(url, proton::receiver_options(), connection_options());
 }
 
 returned<receiver> container::open_receiver(const std::string &url, const proton::receiver_options &lo) {
     return open_receiver(url, lo, connection_options());
+}
+
+returned<receiver> container::open_receiver(const std::string &url, const proton::connection_options &co) {
+    return open_receiver(url, receiver_options(), co);
 }
 
 namespace{
@@ -89,5 +84,55 @@ listener container::listen(const std::string& url, const connection_options& opt
 listener container::listen(const std::string &url) {
     return listen(url, connection_options());
 }
+
+void container::stop() { stop(error_condition()); }
+
+returned<connection> container::connect(const std::string& url, const connection_options& opts) {
+    return impl_->connect(url, opts);
+}
+
+listener container::listen(const std::string& url, listen_handler& l) { return impl_->listen(url, l); }
+
+void container::stop_listening(const std::string& url) { impl_->stop_listening(url); }
+
+void container::run() { impl_->run(); }
+
+void container::auto_stop(bool set) { impl_->auto_stop(set); }
+
+void container::stop(const error_condition& err) { impl_->stop(err); }
+
+returned<sender> container::open_sender(
+    const std::string &url,
+    const class sender_options &o,
+    const connection_options &c) {
+    return impl_->open_sender(url, o, c);
+}
+
+returned<receiver> container::open_receiver(
+    const std::string&url,
+    const class receiver_options &o,
+    const connection_options &c) {
+    return impl_->open_receiver(url, o, c);
+}
+
+std::string container::id() const { return impl_->id(); }
+
+void container::schedule(duration d, void_function0& f) { return impl_->schedule(d, f); }
+
+#if PN_CPP_HAS_STD_FUNCTION
+void container::schedule(duration d, std::function<void()> f) { return impl_->schedule(d, f); }
+#endif
+
+void container::client_connection_options(const connection_options& c) { impl_->client_connection_options(c); }
+connection_options container::client_connection_options() const { return impl_->client_connection_options(); }
+
+void container::server_connection_options(const connection_options &o) { impl_->server_connection_options(o); }
+connection_options container::server_connection_options() const { return impl_->server_connection_options(); }
+
+void container::sender_options(const class sender_options &o) { impl_->sender_options(o); }
+class sender_options container::sender_options() const { return impl_->sender_options(); }
+
+void container::receiver_options(const class receiver_options & o) { impl_->receiver_options(o); }
+class receiver_options container::receiver_options() const { return impl_->receiver_options(); }
 
 } // namespace proton

@@ -31,12 +31,12 @@
 extern "C" {
 #endif
 
-/** @file
+/**
+ * @file
  *
- * Terminus API for the proton Engine.
+ * @copybrief terminus
  *
- * @defgroup terminus Terminus
- * @ingroup link
+ * @addtogroup terminus
  * @{
  */
 
@@ -298,7 +298,8 @@ PN_EXTERN pn_data_t *pn_terminus_filter(pn_terminus_t *terminus);
  */
 PN_EXTERN int pn_terminus_copy(pn_terminus_t *terminus, pn_terminus_t *src);
 
-/** @}
+/**
+ * @}
  */
 
 #ifdef __cplusplus

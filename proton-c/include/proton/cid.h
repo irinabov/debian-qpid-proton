@@ -1,5 +1,6 @@
 #ifndef PROTON_CID_H
 #define PROTON_CID_H 1
+
 /*
  *
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -19,6 +20,10 @@
  * specific language governing permissions and limitations
  * under the License.
  *
+ */
+
+/**
+ * @cond INTERNAL
  */
 
 typedef enum {
@@ -56,7 +61,14 @@ typedef enum {
   CID_pn_selector,
   CID_pn_selectable,
 
-  CID_pn_url
+  CID_pn_url,
+
+  CID_pn_listener,
+  CID_pn_proactor
 } pn_cid_t;
+
+/**
+ * @endcond
+ */
 
 #endif /* cid.h */

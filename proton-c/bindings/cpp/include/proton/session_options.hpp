@@ -22,15 +22,11 @@
  *
  */
 
-#include "./internal/config.hpp"
+#include "./fwd.hpp"
 #include "./internal/export.hpp"
 #include "./internal/pn_unique_ptr.hpp"
-#include "./types.hpp"
 
 namespace proton {
-
-class messaging_handler;
-class session;
 
 /// Options for creating a session.
 ///
@@ -53,7 +49,7 @@ class session_options {
     PN_CPP_EXTERN session_options& operator=(const session_options&);
 
     /// Set a messaging_handler for the session.
-    PN_CPP_EXTERN session_options& handler(class messaging_handler *);
+    PN_CPP_EXTERN session_options& handler(class messaging_handler &);
 
     /// @cond INTERNAL
     // Other useful session configuration TBD.

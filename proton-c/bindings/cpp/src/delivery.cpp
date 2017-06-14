@@ -25,6 +25,8 @@
 
 #include "proton_bits.hpp"
 
+#include <proton/delivery.h>
+
 namespace {
 
 void settle_delivery(pn_delivery_t* o, uint64_t state) {

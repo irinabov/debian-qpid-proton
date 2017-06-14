@@ -25,7 +25,8 @@
 #include <proton/url.hpp>
 
 #include <proton/io/container_impl_base.hpp>
-#include <proton/io/connection_engine.hpp>
+#include <proton/io/connection_driver.hpp>
+#include <proton/io/link_namer.hpp>
 
 #include <atomic>
 #include <memory>
@@ -96,13 +97,18 @@ class unique_fd {
 };
 
 class pollable;
-class pollable_engine;
+class pollable_driver;
 class pollable_listener;
 
 class epoll_container : public proton::io::container_impl_base {
   public:
     epoll_container(const std::string& id);
     ~epoll_container();
+
+    // Pull in base class functions here so that name search finds all the overloads
+    using standard_container::stop;
+    using standard_container::connect;
+    using standard_container::listen;
 
     proton::returned<proton::connection> connect(
         const std::string& addr, const proton::connection_options& opts) OVERRIDE;
@@ -118,7 +124,7 @@ class epoll_container : public proton::io::container_impl_base {
     std::string id() const OVERRIDE { return id_; }
 
     // Functions used internally.
-    proton::connection add_engine(proton::connection_options opts, int fd, bool server);
+    proton::connection add_driver(proton::connection_options opts, int fd, bool server);
     void erase(pollable*);
 
     // Link names must be unique per container.
@@ -131,9 +137,12 @@ class epoll_container : public proton::io::container_impl_base {
             return o.str();
         }
       private:
-        std::atomic<uint64_t> count_;
+        std::atomic<int> count_;
     };
 
+     // FIXME aconway 2016-06-07: Unfinished
+    void schedule(proton::duration, std::function<void()>) OVERRIDE { throw std::logic_error("FIXME"); }
+    void schedule(proton::duration, proton::void_function0&) OVERRIDE { throw std::logic_error("FIXME"); }
     atomic_link_namer link_namer;
 
   private:
@@ -151,7 +160,7 @@ class epoll_container : public proton::io::container_impl_base {
 
     proton::connection_options options_;
     std::map<std::string, std::unique_ptr<pollable_listener> > listeners_;
-    std::map<pollable*, std::unique_ptr<pollable_engine> > engines_;
+    std::map<pollable*, std::unique_ptr<pollable_driver> > drivers_;
 
     std::condition_variable stopped_;
     bool stopping_;
@@ -244,8 +253,8 @@ class epoll_event_loop : public proton::event_loop {
         return true;
     }
 
-    bool inject(proton::inject_handler& h) OVERRIDE {
-        return inject(std::bind(&proton::inject_handler::on_inject, &h));
+    bool inject(proton::void_function0& f) OVERRIDE {
+        return inject([&f]() { f(); });
     }
 
     jobs pop_all() {
@@ -265,17 +274,21 @@ class epoll_event_loop : public proton::event_loop {
     bool closed_;
 };
 
-// Handle epoll wakeups for a connection_engine.
-class pollable_engine : public pollable {
+// Handle epoll wakeups for a connection_driver.
+class pollable_driver : public pollable {
   public:
-    pollable_engine(epoll_container& c, int fd, int epoll_fd) :
+    pollable_driver(epoll_container& c, int fd, int epoll_fd) :
         pollable(fd, epoll_fd),
         loop_(new epoll_event_loop(*this)),
-        engine_(c, c.link_namer, loop_) {}
+        driver_(c, loop_)
+    {
+        proton::connection conn = driver_.connection();
+        proton::io::set_link_namer(conn, c.link_namer);
+    }
 
-    ~pollable_engine() {
+    ~pollable_driver() {
         loop_->close();                // No calls to notify() after this.
-        engine_.dispatch();            // Run any final events.
+        driver_.dispatch();            // Run any final events.
         try { write(); } catch(...) {} // Write connection close if we can.
         for (auto f : loop_->pop_all()) {// Run final queued work for side-effects.
             try { f(); } catch(...) {}
@@ -284,65 +297,68 @@ class pollable_engine : public pollable {
 
     uint32_t work(uint32_t events) {
         try {
-            bool can_read = events & EPOLLIN, can_write = events && EPOLLOUT;
+            bool can_read = events & EPOLLIN, can_write = events & EPOLLOUT;
             do {
                 can_write = can_write && write();
                 can_read = can_read && read();
                 for (auto f : loop_->pop_all()) // Run queued work
                     f();
-                engine_.dispatch();
+                driver_.dispatch();
             } while (can_read || can_write);
-            return (engine_.read_buffer().size ? EPOLLIN:0) |
-                (engine_.write_buffer().size ? EPOLLOUT:0);
+            return (driver_.read_buffer().size ? EPOLLIN:0) |
+                (driver_.write_buffer().size ? EPOLLOUT:0);
         } catch (const std::exception& e) {
-            engine_.disconnected(proton::error_condition("exception", e.what()));
+            driver_.disconnected(proton::error_condition("exception", e.what()));
         }
         return 0;               // Ending
     }
 
-    proton::io::connection_engine& engine() { return engine_; }
+    proton::io::connection_driver& driver() { return driver_; }
 
   private:
+    static bool try_again(int e) {
+        // These errno values from read or write mean "try again"
+        return (e == EAGAIN || e == EWOULDBLOCK || e == EINTR);
+    }
 
     bool write() {
-        if (engine_.write_buffer().size) {
-            ssize_t n = ::write(fd_, engine_.write_buffer().data, engine_.write_buffer().size);
-            while (n == EINTR)
-                n = ::write(fd_, engine_.write_buffer().data, engine_.write_buffer().size);
+        proton::io::const_buffer wbuf(driver_.write_buffer());
+        if (wbuf.size) {
+            ssize_t n = ::write(fd_, wbuf.data, wbuf.size);
             if (n > 0) {
-                engine_.write_done(n);
+                driver_.write_done(n);
                 return true;
-            } else if (errno != EAGAIN && errno != EWOULDBLOCK)
+            } else if (n < 0 && !try_again(errno)) {
                 check(n, "write");
+            }
         }
         return false;
     }
 
     bool read() {
-        if (engine_.read_buffer().size) {
-            ssize_t n = ::read(fd_, engine_.read_buffer().data, engine_.read_buffer().size);
-            while (n == EINTR)
-                n = ::read(fd_, engine_.read_buffer().data, engine_.read_buffer().size);
+        proton::io::mutable_buffer rbuf(driver_.read_buffer());
+        if (rbuf.size) {
+            ssize_t n = ::read(fd_, rbuf.data, rbuf.size);
             if (n > 0) {
-                engine_.read_done(n);
+                driver_.read_done(n);
                 return true;
             }
             else if (n == 0)
-                engine_.read_close();
-            else if (errno != EAGAIN && errno != EWOULDBLOCK)
+                driver_.read_close();
+            else if (!try_again(errno))
                 check(n, "read");
         }
         return false;
     }
 
     // Lifecycle note: loop_ belongs to the proton::connection, which can live
-    // longer than the engine if the application holds a reference to it, we
-    // disconnect ourselves with loop_->close() in ~connection_engine()
+    // longer than the driver if the application holds a reference to it, we
+    // disconnect ourselves with loop_->close() in ~connection_driver()
     epoll_event_loop* loop_;
-    proton::io::connection_engine engine_;
+    proton::io::connection_driver driver_;
 };
 
-// A pollable listener fd that creates pollable_engine for incoming connections.
+// A pollable listener fd that creates pollable_driver for incoming connections.
 class pollable_listener : public pollable {
   public:
     pollable_listener(
@@ -364,7 +380,7 @@ class pollable_listener : public pollable {
         }
         try {
             int accepted = check(::accept(fd_, NULL, 0), "accept");
-            container_.add_engine(listener_.on_accept(), accepted, true);
+            container_.add_driver(listener_.on_accept(), accepted, true);
             return EPOLLIN;
         } catch (const std::exception& e) {
             listener_.on_error(e.what());
@@ -408,25 +424,25 @@ epoll_container::~epoll_container() {
     } catch (...) {}
 }
 
-proton::connection epoll_container::add_engine(proton::connection_options opts, int fd, bool server)
+proton::connection epoll_container::add_driver(proton::connection_options opts, int fd, bool server)
 {
     lock_guard g(lock_);
     if (stopping_)
         throw proton::error("container is stopping");
-    std::unique_ptr<pollable_engine> eng(new pollable_engine(*this, fd, epoll_fd_));
+    std::unique_ptr<pollable_driver> eng(new pollable_driver(*this, fd, epoll_fd_));
     if (server)
-        eng->engine().accept(opts);
+        eng->driver().accept(opts);
     else
-        eng->engine().connect(opts);
-    proton::connection c = eng->engine().connection();
+        eng->driver().connect(opts);
+    proton::connection c = eng->driver().connection();
     eng->notify();
-    engines_[eng.get()] = std::move(eng);
+    drivers_[eng.get()] = std::move(eng);
     return c;
 }
 
 void epoll_container::erase(pollable* e) {
     lock_guard g(lock_);
-    if (!engines_.erase(e)) {
+    if (!drivers_.erase(e)) {
         pollable_listener* l = dynamic_cast<pollable_listener*>(e);
         if (l)
             listeners_.erase(l->addr());
@@ -435,7 +451,7 @@ void epoll_container::erase(pollable* e) {
 }
 
 void epoll_container::idle_check(const lock_guard&) {
-    if (stopping_  && engines_.empty() && listeners_.empty())
+    if (stopping_  && drivers_.empty() && listeners_.empty())
         interrupt();
 }
 
@@ -446,7 +462,7 @@ proton::returned<proton::connection> epoll_container::connect(
     unique_addrinfo ainfo(addr);
     unique_fd fd(check(::socket(ainfo->ai_family, SOCK_STREAM, 0), msg));
     check(::connect(fd, ainfo->ai_addr, ainfo->ai_addrlen), msg);
-    return make_thread_safe(add_engine(opts, fd.release(), false));
+    return make_thread_safe(add_driver(opts, fd.release(), false));
 }
 
 proton::listener epoll_container::listen(const std::string& addr, proton::listen_handler& lh) {
@@ -504,10 +520,10 @@ void epoll_container::stop(const proton::error_condition& err) {
 void epoll_container::wait() {
     std::unique_lock<std::mutex> l(lock_);
     stopped_.wait(l, [this]() { return this->threads_ == 0; } );
-    for (auto& eng : engines_)
-        eng.second->engine().disconnected(stop_err_);
+    for (auto& eng : drivers_)
+        eng.second->driver().disconnected(stop_err_);
     listeners_.clear();
-    engines_.clear();
+    drivers_.clear();
 }
 
 void epoll_container::interrupt() {
