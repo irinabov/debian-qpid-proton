@@ -17,20 +17,20 @@
 # under the License.
 #
 
+# NOTE: The examples and their build files are self-contained, and installed
+# stand-alone independent of the library build tree. They must build and work in
+# this mode.
+#
+# For self-test purposes, the library and binding CMake files can provide extra
+# settings in <LANGUAGE>_EXAMPLE_* variables - for example to enable extra error
+# checking or ensure compiler consistency with the library build. However, the
+# examples must also build correctly stand-alone, with none of those variables set.
+
 set (Proton_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set (ProtonCpp_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Set result to a native search path
-macro(set_search_path result)  # args after result are directories or search paths.
-  set(${result} ${ARGN})
-  if (UNIX)
-    string(REPLACE ";" ":" ${result} "${${result}}") # native search path separators.
-  endif()
-  file(TO_NATIVE_PATH "${${result}}" ${result}) # native slash separators
-endmacro()
-
-# Some non-python examples use exampletest.py to drive their self-tests.
-set_search_path(EXAMPLE_PYTHONPATH "${CMAKE_CURRENT_SOURCE_DIR}" "$ENV{PYTHON_PATH}")
+# Add the tools directory for the 'proctest' module
+set_search_path(EXAMPLE_PYTHONPATH "${CMAKE_SOURCE_DIR}/tools/py" "$ENV{PYTHON_PATH}")
 set(EXAMPLE_ENV "PYTHONPATH=${EXAMPLE_PYTHONPATH}")
 
 add_subdirectory(c)
@@ -38,3 +38,20 @@ add_subdirectory(go)
 if (BUILD_CPP)
   add_subdirectory(cpp)
 endif()
+
+install(DIRECTORY c cpp go
+        DESTINATION ${PROTON_SHARE}/examples)
+
+install(DIRECTORY python
+        DESTINATION ${PROTON_SHARE}/examples
+        PATTERN "*.py"
+        PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+                    GROUP_EXECUTE GROUP_READ
+                    WORLD_EXECUTE WORLD_READ)
+
+install(DIRECTORY ruby
+        DESTINATION ${PROTON_SHARE}/examples
+        PATTERN "*.rb"
+        PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+                    GROUP_EXECUTE GROUP_READ
+                    WORLD_EXECUTE WORLD_READ)

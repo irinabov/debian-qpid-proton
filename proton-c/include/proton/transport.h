@@ -67,42 +67,45 @@ typedef void (*pn_tracer_t)(pn_transport_t *transport, const char *message);
 #define PN_TRACE_OFF (0)
 
 /**
- * Log raw binary data into/out of the transport.
+ * Log raw binary data going in and out of the transport.
  */
 #define PN_TRACE_RAW (1)
 
 /**
- * Log frames into/out of the transport.
+ * Log protocol frames going in and out of the transport.
  */
 #define PN_TRACE_FRM (2)
 
 /**
- * Log driver related events, e.g. initialization, end of stream, etc.
+ * Log driver-related events.  For example, initialization, end of
+ * stream, and so on.
  */
 #define PN_TRACE_DRV (4)
 
 /**
- * Log events
+ * Log events.
  */
 #define PN_TRACE_EVT (8)
 
 /**
  * Factory for creating a transport.
+ *
  * A transport is used by a connection to interface with the network.
  * There can only be one connection associated with a transport. See
  * pn_transport_bind().
  *
- * Initially a transport is configured to be a client transport. Use pn_transport_set_server()
- * to configure the transport as a server transport.
+ * Initially a transport is configured to be a client transport. Use
+ * pn_transport_set_server() to configure the transport as a server
+ * transport.
  *
  * A client transport initiates outgoing connections.
  *
- * A client transport must be configured with the protocol layers to use and cannot
- * configure itself automatically.
+ * A client transport must be configured with the protocol layers to
+ * use and cannot configure itself automatically.
  *
- * A server transport accepts incoming connections. It can automatically
- * configure itself to include the various protocol layers depending on
- * the incoming protocol headers.
+ * A server transport accepts incoming connections. It can
+ * automatically configure itself to include the various protocol
+ * layers depending on the incoming protocol headers.
  *
  * @return pointer to new transport
  */
@@ -177,7 +180,7 @@ PN_EXTERN bool pn_transport_is_authenticated(pn_transport_t *transport);
  *
  * There are several ways within the AMQP protocol suite to get encrypted connections:
  * - Use TLS
- * - Use a SASL with a mechanism that supports saecurity layers
+ * - Use a SASL with a mechanism that supports security layers
  *
  * The default if this option is not set is to allow unencrypted connections.
  *
@@ -201,7 +204,7 @@ PN_EXTERN bool pn_transport_is_encrypted(pn_transport_t *transport);
  * Get additional information about the condition of the transport.
  *
  * When a PN_TRANSPORT_ERROR event occurs, this operation can be used
- * to access the details of the error condtion.
+ * to access the details of the error condition.
  *
  * The pointer returned by this operation is valid until the
  * transport object is freed.
@@ -212,7 +215,7 @@ PN_EXTERN bool pn_transport_is_encrypted(pn_transport_t *transport);
 PN_EXTERN pn_condition_t *pn_transport_condition(pn_transport_t *transport);
 
 /**
- * @deprecated
+ * **Deprecated**
  */
 PN_EXTERN pn_error_t *pn_transport_error(pn_transport_t *transport);
 
@@ -268,7 +271,7 @@ PN_EXTERN void pn_transport_set_tracer(pn_transport_t *transport, pn_tracer_t tr
 PN_EXTERN pn_tracer_t pn_transport_get_tracer(pn_transport_t *transport);
 
 /**
- * @deprecated
+ * **Deprecated** - Use ::pn_transport_attachments().
  *
  * Get the application context that is associated with a transport object.
  *
@@ -281,7 +284,7 @@ PN_EXTERN pn_tracer_t pn_transport_get_tracer(pn_transport_t *transport);
 PN_EXTERN void *pn_transport_get_context(pn_transport_t *transport);
 
 /**
- * @deprecated
+ * **Deprecated** - Use ::pn_transport_attachments().
  *
  * Set a new application context for a transport object.
  *
@@ -361,7 +364,7 @@ PN_EXTERN uint16_t pn_transport_get_channel_max(pn_transport_t *transport);
  * Set the maximum allowed channel number for a transport.
  * Note that this is the maximum channel number allowed, giving a
  * valid channel number range of [0..channel_max]. Therefore the
- * maximum number of simultaineously active channels will be
+ * maximum number of simultaneously active channels will be
  * channel_max plus 1.
  * You can call this function more than once to raise and lower
  * the limit your application imposes on max channels for this
@@ -455,12 +458,12 @@ PN_EXTERN void pn_transport_set_idle_timeout(pn_transport_t *transport, pn_milli
 PN_EXTERN pn_millis_t pn_transport_get_remote_idle_timeout(pn_transport_t *transport);
 
 /**
- * @deprecated
+ * **Deprecated**
  */
 PN_EXTERN ssize_t pn_transport_input(pn_transport_t *transport, const char *bytes, size_t available);
 
 /**
- * @deprecated
+ * **Deprecated**
  */
 PN_EXTERN ssize_t pn_transport_output(pn_transport_t *transport, char *bytes, size_t size);
 
@@ -471,7 +474,7 @@ PN_EXTERN ssize_t pn_transport_output(pn_transport_t *transport, char *bytes, si
  * If the engine is in an exceptional state such as encountering an
  * error condition or reaching the end of stream state, a negative
  * value will be returned indicating the condition. If an error is
- * indicated, futher details can be obtained from
+ * indicated, further details can be obtained from
  * ::pn_transport_error. Calls to ::pn_transport_process may alter the
  * value of this pointer. See ::pn_transport_process for details.
  *
@@ -484,7 +487,7 @@ PN_EXTERN ssize_t pn_transport_capacity(pn_transport_t *transport);
  * Get the transport's tail pointer.
  *
  * The amount of free space following this pointer is reported by
- * ::pn_transport_capacity. Calls to ::pn_transport_process may alther
+ * ::pn_transport_capacity. Calls to ::pn_transport_process may alter
  * the value of this pointer. See ::pn_transport_process for details.
  *
  * @param[in] transport the transport
@@ -495,10 +498,10 @@ PN_EXTERN char *pn_transport_tail(pn_transport_t *transport);
 /**
  * Pushes the supplied bytes into the tail of the transport.
  *
- * This is equivalent to copying @c size bytes afther the tail pointer
+ * This is equivalent to copying @c size bytes after the tail pointer
  * and then calling ::pn_transport_process with an argument of @c
  * size. Only some of the bytes will be copied if there is
- * insufficienty capacity available. Use ::pn_transport_capacity to
+ * insufficient capacity available. Use ::pn_transport_capacity to
  * determine how much capacity the transport has.
  *
  * @param[in] transport the transport
@@ -610,14 +613,17 @@ PN_EXTERN int pn_transport_close_head(pn_transport_t *transport);
 PN_EXTERN bool pn_transport_quiesced(pn_transport_t *transport);
 
 /**
- * Check if a transport is closed.
- *
- * A transport is defined to be closed when both the tail and the head
- * are closed. In other words, when both ::pn_transport_capacity() < 0
- * and ::pn_transport_pending() < 0.
- *
- * @param[in] transport a transport object
- * @return true if the transport is closed, false otherwise
+ * True if pn_transport_close_head() has been called.
+ */
+PN_EXTERN bool pn_transport_head_closed(pn_transport_t *transport);
+
+/**
+ * True if pn_transport_close_tail() has been called.
+ */
+PN_EXTERN bool pn_transport_tail_closed(pn_transport_t *transport);
+
+/**
+ * Equivalent to pn_transport_head_closed(transport) && pn_transport_tail_closed(transport)
  */
 PN_EXTERN bool pn_transport_closed(pn_transport_t *transport);
 

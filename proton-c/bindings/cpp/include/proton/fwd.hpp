@@ -22,6 +22,11 @@
  *
  */
 
+/// @file
+/// Forward declarations.
+
+#include "./internal/config.hpp"
+
 namespace proton {
 
 class annotation_key;
@@ -29,6 +34,7 @@ class connection;
 class connection_options;
 class container;
 class delivery;
+class duration;
 class error_condition;
 class event;
 class message;
@@ -39,7 +45,7 @@ class listener;
 class receiver;
 class receiver_iterator;
 class receiver_options;
-class reconnect_timer;
+class reconnect_options;
 class sasl;
 class sender;
 class sender_iterator;
@@ -53,7 +59,16 @@ class tracker;
 class transport;
 class url;
 class void_function0;
+class work_queue;
 
+namespace internal { namespace v03 { class work; } }
+
+#if PN_CPP_HAS_LAMBDAS && PN_CPP_HAS_VARIADIC_TEMPLATES
+namespace internal { namespace v11 { class work; } }
+using internal::v11::work;
+#else
+using internal::v03::work;
+#endif
 
 namespace io {
 
@@ -62,8 +77,6 @@ class connection_driver;
 }
 
 template <class T> class returned;
-template <class T> class thread_safe;
-
 }
 
 #endif // PROTON_FWD_HPP

@@ -27,7 +27,7 @@
 #include <proton/link.h>
 
 #include "contexts.hpp"
-#include "container_impl.hpp"
+#include "proactor_container_impl.hpp"
 #include "messaging_adapter.hpp"
 #include "proton_bits.hpp"
 
@@ -70,6 +70,7 @@ class receiver_options::impl {
     option<bool> dynamic_address;
     option<source_options> source;
     option<target_options> target;
+    option<std::string> name;
 
 
     void apply(receiver& r) {
@@ -120,11 +121,18 @@ void receiver_options::update(const receiver_options& x) { impl_->update(*x.impl
 receiver_options& receiver_options::handler(class messaging_handler &h) { impl_->handler = &h; return *this; }
 receiver_options& receiver_options::delivery_mode(proton::delivery_mode m) {impl_->delivery_mode = m; return *this; }
 receiver_options& receiver_options::auto_accept(bool b) {impl_->auto_accept = b; return *this; }
-receiver_options& receiver_options::auto_settle(bool b) {impl_->auto_settle = b; return *this; }
 receiver_options& receiver_options::credit_window(int w) {impl_->credit_window = w; return *this; }
 receiver_options& receiver_options::source(source_options &s) {impl_->source = s; return *this; }
 receiver_options& receiver_options::target(target_options &s) {impl_->target = s; return *this; }
+receiver_options& receiver_options::name(const std::string &s) {impl_->name = s; return *this; }
 
 void receiver_options::apply(receiver& r) const { impl_->apply(r); }
+
+const std::string* receiver_options::get_name() const {
+    return impl_->name.set ? &impl_->name.value : 0;
+}
+
+// No-op, kept for binary compat but auto_settle is not relevant to receiver only sender.
+receiver_options& receiver_options::auto_settle(bool b) { return *this; }
 
 } // namespace proton

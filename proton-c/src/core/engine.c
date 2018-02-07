@@ -976,21 +976,6 @@ static void pn_session_finalize(void *object)
 pn_session_t *pn_session(pn_connection_t *conn)
 {
   assert(conn);
-
-
-  pn_transport_t * transport = pn_connection_transport(conn);
-
-  if(transport) {
-    // channel_max is an index, not a count.  
-    if(pn_hash_size(transport->local_channels) > (size_t)transport->channel_max) {
-      pn_transport_logf(transport, 
-                        "pn_session: too many sessions: %d  channel_max is %d",
-                        pn_hash_size(transport->local_channels),
-                        transport->channel_max);
-      return (pn_session_t *) 0;
-    }
-  }
-
 #define pn_session_free pn_object_free
   static const pn_class_t clazz = PN_METACLASS(pn_session);
 #undef pn_session_free
@@ -1513,7 +1498,19 @@ static void pn_disposition_clear(pn_disposition_t *ds)
 #define pn_delivery_initialize NULL
 #define pn_delivery_hashcode NULL
 #define pn_delivery_compare NULL
-#define pn_delivery_inspect NULL
+
+int pn_delivery_inspect(void *obj, pn_string_t *dst) {
+  pn_delivery_t *d = (pn_delivery_t*)obj;
+  const char* dir = pn_link_is_sender(d->link) ? "sending" : "receiving";
+  pn_bytes_t bytes = pn_buffer_bytes(d->tag);
+  int err =
+    pn_string_addf(dst, "pn_delivery<%p>{%s, tag=b\"", obj, dir) ||
+    pn_quote(dst, bytes.start, bytes.size) ||
+    pn_string_addf(dst, "\", local=%s, remote=%s}",
+                   pn_disposition_type_name(d->local.type),
+                   pn_disposition_type_name(d->remote.type));
+  return err;
+}
 
 pn_delivery_tag_t pn_dtag(const char *bytes, size_t size) {
   pn_delivery_tag_t dtag = {size, bytes};
@@ -1555,11 +1552,13 @@ pn_delivery_t *pn_delivery(pn_link_t *link, pn_delivery_tag_t tag)
   delivery->tpwork = false;
   pn_buffer_clear(delivery->bytes);
   delivery->done = false;
+  delivery->aborted = false;
   pn_record_clear(delivery->context);
 
   // begin delivery state
   delivery->state.init = false;
-  delivery->state.sent = false;
+  delivery->state.sending = false; /* True if we have sent at least 1 frame */
+  delivery->state.sent = false;    /* True if we have sent the entire delivery */
   // end delivery state
 
   if (!link->current)
@@ -1742,9 +1741,16 @@ pn_delivery_t *pn_link_current(pn_link_t *link)
 static void pni_advance_sender(pn_link_t *link)
 {
   link->current->done = true;
-  link->queued++;
-  link->credit--;
-  link->session->outgoing_deliveries++;
+  /* Skip accounting if the link is aborted and has not sent any frames.
+     A delivery that was aborted before sending the first frame was not accounted
+     for in pni_process_tpwork_sender() so we don't need to account for it being sent here.
+  */
+  bool skip = link->current->aborted && !link->current->state.sending;
+  if (!skip) {
+    link->queued++;
+    link->credit--;
+    link->session->outgoing_deliveries++;
+  }
   pni_add_tpwork(link->current);
   link->current = link->current->unsettled_next;
 }
@@ -1902,24 +1908,22 @@ int pn_link_drained(pn_link_t *link)
 ssize_t pn_link_recv(pn_link_t *receiver, char *bytes, size_t n)
 {
   if (!receiver) return PN_ARG_ERR;
-
   pn_delivery_t *delivery = receiver->current;
-  if (delivery) {
-    size_t size = pn_buffer_get(delivery->bytes, 0, n, bytes);
-    pn_buffer_trim(delivery->bytes, size, 0);
-    if (size) {
-      receiver->session->incoming_bytes -= size;
-      if (!receiver->session->state.incoming_window) {
-        pni_add_tpwork(delivery);
-      }
-      return size;
-    } else {
-      return delivery->done ? PN_EOS : 0;
+  if (!delivery) return PN_STATE_ERR;
+  if (delivery->aborted) return PN_ABORTED;
+  size_t size = pn_buffer_get(delivery->bytes, 0, n, bytes);
+  pn_buffer_trim(delivery->bytes, size, 0);
+  if (size) {
+    receiver->session->incoming_bytes -= size;
+    if (!receiver->session->state.incoming_window) {
+      pni_add_tpwork(delivery);
     }
+    return size;
   } else {
-    return PN_STATE_ERR;
+    return delivery->done ? PN_EOS : 0;
   }
 }
+
 
 void pn_link_flow(pn_link_t *receiver, int credit)
 {
@@ -2046,12 +2050,28 @@ bool pn_delivery_readable(pn_delivery_t *delivery)
 
 size_t pn_delivery_pending(pn_delivery_t *delivery)
 {
+  /* Aborted deliveries: for clients that don't check pn_delivery_aborted(),
+     return 1 rather than 0. This will force them to call pn_link_recv() and get
+     the PN_ABORTED error return code.
+  */
+  if (delivery->aborted) return 1;
   return pn_buffer_size(delivery->bytes);
 }
 
 bool pn_delivery_partial(pn_delivery_t *delivery)
 {
   return !delivery->done;
+}
+
+void pn_delivery_abort(pn_delivery_t *delivery) {
+  if (!delivery->local.settled) { /* Can't abort a settled delivery */
+    delivery->aborted = true;
+    pn_delivery_settle(delivery);
+  }
+}
+
+bool pn_delivery_aborted(pn_delivery_t *delivery) {
+  return delivery->aborted;
 }
 
 pn_condition_t *pn_connection_condition(pn_connection_t *connection)
@@ -2269,9 +2289,54 @@ int pn_condition_copy(pn_condition_t *dest, pn_condition_t *src) {
   assert(src);
   int err = 0;
   if (src != dest) {
-    int err = pn_string_copy(dest->name, src->name);
+    err = pn_string_copy(dest->name, src->name);
     if (!err) err = pn_string_copy(dest->description, src->description);
     if (!err) err = pn_data_copy(dest->info, src->info);
   }
   return err;
+}
+
+
+static pn_condition_t *cond_set(pn_condition_t *cond) {
+  return cond && pn_condition_is_set(cond) ? cond : NULL;
+}
+
+static pn_condition_t *cond2_set(pn_condition_t *cond1, pn_condition_t *cond2) {
+  pn_condition_t *cond = cond_set(cond1);
+  if (!cond) cond = cond_set(cond2);
+  return cond;
+}
+
+pn_condition_t *pn_event_condition(pn_event_t *e) {
+  void *ctx = pn_event_context(e);
+  switch (pn_class_id(pn_event_class(e))) {
+   case CID_pn_connection: {
+     pn_connection_t *c = (pn_connection_t*)ctx;
+     return cond2_set(pn_connection_remote_condition(c), pn_connection_condition(c));
+   }
+   case CID_pn_session: {
+     pn_session_t *s = (pn_session_t*)ctx;
+     return cond2_set(pn_session_remote_condition(s), pn_session_condition(s));
+   }
+   case CID_pn_link: {
+     pn_link_t *l = (pn_link_t*)ctx;
+     return cond2_set(pn_link_remote_condition(l), pn_link_condition(l));
+   }
+   case CID_pn_transport:
+    return cond_set(pn_transport_condition((pn_transport_t*)ctx));
+
+   default:
+    return NULL;
+  }
+}
+
+const char *pn_disposition_type_name(uint64_t d) {
+  switch(d) {
+   case PN_RECEIVED: return "received";
+   case PN_ACCEPTED: return "accepted";
+   case PN_REJECTED: return "rejected";
+   case PN_RELEASED: return "released";
+   case PN_MODIFIED: return "modified";
+   default: return "unknown";
+  }
 }

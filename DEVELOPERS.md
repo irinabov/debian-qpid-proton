@@ -49,10 +49,13 @@ development environments on your system.  Most modern Linux
 distributions support installing Python 2.x and Python 3.x in
 parallel.
 
-2. Install the **tox** Python testing tool, (e.g. for Fedora):
+2. Install the **tox** Python testing tool, e.g. for older Fedora:
 
    $ yum install python-tox
 
+   For newer fedora:
+
+   $ dnf install python3-tox redhat-rpm-config
 
 To run the tests, cd into your build directory and use the following commands:
 
@@ -68,10 +71,19 @@ To run the tests, cd into your build directory and use the following commands:
 Additional packages required for testing the language bindings:
 
     # ruby dependencies
-    $ yum install rubygem-minitest rubygem-rspec rubygem-simplecov
+    $ yum install rubygem-minitest
 
     # alternatively ruby depedencies on non-RPM based systems
-    $ gem install minitest rspec simplecov
+    $ gem install minitest
+
+To run coverage reporting:
+
+    # install coverage tools
+    $ dnf install lcov
+    $ pip install coverage
+
+    $ cmake -DCMAKE_BUILD_TYPE=Coverage && make && ctest && make coverage
+    # Then browse to {CMAKE_BUILD_DIR}/coverage_results/html/index.html
 
 Mailing list
 ------------

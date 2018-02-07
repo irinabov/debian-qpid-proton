@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,24 +14,27 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
+  # @deprecated use {URI} or {String}
   class URL
+    include Util::Deprecation
 
     attr_reader :scheme
     attr_reader :username
+    alias user username
     attr_reader :password
     attr_reader :host
-    attr_reader :port
     attr_reader :path
 
-    def initialize(url = nil, options = {})
-      options[:defaults] = true
-
+    # Parse a string, return a new URL
+    # @param url [#to_s] the URL string
+    def initialize(url = nil)
+      deprecated self.class, 'URI or String'
       if url
-        @url = Cproton.pn_url_parse(url)
+        @url = Cproton.pn_url_parse(url.to_s)
         if @url.nil?
           raise ::ArgumentError.new("invalid url: #{url}")
         end
@@ -60,18 +62,20 @@ module Qpid::Proton
       Cproton.pn_url_get_port(@url).to_i
     end
 
+    # @return [String] Convert to string
     def to_s
       "#{@scheme}://#{@username.nil? ? '' : @username}#{@password.nil? ? '' : '@' + @password + ':'}#{@host}:#{@port}/#{@path}"
     end
 
+    # @return [String] Allow implicit conversion by {String#try_convert}
+    alias to_str to_s
+
     private
 
     def defaults
-      @scheme = @scheme || "ampq"
+      @scheme = @scheme || "amqp"
       @host = @host || "0.0.0.0"
       @port = @port || 5672
     end
-
   end
-
 end

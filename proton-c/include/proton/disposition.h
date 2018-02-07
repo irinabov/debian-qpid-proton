@@ -34,14 +34,16 @@ extern "C" {
 /**
  * @file
  *
- * Delivery state
+ * @copybrief pn_disposition_t
  *
  * @addtogroup delivery
  * @{
  */
 
 /**
- * Dispositions record the current state and/or final outcome of a
+ * A delivery state.
+ *
+ * Dispositions record the current state or final outcome of a
  * transfer. Every delivery contains both a local and remote
  * disposition. The local disposition holds the local state of the
  * delivery, and the remote disposition holds the last known remote
@@ -103,6 +105,11 @@ typedef struct pn_disposition_t pn_disposition_t;
  * @return the type of the disposition
  */
 PN_EXTERN uint64_t pn_disposition_type(pn_disposition_t *disposition);
+
+/**
+ * Name of a disposition type for logging and debugging: "received", "accepted" etc.
+ */
+PN_EXTERN const char *pn_disposition_type_name(uint64_t disposition_type);
 
 /**
  * Access the condition object associated with a disposition.

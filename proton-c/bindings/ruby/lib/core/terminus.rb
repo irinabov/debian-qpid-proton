@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
@@ -30,6 +29,7 @@ module Qpid::Proton
   # the Link.
   #
   class Terminus
+    include Util::Deprecation
 
     # Indicates a non-existent source or target terminus.
     UNSPECIFIED = Cproton::PN_UNSPECIFIED
@@ -66,76 +66,75 @@ module Qpid::Proton
     DIST_MODE_MOVE = Cproton::PN_DIST_MODE_MOVE
 
     # @private
-    include Util::SwigHelper
-
-    # @private
     PROTON_METHOD_PREFIX = "pn_terminus"
+    # @private
+    include Util::Wrapper
 
     # @!attribute type
     #
-    # @return [Fixnum] The terminus type.
+    # @return [Integer] The terminus type.
     #
     # @see SOURCE
     # @see TARGET
     # @see COORDINATOR
     #
-    proton_accessor :type
+    proton_set_get :type
 
     # @!attribute address
     #
     # @return [String] The terminus address.
     #
-    proton_accessor :address
+    proton_set_get :address
 
-    # @!attribute durability
+    # @!attribute durability_mode
     #
-    # @return [Fixnum] The durability mode of the terminus.
+    # @return [Integer] The durability mode of the terminus.
     #
     # @see NONDURABLE
     # @see CONFIGURATION
     # @see DELIVERIES
     #
-    proton_accessor :durability
+    proton_forward :durability_mode, :get_durability
+    proton_forward :durability_mode=, :set_durability
+
+    deprecated_alias :durability, :durability_mode
+    deprecated_alias :durability=, :durability_mode=
 
     # @!attribute expiry_policy
     #
-    # @return [Fixnum] The expiry policy.
+    # @return [Integer] The expiry policy.
     #
     # @see EXPIRE_WITH_LINK
     # @see EXPIRE_WITH_SESSION
     # @see EXPIRE_WITH_CONNECTION
     # @see EXPIRE_NEVER
     #
-    proton_accessor :expiry_policy
+    proton_set_get :expiry_policy
 
     # @!attribute timeout
     #
-    # @return [Fixnum] The timeout period.
+    # @return [Integer] The timeout period.
     #
-    proton_accessor :timeout
+    proton_set_get :timeout
 
     # @!attribute dynamic?
     #
     # @return [Boolean] True if the terminus is dynamic.
     #
-    proton_accessor :dynamic, :is_or_get => :is
+    proton_set_is :dynamic
 
     # @!attribute distribution_mode
     #
-    # @return [Fixnum] The distribution mode.
+    # @return [Integer] The distribution mode. Only relevant for a message source.
     #
     # @see DIST_MODE_UNSPECIFIED
     # @see DIST_MODE_COPY
     # @see DIST_MODE_MOVE
     #
-    proton_accessor :distribution_mode
+    proton_set_get :distribution_mode
 
     # @private
     include Util::ErrorHandler
-
-    can_raise_error [:type=, :address=, :durability=, :expiry_policy=,
-                          :timeout=, :dynamic=, :distribution_mode=, :copy],
-                    :error_class => Qpid::Proton::LinkError
 
     # @private
     attr_reader :impl
@@ -157,7 +156,7 @@ module Qpid::Proton
     # @return [Data] The terminus properties.
     #
     def properties
-      Data.new(Cproton.pn_terminus_properties(@impl))
+      Codec::Data.new(Cproton.pn_terminus_properties(@impl))
     end
 
     # Access and modify the AMQP capabilities data for the Terminus.
@@ -172,7 +171,7 @@ module Qpid::Proton
     # @return [Data] The terminus capabilities.
     #
     def capabilities
-      Data.new(Cproton.pn_terminus_capabilities(@impl))
+      Codec::Data.new(Cproton.pn_terminus_capabilities(@impl))
     end
 
     # Access and modify the AMQP outcomes for the Terminus.
@@ -187,10 +186,11 @@ module Qpid::Proton
     # @return [Data] The terminus outcomes.
     #
     def outcomes
-      Data.new(Cproton.pn_terminus_outcomes(@impl))
+      Codec::Data.new(Cproton.pn_terminus_outcomes(@impl))
     end
 
-    # Access and modify the AMQP filter set for the Terminus.
+    # Access and modify the AMQP filter set for a source terminus.
+    # Only relevant for a message source.
     #
     # This operation will return an instance of Data that is valid until the
     # Terminus is freed due to its parent being freed. Any data contained in
@@ -202,17 +202,49 @@ module Qpid::Proton
     # @return [Data] The terminus filter.
     #
     def filter
-      Data.new(Cproton.pn_terminus_filter(@impl))
+      Codec::Data.new(Cproton.pn_terminus_filter(@impl))
     end
 
-    # Copy another Terminus into this instance.
-    #
-    # @param source [Terminus] The source instance.
-    #
-    def copy(source)
-      Cproton.pn_terminus_copy(@impl,source.impl)
+    # Replace the data in this Terminus with the contents of +other+
+    # @param other [Terminus] The other instance.
+    def replace(other)
+      Cproton.pn_terminus_copy(@impl, other.impl)
+      self
+    end
+    deprecated_alias :copy, :replace
+
+    # Apply options to this terminus.
+    # @option opts [String] :address the node address
+    # @option opts [Boolean] :dynamic (false)
+    #   if true, request a new node with a unique address to be created. +:address+ is ignored.
+    # @option opts [Integer] :distribution_mode see {#distribution_mode}, only for source nodes
+    # @option opts [Integer] :durability_mode see {#durability_mode}
+    # @option opts [Integer] :timeout see {#timeout}
+    # @option opts [Integer] :expiry_policy see {#expiry_policy}
+    # @option opts [Hash] :filter see {#filter}, only for source nodes
+    # @option opts [Hash] :capabilities see {#capabilities}
+    def apply(opts=nil)
+      return unless opts
+      if opts.is_a? String      # Shorthand for address
+        self.address = opts
+      else
+        opts.each_pair do |k,v|
+          case k
+          when :address then self.address = v
+          when :dynamic then self.dynamic = !!v
+          when :distribution_mode then self.distribution_mode = v
+          when :durability_mode then self.durability_mode = v
+          when :timeout then self.timeout = v
+          when :expiry_policy then self.expiry_policy = v
+          when :filter then self.filter = v
+          when :capabilities then self.capabilities = v
+          end
+        end
+      end
     end
 
+    can_raise_error([:type=, :address=, :durability=, :expiry_policy=,
+                     :timeout=, :dynamic=, :distribution_mode=, :copy],
+                    :error_class => Qpid::Proton::LinkError)
   end
-
 end

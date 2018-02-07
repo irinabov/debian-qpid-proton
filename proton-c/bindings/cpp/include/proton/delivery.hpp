@@ -27,6 +27,9 @@
 #include "./internal/object.hpp"
 #include "./transfer.hpp"
 
+/// @file
+/// @copybrief proton::delivery
+
 namespace proton {
 
 /// A received message.
@@ -46,7 +49,7 @@ class delivery : public transfer {
 
     // XXX ATM the following don't reflect the differing behaviors we
     // get from the different delivery modes. - Deferred
-    
+
     /// Settle with ACCEPTED state.
     PN_CPP_EXTERN void accept();
 

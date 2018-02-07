@@ -21,22 +21,34 @@
 #include <proton/condition.h>
 #include <proton/connection.h>
 #include <proton/connection_driver.h>
+#include <proton/event.h>
 #include <proton/transport.h>
 #include <string.h>
 
 struct driver_batch {
   pn_event_batch_t batch;
+  pn_collector_t *collector;
 };
 
 static pn_event_t *batch_next(pn_event_batch_t *batch) {
   pn_connection_driver_t *d =
     (pn_connection_driver_t*)((char*)batch - offsetof(pn_connection_driver_t, batch));
-  pn_collector_t *collector = pn_connection_collector(d->connection);
-  pn_event_t *handled = pn_collector_prev(collector);
-  if (handled && pn_event_type(handled) == PN_CONNECTION_INIT) {
-      pn_transport_bind(d->transport, d->connection); /* Init event handled, auto-bind */
+  if (!d->collector) return NULL;
+  pn_event_t *handled = pn_collector_prev(d->collector);
+  if (handled) {
+    switch (pn_event_type(handled)) {
+     case PN_CONNECTION_INIT:   /* Auto-bind after the INIT event is handled */
+      pn_transport_bind(d->transport, d->connection);
+      break;
+     case PN_TRANSPORT_CLOSED:  /* No more events after TRANSPORT_CLOSED  */
+      pn_collector_release(d->collector);
+      break;
+     default:
+      break;
+    }
   }
-  pn_event_t *next = pn_collector_next(collector);
+  /* Log the next event that will be processed */
+  pn_event_t *next = pn_collector_next(d->collector);
   if (next && d->transport->trace & PN_TRACE_EVT) {
     pn_string_clear(d->transport->scratch);
     pn_inspect(next, d->transport->scratch);
@@ -50,13 +62,12 @@ int pn_connection_driver_init(pn_connection_driver_t* d, pn_connection_t *c, pn_
   d->batch.next_event = &batch_next;
   d->connection = c ? c : pn_connection();
   d->transport = t ? t : pn_transport();
-  pn_collector_t *collector = pn_collector();
-  if (!d->connection || !d->transport || !collector) {
-    if (collector) pn_collector_free(collector);
+  d->collector = pn_collector();
+  if (!d->connection || !d->transport || !d->collector) {
     pn_connection_driver_destroy(d);
     return PN_OUT_OF_MEMORY;
   }
-  pn_connection_collect(d->connection, collector);
+  pn_connection_collect(d->connection, d->collector);
   return 0;
 }
 
@@ -64,16 +75,24 @@ int pn_connection_driver_bind(pn_connection_driver_t *d) {
   return pn_transport_bind(d->transport, d->connection);
 }
 
+pn_connection_t *pn_connection_driver_release_connection(pn_connection_driver_t *d) {
+  if (d->transport) {           /* Make sure transport is closed and unbound */
+      pn_connection_driver_close(d);
+      pn_transport_unbind(d->transport);
+  }
+  pn_connection_t *c = d->connection;
+  if (c) {
+    d->connection = NULL;
+    pn_connection_collect(c, NULL); /* Disconnect from the collector */
+  }
+  return c;
+}
+
 void pn_connection_driver_destroy(pn_connection_driver_t *d) {
-  if (d->transport) {
-    pn_transport_unbind(d->transport);
-    pn_transport_free(d->transport);
-  }
-  if (d->connection) {
-    pn_collector_t *collector = pn_connection_collector(d->connection);
-    pn_connection_free(d->connection);
-    pn_collector_free(collector);
-  }
+  pn_connection_t *c = pn_connection_driver_release_connection(d);
+  if (c) pn_connection_free(c);
+  if (d->transport) pn_transport_free(d->transport);
+  if (d->collector) pn_collector_free(d->collector);
   memset(d, 0, sizeof(*d));
 }
 
@@ -87,7 +106,7 @@ void pn_connection_driver_read_done(pn_connection_driver_t *d, size_t n) {
 }
 
 bool pn_connection_driver_read_closed(pn_connection_driver_t *d) {
-  return pn_transport_capacity(d->transport) < 0;
+  return pn_transport_tail_closed(d->transport);
 }
 
 void pn_connection_driver_read_close(pn_connection_driver_t *d) {
@@ -103,12 +122,11 @@ pn_bytes_t pn_connection_driver_write_buffer(pn_connection_driver_t *d) {
 }
 
 void pn_connection_driver_write_done(pn_connection_driver_t *d, size_t n) {
-  if (n > 0)
-    pn_transport_pop(d->transport, n);
+  pn_transport_pop(d->transport, n);
 }
 
 bool pn_connection_driver_write_closed(pn_connection_driver_t *d) {
-  return pn_transport_pending(d->transport) < 0;
+  return pn_transport_head_closed(d->transport);
 }
 
 void pn_connection_driver_write_close(pn_connection_driver_t *d) {
@@ -127,7 +145,7 @@ pn_event_t* pn_connection_driver_next_event(pn_connection_driver_t *d) {
 }
 
 bool pn_connection_driver_has_event(pn_connection_driver_t *d) {
-  return pn_collector_peek(pn_connection_collector(d->connection));
+  return d->connection && pn_collector_peek(pn_connection_collector(d->connection));
 }
 
 bool pn_connection_driver_finished(pn_connection_driver_t *d) {
@@ -153,12 +171,15 @@ void pn_connection_driver_log(pn_connection_driver_t *d, const char *msg) {
   pn_transport_log(d->transport, msg);
 }
 
-void pn_connection_driver_vlogf(pn_connection_driver_t *d, const char *fmt, va_list ap) {
+void pn_connection_driver_logf(pn_connection_driver_t *d, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
   pn_transport_vlogf(d->transport, fmt, ap);
+  va_end(ap);
 }
 
-void pn_connection_driver_vlog(pn_connection_driver_t *d, const char *msg) {
-  pn_transport_log(d->transport, msg);
+void pn_connection_driver_vlogf(pn_connection_driver_t *d, const char *fmt, va_list ap) {
+  pn_transport_vlogf(d->transport, fmt, ap);
 }
 
 pn_connection_driver_t* pn_event_batch_connection_driver(pn_event_batch_t *batch) {

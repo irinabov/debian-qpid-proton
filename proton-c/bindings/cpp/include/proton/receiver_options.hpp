@@ -26,6 +26,10 @@
 #include "./internal/export.hpp"
 #include "./internal/pn_unique_ptr.hpp"
 #include "./delivery_mode.hpp"
+#include <string>
+
+/// @file
+/// @copybrief proton::receiver_options
 
 namespace proton {
 
@@ -34,7 +38,7 @@ namespace proton {
 /// Options can be "chained" like this:
 ///
 /// @code
-/// l = container.create_receiver(url, receiver_options().handler(h).auto_settle(true));
+/// l = container.create_receiver(url, receiver_options().handler(h).auto_accept(true));
 /// @endcode
 ///
 /// You can also create an options object with common settings and use
@@ -43,7 +47,7 @@ namespace proton {
 ///
 /// @code
 /// receiver_options opts;
-/// opts.auto_settle(true);
+/// opts.auto_accept(true);
 /// c2 = container.open_receiver(url2, opts.handler(h2));
 /// @endcode
 ///
@@ -62,42 +66,51 @@ class receiver_options {
     /// Copy options.
     PN_CPP_EXTERN receiver_options& operator=(const receiver_options&);
 
-    /// Merge with another option set
+    /// Merge with another option set.
     PN_CPP_EXTERN void update(const receiver_options& other);
 
-    /// Set a messaging_handler for receiver events only.
-    /// The handler is no longer in use when messaging_handler::on_receiver_close() is called.
+    /// Set a messaging_handler for receiver events only.  The handler
+    /// is no longer in use when
+    /// messaging_handler::on_receiver_close() is called.
     PN_CPP_EXTERN receiver_options& handler(class messaging_handler&);
 
-    /// Set the delivery mode on the receiver.
+    /// Set the delivery mode on the receiver.  The default is
+    /// delivery_mode::AT_LEAST_ONCE.
     PN_CPP_EXTERN receiver_options& delivery_mode(delivery_mode);
 
-    /// Automatically accept inbound messages that aren't otherwise
-    /// released, rejected, or modified (default is true).
+    /// Enable or disable automatic acceptance of messages that aren't
+    /// otherwise released, rejected, or modified.  It is enabled by
+    /// default.
     PN_CPP_EXTERN receiver_options& auto_accept(bool);
 
-    /// Automatically settle messages (default is true).
+    /// @deprecated not applicable to receiver, only to sender
     PN_CPP_EXTERN receiver_options& auto_settle(bool);
 
     /// Options for the source node of the receiver.
-    PN_CPP_EXTERN receiver_options& source(source_options &);
+    PN_CPP_EXTERN receiver_options& source(source_options&);
 
     /// Options for the target node of the receiver.
-    PN_CPP_EXTERN receiver_options& target(target_options &);
+    PN_CPP_EXTERN receiver_options& target(target_options&);
 
-    /// Set automated flow control to pre-fetch this many messages
-    /// (default is 10).  Set to zero to disable automatic credit
-    /// replenishing.
-    PN_CPP_EXTERN receiver_options& credit_window(int);
+    /// Automatically replenish credit for flow control up to `count`
+    /// messages.  The default is 10.  Set to zero to disable
+    /// automatic replenishment.
+    PN_CPP_EXTERN receiver_options& credit_window(int count);
 
-    /// @cond INTERNAL
+    /// Set the link name. If not set a unique name is generated.
+    PN_CPP_EXTERN receiver_options& name(const std::string& name);
+
+
   private:
     void apply(receiver &) const;
+    const std::string* get_name() const; // Pointer to name if set, else 0
 
     class impl;
     internal::pn_unique_ptr<impl> impl_;
 
-    friend class receiver;
+    /// @cond INTERNAL
+  friend class receiver;
+  friend class session;
     /// @endcond
 };
 

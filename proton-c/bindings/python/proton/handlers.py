@@ -16,13 +16,14 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-import heapq, logging, os, re, socket, time, types
+import heapq, logging, os, re, socket, time, types, weakref
 
 from proton import dispatch, generate_uuid, PN_ACCEPTED, SASL, symbol, ulong, Url
 from proton import Collector, Connection, Delivery, Described, Endpoint, Event, Link, Terminus, Timeout
 from proton import Message, Handler, ProtonException, Transport, TransportException, ConnectionException
 from select import select
 
+log = logging.getLogger("proton")
 
 class OutgoingMessageHandler(Handler):
     """
@@ -87,7 +88,7 @@ class OutgoingMessageHandler(Handler):
     def on_settled(self, event):
         """
         Called when the remote peer has settled the outgoing
-        message. This is the point at which it shouod never be
+        message. This is the point at which it should never be
         retransmitted.
         """
         if self.delegate != None:
@@ -155,7 +156,10 @@ class IncomingMessageHandler(Handler, Acking):
     def on_delivery(self, event):
         dlv = event.delivery
         if not dlv.link.is_receiver: return
-        if dlv.readable and not dlv.partial:
+        if dlv.aborted:
+            self.on_aborted(event)
+            dlv.settle()
+        elif dlv.readable and not dlv.partial:
             event.message = recv_msg(dlv)
             if event.link.state & Endpoint.LOCAL_CLOSED:
                 if self.auto_accept:
@@ -180,7 +184,7 @@ class IncomingMessageHandler(Handler, Acking):
         """
         Called when a message is received. The message itself can be
         obtained as a property on the event. For the purpose of
-        refering to this message in further actions (e.g. if
+        referring to this message in further actions (e.g. if
         explicitly accepting it, the ``delivery`` should be used, also
         obtainable via a property on the event.
         """
@@ -190,6 +194,10 @@ class IncomingMessageHandler(Handler, Acking):
     def on_settled(self, event):
         if self.delegate != None:
             dispatch(self.delegate, 'on_settled', event)
+
+    def on_aborted(self, event):
+        if self.delegate != None:
+            dispatch(self.delegate, 'on_aborted', event)
 
 class EndpointStateHandler(Handler):
     """
@@ -231,9 +239,9 @@ class EndpointStateHandler(Handler):
     @classmethod
     def print_error(cls, endpoint, endpoint_type):
         if endpoint.remote_condition:
-            logging.error(endpoint.remote_condition.description or endpoint.remote_condition.name)
+            log.error(endpoint.remote_condition.description or endpoint.remote_condition.name)
         elif cls.is_local_open(endpoint) and cls.is_remote_closed(endpoint):
-            logging.error("%s closed by peer" % endpoint_type)
+            log.error("%s closed by peer" % endpoint_type)
 
     def on_link_remote_close(self, event):
         if event.link.remote_condition:
@@ -255,6 +263,10 @@ class EndpointStateHandler(Handler):
 
     def on_connection_remote_close(self, event):
         if event.connection.remote_condition:
+            if event.connection.remote_condition.name == "amqp:connection:forced":
+                # Treat this the same as just having the transport closed by the peer without
+                # sending any events. Allow reconnection to happen transparently.
+                return
             self.on_connection_error(event)
         elif self.is_local_closed(event.connection):
            self.on_connection_closed(event)
@@ -386,9 +398,9 @@ class MessagingHandler(Handler, Acking):
         self.handlers = []
         if prefetch:
             self.handlers.append(CFlowController(prefetch))
-        self.handlers.append(EndpointStateHandler(peer_close_is_error, self))
-        self.handlers.append(IncomingMessageHandler(auto_accept, self))
-        self.handlers.append(OutgoingMessageHandler(auto_settle, self))
+        self.handlers.append(EndpointStateHandler(peer_close_is_error, weakref.proxy(self)))
+        self.handlers.append(IncomingMessageHandler(auto_accept, weakref.proxy(self)))
+        self.handlers.append(OutgoingMessageHandler(auto_settle, weakref.proxy(self)))
         self.fatal_conditions = ["amqp:unauthorized-access"]
 
     def on_transport_error(self, event):
@@ -399,9 +411,9 @@ class MessagingHandler(Handler, Acking):
         """
         if event.transport.condition:
             if event.transport.condition.info:
-                logging.error("%s: %s" % (event.transport.condition.name, event.transport.condition.description, event.transport.condition.info))
+                log.error("%s: %s: %s" % (event.transport.condition.name, event.transport.condition.description, event.transport.condition.info))
             else:
-                logging.error("%s: %s" % (event.transport.condition.name, event.transport.condition.description))
+                log.error("%s: %s" % (event.transport.condition.name, event.transport.condition.description))
             if event.transport.condition.name in self.fatal_conditions:
                 event.connection.close()
         else:
@@ -506,7 +518,7 @@ class MessagingHandler(Handler, Acking):
     def on_settled(self, event):
         """
         Called when the remote peer has settled the outgoing
-        message. This is the point at which it shouod never be
+        message. This is the point at which it should never be
         retransmitted.
         """
         pass
@@ -514,7 +526,7 @@ class MessagingHandler(Handler, Acking):
         """
         Called when a message is received. The message itself can be
         obtained as a property on the event. For the purpose of
-        refering to this message in further actions (e.g. if
+        referring to this message in further actions (e.g. if
         explicitly accepting it, the ``delivery`` should be used, also
         obtainable via a property on the event.
         """

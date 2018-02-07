@@ -32,6 +32,9 @@
 
 #include <string>
 
+/// @file
+/// @copybrief proton::connection
+
 struct pn_connection_t;
 
 namespace proton {
@@ -57,7 +60,10 @@ PN_CPP_CLASS_EXTERN connection : public internal::object<pn_connection_t>, publi
     ///
     /// @throw proton::error if this connection is not managed by a
     /// container
-    PN_CPP_EXTERN class container &container() const;
+    PN_CPP_EXTERN class container& container() const;
+
+    /// Get the work_queue for the connection.
+    PN_CPP_EXTERN class work_queue& work_queue() const;
 
     /// Get the transport for the connection.
     PN_CPP_EXTERN class transport transport() const;
@@ -78,7 +84,7 @@ PN_CPP_CLASS_EXTERN connection : public internal::object<pn_connection_t>, publi
     PN_CPP_EXTERN void open();
 
     /// @copydoc open
-    PN_CPP_EXTERN void open(const connection_options &);
+    PN_CPP_EXTERN void open(const connection_options&);
 
     PN_CPP_EXTERN void close();
     PN_CPP_EXTERN void close(const error_condition&);
@@ -87,24 +93,30 @@ PN_CPP_CLASS_EXTERN connection : public internal::object<pn_connection_t>, publi
     PN_CPP_EXTERN session open_session();
 
     /// @copydoc open_session
-    PN_CPP_EXTERN session open_session(const session_options &);
+    PN_CPP_EXTERN session open_session(const session_options&);
 
     /// Get the default session.  A default session is created on the
     /// first call and reused for the lifetime of the connection.
     PN_CPP_EXTERN session default_session();
 
     /// Open a sender for `addr` on default_session().
-    PN_CPP_EXTERN sender open_sender(const std::string &addr);
+    PN_CPP_EXTERN sender open_sender(const std::string& addr);
 
     /// @copydoc open_sender
-    PN_CPP_EXTERN sender open_sender(const std::string &addr, const sender_options &);
+    PN_CPP_EXTERN sender open_sender(const std::string& addr, const sender_options&);
 
     /// Open a receiver for `addr` on default_session().
-    PN_CPP_EXTERN receiver open_receiver(const std::string &addr);
+    PN_CPP_EXTERN receiver open_receiver(const std::string& addr);
 
     /// @copydoc open_receiver
-    PN_CPP_EXTERN receiver open_receiver(const std::string &addr,
-                                         const receiver_options &);
+    PN_CPP_EXTERN receiver open_receiver(const std::string& addr,
+                                         const receiver_options&);
+
+    /// @see proton::container::sender_options()
+    PN_CPP_EXTERN class sender_options sender_options() const;
+
+    /// @see container::receiver_options()
+    PN_CPP_EXTERN class receiver_options receiver_options() const;
 
     /// Return all sessions on this connection.
     PN_CPP_EXTERN session_range sessions() const;
@@ -115,25 +127,45 @@ PN_CPP_CLASS_EXTERN connection : public internal::object<pn_connection_t>, publi
     /// Return all senders on this connection.
     PN_CPP_EXTERN sender_range senders() const;
 
-    /// Get the maximum frame size.
+    /// Get the maximum frame size allowed by the remote peer.
     ///
     /// @see @ref connection_options::max_frame_size
     PN_CPP_EXTERN uint32_t max_frame_size() const;
 
-    /// Get the maximum number of open sessions.
+    /// Get the maximum number of open sessions allowed by the remote
+    /// peer.
     ///
     /// @see @ref connection_options::max_sessions
     PN_CPP_EXTERN uint16_t max_sessions() const;
 
-    /// Get the idle timeout.
+    /// Get the idle timeout set by the remote peer.
     ///
     /// @see @ref connection_options::idle_timeout
     PN_CPP_EXTERN uint32_t idle_timeout() const;
 
+    /// **Unsettled API** - Trigger an event from another thread.
+    ///
+    /// This method can be called from any thread. The Proton library
+    /// will call `messaging_handler::on_connection_wake()` as soon as
+    /// possible in the correct event-handling thread.
+    ///
+    /// **Thread-safety** - This is the *only* `proton::connection`
+    /// function that can be called from outside the handler thread.
+    ///
+    /// @note Spurious `messaging_handler::on_connection_wake()` calls
+    /// can occur even if the application does not call `wake()`.
+    ///
+    /// @note Multiple calls to `wake()` may be coalesced into a
+    /// single call to `messaging_handler::on_connection_wake()` that
+    /// occurs after all of them.
+    ///
+    /// The `proton::work_queue` interface provides an easier way
+    /// execute code safely in the event-handler thread.
+    PN_CPP_EXTERN void wake() const;
+
     /// @cond INTERNAL
   friend class internal::factory<connection>;
   friend class container;
-  friend class proton::thread_safe<connection>;
     /// @endcond
 };
 

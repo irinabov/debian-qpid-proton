@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,73 +14,37 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 #--
 # Patch the Hash class to provide methods for adding its contents
-# to a Qpid::Proton::Data instance.
+# to a Qpid::Proton::Codec::Data instance.
 #++
 
 # @private
 class Hash # :nodoc:
 
-  # Places the contents of the hash into the specified data object.
-  #
-  # ==== Arguments
-  #
-  # * data - the Qpid::Proton::Data instance
-  #
-  # ==== Examples
-  #
-  #   data = Qpid::Proton::Data.new
-  #   values = {:foo => :bar}
-  #   values.proton_data_put(data)
-  #
+  # @deprecated
   def proton_data_put(data)
-    raise TypeError, "data object cannot be nil" if data.nil?
-
-    data.put_map
-    data.enter
-
-    each_pair do |key, value|
-      type = Qpid::Proton::Codec::Mapping.for_class(key.class)
-      type.put(data, key)
-      type = Qpid::Proton::Codec::Mapping.for_class(value.class)
-      type.put(data, value)
-    end
-
-    data.exit
+    Qpid::Proton::Util::Deprecation.deprecated(__method__, "Codec::Data#map=")
+    data.map = self
   end
 
-  class << self
+  # @deprecated
+  def self.proton_data_get(data)
+    Qpid::Proton::Util::Deprecation.deprecated(__method__, "Codec::Data#map")
+    data.map
+  end
+end
 
-    def proton_data_get(data)
-      raise TypeError, "data object cannot be nil" if data.nil?
-
-      type = data.type
-
-      raise TypeError, "element is not a map" unless type == Qpid::Proton::Codec::MAP
-
-      count = data.map
-      result = {}
-
-      data.enter
-
-      (0...(count/2)).each do
-        data.next
-        type = data.type
-        key = type.get(data)
-        data.next
-        type = data.type
-        value = type.get(data)
-        result[key] = value
-      end
-
-      data.exit
-
-      return result
-    end
-
+module Qpid::Proton::Types
+  # @private
+  def self.symbol_keys(h)
+    h && h.reduce({}) { |x, (k, v)| x[k.to_sym] = v; x }
   end
 
+  # @private
+  def self.symbol_array(a)
+    a && UniformArray.new(SYMBOL, a.collect { |v| v.to_sym })
+  end
 end

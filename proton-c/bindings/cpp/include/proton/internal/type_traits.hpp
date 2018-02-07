@@ -72,7 +72,7 @@ template <> struct is_signed<signed short> : public true_type {};
 template <> struct is_signed<signed int> : public true_type {};
 template <> struct is_signed<signed long> : public true_type {};
 
-#if PN_CPP_HAS_LONG_LONG
+#if PN_CPP_HAS_LONG_LONG_TYPE
 template <> struct is_integral<unsigned long long> : public true_type {};
 template <> struct is_integral<signed long long> : public true_type {};
 template <> struct is_signed<unsigned long long> : public false_type {};
@@ -150,7 +150,6 @@ template <class T> struct is_unknown_integer {
 
 template<class T, class = typename enable_if<is_unknown_integer<T>::value>::type>
 struct known_integer : public integer_type<sizeof(T), is_signed<T>::value> {};
-
 
 // Helper base for SFINAE templates.
 struct sfinae {

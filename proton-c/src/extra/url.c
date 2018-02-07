@@ -19,33 +19,13 @@
  *
  */
 
+#include "core/util.h"
 #include "proton/url.h"
 #include "proton/object.h"
 
-#include "core/util.h"
-
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
-
-/** URL-encode src and append to dst. */
-static void pni_urlencode(pn_string_t *dst, const char* src) {
-    static const char *bad = "@:/";
-
-    if (!src) return;
-    const char *i = src;
-    const char *j = strpbrk(i, bad);
-    while (j) {
-        pn_string_addf(dst, "%.*s", (int)(j-i), i);
-        pn_string_addf(dst, "%%%02X", (int)*j);
-        i = j + 1;
-        j = strpbrk(i, bad);
-    }
-    pn_string_addf(dst, "%s", i);
-}
-
-// Low level url parser
 static void pni_urldecode(const char *src, char *dst)
 {
   const char *in = src;
@@ -82,9 +62,11 @@ static void pni_urldecode(const char *src, char *dst)
   *out = '\0';
 }
 
+/* Not static - used by messenger.c */
 void pni_parse_url(char *url, char **scheme, char **user, char **pass, char **host, char **port, char **path)
 {
   if (!url) return;
+  *scheme = *user = *pass = *host = *port = *path = NULL;
 
   char *slash = strchr(url, '/');
 
@@ -128,7 +110,7 @@ void pni_parse_url(char *url, char **scheme, char **user, char **pass, char **ho
     }
   }
 
-  char *colon = strchr(url, ':');
+  char *colon = strrchr(url, ':'); /* Be flexible about unbracketed IPV6 literals like ::1:<port> */
   if (colon) {
     *colon = '\0';
     *port = colon + 1;
@@ -136,6 +118,22 @@ void pni_parse_url(char *url, char **scheme, char **user, char **pass, char **ho
 
   if (*user) pni_urldecode(*user, *user);
   if (*pass) pni_urldecode(*pass, *pass);
+}
+
+/** URL-encode src and append to dst. */
+static void pni_urlencode(pn_string_t *dst, const char* src) {
+    static const char *bad = "@:/";
+
+    if (!src) return;
+    const char *i = src;
+    const char *j = strpbrk(i, bad);
+    while (j) {
+        pn_string_addf(dst, "%.*s", (int)(j-i), i);
+        pn_string_addf(dst, "%%%02X", (int)*j);
+        i = j + 1;
+        j = strpbrk(i, bad);
+    }
+    pn_string_addf(dst, "%s", i);
 }
 
 struct pn_url_t {

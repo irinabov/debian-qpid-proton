@@ -24,13 +24,11 @@
 #include <proton/connection.hpp>
 #include <proton/connection_options.hpp>
 #include <proton/container.hpp>
-#include <proton/default_container.hpp>
 #include <proton/delivery.hpp>
 #include <proton/link.hpp>
 #include <proton/message.hpp>
 #include <proton/message_id.hpp>
 #include <proton/messaging_handler.hpp>
-#include <proton/thread_safe.hpp>
 #include <proton/value.hpp>
 
 #include <iostream>
@@ -56,7 +54,6 @@ class simple_recv : public proton::messaging_handler {
         if (!user.empty()) co.user(user);
         if (!password.empty()) co.password(password);
         receiver = c.open_receiver(url, co);
-        std::cout << "simple_recv listening on " << url << std::endl;
     }
 
     void on_message(proton::delivery &d, proton::message &msg) OVERRIDE {
@@ -93,7 +90,7 @@ int main(int argc, char **argv) {
         opts.parse();
 
         simple_recv recv(address, user, password, message_count);
-        proton::default_container(recv).run();
+        proton::container(recv).run();
 
         return 0;
     } catch (const example::bad_option& e) {

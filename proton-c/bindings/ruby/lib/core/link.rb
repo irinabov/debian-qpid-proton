@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
@@ -25,6 +24,11 @@ module Qpid::Proton
   # A Link has a single parent Qpid::Proton::Session instance.
   #
   class Link < Endpoint
+
+    # @private
+    PROTON_METHOD_PREFIX = "pn_link"
+    # @private
+    include Util::Wrapper
 
     # The sender will send all deliveries initially unsettled.
     SND_UNSETTLED = Cproton::PN_SND_UNSETTLED
@@ -38,36 +42,21 @@ module Qpid::Proton
     # The receiver will only settle deliveries after the sender settles.
     RCV_SECOND = Cproton::PN_RCV_SECOND
 
-    # @private
-    include Util::SwigHelper
-
-    # @private
-    PROTON_METHOD_PREFIX = "pn_link"
-
     # @!attribute [r] state
     #
     # Returns the endpoint state flags.
     #
     proton_caller :state
 
-    # @!method open
-    #
-    # Opens the link. Once this operation has completed, the state flag will be
-    # set.
-    #
-    # @see Endpoint::LOCAL_ACTIVE
+    # @deprecated  Use {Sender#open} or {Receiver#open}
     proton_caller :open
 
-    # @!method close
-    #
-    # Closes the link.
-    #
-    # Once this operation has completed, the state flag will be set.
-    # This may be called without first calling #open, which is the equivalent to
-    # calling #open and then #close.
-    #
-    # @see Endpoint::LOCAL_CLOSED
-    proton_caller :close
+    # Close the local end of the link. The remote end may or may not be closed.
+    # @param error [Condition] Optional error condition to send with the close.
+    def close(error=nil)
+      Condition.assign(_local_condition, error)
+      Cproton.pn_link_close(@impl)
+    end
 
     # @!method detach
     #
@@ -113,7 +102,7 @@ module Qpid::Proton
     # the link until enough credit is obtained from the receiver to send them
     # over the wire. In this case the balance reported will go negative.
     #
-    # @return [Fixnum] The credit balance.
+    # @return [Integer] The credit balance.
     #
     # @see #flow
     #
@@ -130,7 +119,7 @@ module Qpid::Proton
     # @see #queued
     # @see #credit
     #
-    # @return [Fixnum] The remove view of the credit.
+    # @return [Integer] The remove view of the credit.
     #
     proton_caller :remote_credit
 
@@ -142,7 +131,7 @@ module Qpid::Proton
     # deliveries that might be able to be sent if sufficient credit were issued
     # by the receiving link endpoint.
     #
-    # @return [Fixnum] The available deliveries hint.
+    # @return [Integer] The available deliveries hint.
     #
     # @see Sender#offered
     #
@@ -156,7 +145,7 @@ module Qpid::Proton
     # be insufficient credit to send them to the receiver, or they simply may
     # not have yet had a chance to be written to the wire.
     #
-    # @return [Fixnum] The number of queued deliveries.
+    # @return [Integer] The number of queued deliveries.
     #
     # @see #credit
     #
@@ -176,7 +165,7 @@ module Qpid::Proton
     #
     # @return [Boolean] True if the link is a sender.
     #
-    proton_reader  :sender, :is_or_get => :is
+    proton_is  :sender
 
     # @!attribute [r] receiver?
     #
@@ -184,10 +173,10 @@ module Qpid::Proton
     #
     # @return [Boolean] True if the link is a receiver.
     #
-    proton_reader  :receiver, :is_or_get => :is
+    proton_is  :receiver
 
     # @private
-    proton_reader :attachments
+    proton_get :attachments
 
     # Drains excess credit.
     #
@@ -203,24 +192,15 @@ module Qpid::Proton
     # When invoked on a Receiver, this operation will return and reset the
     # number of credits the sender has released back to it.
     #
-    # @return [Fixnum] The number of credits drained.
+    # @return [Integer] The number of credits drained.
     #
     proton_caller :drained
 
     # @private
-    include Util::Wrapper
-
-    # @private
     def self.wrap(impl)
-      return nil if impl.nil?
-
-      result = self.fetch_instance(impl, :pn_link_attachments)
-      return result unless result.nil?
-      if Cproton.pn_link_is_sender(impl)
-        return Sender.new(impl)
-      elsif Cproton.pn_link_is_receiver(impl)
-        return Receiver.new(impl)
-      end
+      return unless impl
+      return fetch_instance(impl, :pn_link_attachments) ||
+        (Cproton.pn_link_is_sender(impl) ? Sender : Receiver).new(impl)
     end
 
     # @private
@@ -241,13 +221,9 @@ module Qpid::Proton
       Cproton.pn_link_error(@impl)
     end
 
-    # Returns the next link that matches the given state mask.
-    #
-    # @param state_mask [Fixnum] The state mask.
-    #
-    # @return [Sender, Receiver] The next link.
-    #
+    # @deprecated use {Session#each_link, Connection#each_link}
     def next(state_mask)
+      deprecated __method__, "Session#each_link, Connection#each_link"
       return Link.wrap(Cproton.pn_link_next(@impl, state_mask))
     end
 
@@ -298,11 +274,10 @@ module Qpid::Proton
       self.session.connection
     end
 
-    # Returns the parent delivery.
-    #
-    # @return [Delivery] The delivery.
-    #
+
+    # @deprecated use {Sender#send}
     def delivery(tag)
+      deprecated __method__, "Sender#send"
       Delivery.new(Cproton.pn_delivery(@impl, tag))
     end
 
@@ -328,7 +303,7 @@ module Qpid::Proton
 
     # Sets the local sender settle mode.
     #
-    # @param mode [Fixnum] The settle mode.
+    # @param mode [Integer] The settle mode.
     #
     # @see #SND_UNSETTLED
     # @see #SND_SETTLED
@@ -340,7 +315,7 @@ module Qpid::Proton
 
     # Returns the local sender settle mode.
     #
-    # @return [Fixnum] The local sender settle mode.
+    # @return [Integer] The local sender settle mode.
     #
     # @see #snd_settle_mode
     #
@@ -350,7 +325,7 @@ module Qpid::Proton
 
     # Sets the local receiver settle mode.
     #
-    # @param mode [Fixnum] The settle mode.
+    # @param mode [Integer] The settle mode.
     #
     # @see #RCV_FIRST
     # @see #RCV_SECOND
@@ -361,7 +336,7 @@ module Qpid::Proton
 
     # Returns the local receiver settle mode.
     #
-    # @return [Fixnum] The local receiver settle mode.
+    # @return [Integer] The local receiver settle mode.
     #
     def rcv_settle_mode
       Cproton.pn_link_rcv_settle_mode(@impl)

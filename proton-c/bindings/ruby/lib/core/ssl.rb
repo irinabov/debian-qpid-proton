@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
@@ -52,7 +51,7 @@ module Qpid::Proton
   # @see #resume_status
   #
   class SSL
-
+ 
     # Session resume state is unkonnwn or not supported.
     RESUME_UNKNOWN = Cproton::PN_SSL_RESUME_UNKNOWN
     # Session renegotiated and not resumed.
@@ -61,15 +60,11 @@ module Qpid::Proton
     RESUME_REUSED = Cproton::PN_SSL_RESUME_REUSED
 
     # @private
-    include Util::SwigHelper
-
-    # @private
     PROTON_METHOD_PREFIX = "pn_ssl"
-
+    # @private
+    include Util::Wrapper
     # @private
     include Util::ErrorHandler
-
-    can_raise_error :peer_hostname=, :error_class => SSLError
 
     # Returns whether SSL is supported.
     #
@@ -133,8 +128,7 @@ module Qpid::Proton
     #
     def protocol_name
       rc, name = Cproton.pn_ssl_get_protocol_name(@impl, 128)
-      retur name if rc
-      nil
+      name if rc
     end
 
     # Checks whether or not the state has resumed.
@@ -158,7 +152,5 @@ module Qpid::Proton
       raise SSLError.new if error < 0
       return name
     end
-
   end
-
 end

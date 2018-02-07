@@ -1,4 +1,3 @@
-#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,10 +14,11 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#
+
 
 module Qpid::Proton::Messenger
-
+  # @deprecated use {Qpid::Proton::Container}
+  #
   # The +Messenger+ class defines a high level interface for
   # sending and receiving Messages. Every Messenger contains
   # a single logical queue of incoming messages and a single
@@ -37,7 +37,7 @@ module Qpid::Proton::Messenger
   #
   # The put method copies its Message to the outgoing queue, and may
   # send queued messages if it can do so without blocking.  The send
-  # method blocks until it has sent the requested number of messages,
+  # method blocks until it has sent the requested number of 
   # or until a timeout interrupts the attempt.
   #
   # Similarly, the recv method receives messages into the incoming
@@ -56,11 +56,7 @@ module Qpid::Proton::Messenger
   class Messenger
 
     include Qpid::Proton::Util::ErrorHandler
-
-    can_raise_error [:send, :receive, :password=, :start, :stop,
-                     :perform_put, :perform_get, :interrupt,
-                     :route, :rewrite, :accept, :reject,
-                     :incoming_window=, :outgoing_window=]
+    include Qpid::Proton::Util::Deprecation
 
     # Creates a new +Messenger+.
     #
@@ -72,6 +68,7 @@ module Qpid::Proton::Messenger
     # * name - the name (def. nil)
     #
     def initialize(name = nil)
+      deprecated Qpid::Proton::Messenger, Qpid::Proton::Container
       @impl = Cproton.pn_messenger(name)
       @selectables = {}
       ObjectSpace.define_finalizer(self, self.class.finalize!(@impl))
@@ -694,9 +691,13 @@ module Qpid::Proton::Messenger
     end
 
     def valid_window?(window)
-      !window.nil? && [Float, Fixnum].include?(window.class)
+      !window.nil? && window.is_a?(Numeric)
     end
 
-  end
+    can_raise_error [:send, :receive, :password=, :start, :stop,
+                     :perform_put, :perform_get, :interrupt,
+                     :route, :rewrite, :accept, :reject,
+                     :incoming_window=, :outgoing_window=]
 
+  end
 end

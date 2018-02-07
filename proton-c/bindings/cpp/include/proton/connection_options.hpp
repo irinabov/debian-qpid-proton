@@ -22,19 +22,23 @@
  *
  */
 
+#include "./duration.hpp"
 #include "./fwd.hpp"
-#include "./types_fwd.hpp"
 #include "./internal/config.hpp"
 #include "./internal/export.hpp"
 #include "./internal/pn_unique_ptr.hpp"
-#include "./duration.hpp"
+#include "./types_fwd.hpp"
 
 #include <proton/type_compat.h>
 
 #include <vector>
 #include <string>
 
+/// @file
+/// @copybrief proton::connection_options
+
 struct pn_connection_t;
+struct pn_transport_t;
 
 namespace proton {
 
@@ -64,7 +68,7 @@ class connection_options {
     /// Create an empty set of options.
     PN_CPP_EXTERN connection_options();
 
-    /// Shorthand for connection_options().handler(h)
+    /// Shorthand for `connection_options().handler(h)`.
     PN_CPP_EXTERN connection_options(class messaging_handler& h);
 
     /// Copy options.
@@ -79,77 +83,84 @@ class connection_options {
 
     /// Set a connection handler.
     ///
-    /// The handler must not be deleted until messaging_handler::on_transport_close() is called.
+    /// The handler must not be deleted until
+    /// messaging_handler::on_transport_close() is called.
     PN_CPP_EXTERN connection_options& handler(class messaging_handler&);
 
-    /// Set the maximum frame size.
+    /// Set the maximum frame size.  It is unlimited by default.
     PN_CPP_EXTERN connection_options& max_frame_size(uint32_t max);
 
-    /// Set the maximum number of open sessions.
+    /// Set the maximum number of open sessions.  The default is 32767.
     PN_CPP_EXTERN connection_options& max_sessions(uint16_t max);
 
-    // XXX document relationship to heartbeat interval
-    /// Set the idle timeout.
+    /// Set the idle timeout.  The default is no timeout.
+    ///
+    /// If set, the local peer will disconnect if it receives no AMQP
+    /// frames for an interval longer than `duration`.  Also known as
+    /// "heartbeating", this is a way to detect dead peers even in the
+    /// presence of a live TCP connection.
     PN_CPP_EXTERN connection_options& idle_timeout(duration);
 
     /// Set the container ID.
-    PN_CPP_EXTERN connection_options& container_id(const std::string &id);
+    PN_CPP_EXTERN connection_options& container_id(const std::string& id);
 
-    /// Set the virtual host name for the connection. If making a
-    /// client connection by SSL/TLS, this name is also used for
-    /// certificate verification and Server Name Indication.  For
-    /// client connections, it defaults to the host name used to set
-    /// up the connection.  It is not set by default for server
-    /// connections.
-    PN_CPP_EXTERN connection_options& virtual_host(const std::string &name);
-
-    /// Set the user name used to authenticate the connection.
+    /// Set the virtual host name for the connection. For client
+    /// connections, it defaults to the host name used to set up the
+    /// connection.  For server connections, it is unset by default.
     ///
-    /// This will override any user name that is specified in the url
-    /// used for container::connect.
-    /// It will be ignored if the connection is created by container::listen as
-    /// a listening connection has no user name.
-    PN_CPP_EXTERN connection_options& user(const std::string& user);
+    /// If making a client connection by SSL/TLS, this name is also
+    /// used for certificate verification and Server Name Indication.
+    PN_CPP_EXTERN connection_options& virtual_host(const std::string& name);
 
-    /// Set the password used to authenticate the connection
-    PN_CPP_EXTERN connection_options& password(const std::string& pass);
+    /// Set the user name used to authenticate the connection.  It is
+    /// unset by default.
+    ///
+    /// This value overrides any user name that is specified in the
+    /// URL used for `container::connect`.  It is ignored if the
+    /// connection is created by `container::listen` because a
+    /// listening connection's identity is provided by the remote
+    /// client.
+    PN_CPP_EXTERN connection_options& user(const std::string&);
 
-    /// @cond INTERNAL
-    // XXX settle questions about reconnect_timer - consider simply
-    // reconnect_options and making reconnect_timer internal
-    /// **Experimental**
-    PN_CPP_EXTERN connection_options& reconnect(const reconnect_timer &);
-    /// @endcond
+    /// Set the password used to authenticate the connection.
+    ///
+    /// This value is ignored if the connection is created by
+    /// `container::listen`.
+    PN_CPP_EXTERN connection_options& password(const std::string&);
 
     /// Set SSL client options.
-    PN_CPP_EXTERN connection_options& ssl_client_options(const class ssl_client_options &);
+    PN_CPP_EXTERN connection_options& ssl_client_options(const class ssl_client_options&);
 
     /// Set SSL server options.
-    PN_CPP_EXTERN connection_options& ssl_server_options(const class ssl_server_options &);
+    PN_CPP_EXTERN connection_options& ssl_server_options(const class ssl_server_options&);
 
     /// Enable or disable SASL.
     PN_CPP_EXTERN connection_options& sasl_enabled(bool);
 
-    /// Force the enabling of SASL mechanisms that disclose clear text
+    /// Force the enabling of SASL mechanisms that disclose cleartext
     /// passwords over the connection.  By default, such mechanisms
     /// are disabled.
     PN_CPP_EXTERN connection_options& sasl_allow_insecure_mechs(bool);
 
     /// Specify the allowed mechanisms for use on the connection.
-    PN_CPP_EXTERN connection_options& sasl_allowed_mechs(const std::string &);
+    PN_CPP_EXTERN connection_options& sasl_allowed_mechs(const std::string&);
 
-    /// **Experimental** - Set the SASL configuration name.
-    PN_CPP_EXTERN connection_options& sasl_config_name(const std::string &);
+    /// **Unsettled API** - Set the SASL configuration name.
+    PN_CPP_EXTERN connection_options& sasl_config_name(const std::string&);
 
-    /// **Experimental** - Set the SASL configuration path.
-    PN_CPP_EXTERN connection_options& sasl_config_path(const std::string &);
+    /// **Unsettled API** - Set the SASL configuration path.
+    PN_CPP_EXTERN connection_options& sasl_config_path(const std::string&);
+
+    /// **Unsettled API** - Set reconnect and failover options.
+    PN_CPP_EXTERN connection_options& reconnect(reconnect_options &);
 
     /// Update option values from values set in other.
     PN_CPP_EXTERN connection_options& update(const connection_options& other);
 
   private:
     void apply_unbound(connection&) const;
-    void apply_bound(connection&) const;
+    void apply_unbound_client(pn_transport_t*) const;
+    void apply_unbound_server(pn_transport_t*) const;
     messaging_handler* handler() const;
 
     class impl;

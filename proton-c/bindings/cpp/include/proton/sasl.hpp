@@ -30,6 +30,9 @@
 
 #include <string>
 
+/// @file
+/// @copybrief proton::sasl
+
 namespace proton {
 
 /// SASL information.
@@ -38,19 +41,13 @@ class sasl {
     sasl(pn_sasl_t* s) : object_(s) {}
     /// @endcond
 
-  public:
 #if PN_CPP_HAS_DELETED_FUNCTIONS
     sasl() = delete;
-    sasl(const sasl&) = delete;
-    sasl& operator=(const sasl&) = delete;
-    sasl& operator=(sasl&&) = delete;
-#endif
-#if PN_CPP_HAS_DEFAULTED_FUNCTIONS
-    /// @cond INTERNAL
-    sasl(sasl&&) = default;
-    /// @endcond
+#else
+    sasl();
 #endif
 
+  public:
     /// The result of the SASL negotiation.
     enum outcome {
         NONE = PN_SASL_NONE,   ///< Negotiation not completed
@@ -74,7 +71,7 @@ class sasl {
   private:
     pn_sasl_t* const object_;
 
-    friend class internal::factory<sasl>;
+    friend class transport;
     /// @endcond
 };
 

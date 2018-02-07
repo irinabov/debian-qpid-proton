@@ -28,6 +28,10 @@
 #include <proton/terminus.h>
 
 #include <string>
+#include <vector>
+
+/// @file
+/// @copybrief proton::terminus
 
 struct pn_link_t;
 struct pn_terminus_t;
@@ -93,8 +97,11 @@ class terminus {
     /// terminus.  See also lifetime_policy.
     PN_CPP_EXTERN value node_properties() const;
 
+    /// Extension capabilities that are supported/requested
+    PN_CPP_EXTERN std::vector<symbol> capabilities() const;
+
   protected:
-    pn_terminus_t *pn_object() { return object_; }
+    pn_terminus_t *pn_object() const { return object_; }
   private:
     pn_terminus_t* object_;
     pn_link_t* parent_;

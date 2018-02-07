@@ -153,7 +153,7 @@ PN_EXTERN void pn_ssl_domain_free(pn_ssl_domain_t *domain);
  * protected.
  * @return 0 on success
  */
-PN_EXTERN int pn_ssl_domain_set_credentials(pn_ssl_domain_t *domain,
+PN_EXTERN int  pn_ssl_domain_set_credentials(pn_ssl_domain_t *domain,
                                             const char *credential_1,
                                             const char *credential_2,
                                             const char *password);
@@ -225,6 +225,33 @@ typedef enum {
 PN_EXTERN int pn_ssl_domain_set_peer_authentication(pn_ssl_domain_t *domain,
                                                     const pn_ssl_verify_mode_t mode,
                                                     const char *trusted_CAs);
+
+/**
+ * Configure the list of permitted TLS protocols
+ *
+ * @param[in] domain the ssl domain to configure.
+ * @param[in] protocols string representing the protocol list.
+ * This list is a space separated string of the allowed TLS protocols,
+ * The current possibilities are TLSv1 TLSv1.1 TLSv1.2. None of the earlier SSL
+ * protocols are allowed for security reason.
+ *
+ * @note If this API not called then all the TLS protocols are allowed. The API only acts to
+ * restrict the allowed protocols to the specified set.
+ * @return 0 on success
+ */
+PN_EXTERN int pn_ssl_domain_set_protocols(pn_ssl_domain_t *domain, const char *protocols);
+
+/**
+ * Configure the list of permitted ciphers
+ *
+ * @note The syntax of the permitted list is undefined and will depend on the
+ * underlying SSL implementation.
+ *
+ * @param[in] domain the ssl domain to configure.
+ * @param[in] ciphers string representing the cipher list
+ * @return 0 on success
+ */
+PN_EXTERN int pn_ssl_domain_set_ciphers(pn_ssl_domain_t *domain, const char *ciphers);
 
 /**
  * Permit a server to accept connection requests from non-SSL clients.

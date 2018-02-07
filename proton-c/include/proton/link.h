@@ -83,7 +83,7 @@ PN_EXTERN pn_link_t *pn_receiver(pn_session_t *session, const char *name);
 PN_EXTERN void pn_link_free(pn_link_t *link);
 
 /**
- * @deprecated
+ * **Deprecated** - Use ::pn_link_attachments().
  *
  * Get the application context that is associated with a link object.
  *
@@ -96,7 +96,7 @@ PN_EXTERN void pn_link_free(pn_link_t *link);
 PN_EXTERN void *pn_link_get_context(pn_link_t *link);
 
 /**
- * @deprecated
+ * **Deprecated** - Use ::pn_link_attachments().
  *
  * Set a new application context for a link object.
  *
@@ -149,7 +149,7 @@ PN_EXTERN bool pn_link_is_receiver(pn_link_t *link);
 PN_EXTERN pn_state_t pn_link_state(pn_link_t *link);
 
 /**
- * @deprecated
+ * **Deprecated**
  *
  * Get additional error information associated with the link.
  *
@@ -476,7 +476,7 @@ typedef enum {
                            initially unsettled. */
   PN_SND_SETTLED = 1, /**< The sender will send all deliveries settled
                          to the receiver. */
-  PN_SND_MIXED = 2 /**< The sender may send a mixure of settled and
+  PN_SND_MIXED = 2 /**< The sender may send a mixture of settled and
                       unsettled deliveries. */
 } pn_snd_settle_mode_t;
 
@@ -586,8 +586,6 @@ PN_EXTERN void pn_link_offered(pn_link_t *sender, int credit);
  */
 PN_EXTERN ssize_t pn_link_send(pn_link_t *sender, const char *bytes, size_t n);
 
-//PN_EXTERN void pn_link_abort(pn_sender_t *sender);
-
 /**
  * Grant credit for incoming deliveries on a receiver.
  *
@@ -625,13 +623,19 @@ PN_EXTERN void pn_link_set_drain(pn_link_t *receiver, bool drain);
  * the network, so just because there is no data to read does not
  * imply the message is complete. To ensure the entirety of the
  * message data has been read, either invoke ::pn_link_recv until
- * PN_EOS is returned, or verify that ::pn_delivery_partial is false,
- * and ::pn_delivery_pending is 0.
+ * PN_EOS is returned, or verify that
+ *
+ *     (!pn_delivery_partial(d) && !pn_delivery_aborted(d) && pn_delivery_pending(d)==0)
  *
  * @param[in] receiver a receiving link object
  * @param[in] bytes a pointer to an empty buffer
  * @param[in] n the buffer capacity
- * @return the number of bytes received, PN_EOS, or an error code
+ * @return The number of bytes received, or an error code:
+ *   - ::PN_EOS: The message has been completely received
+ *   - 0: No data available now.
+ *     If pn_delivery_partial() there will be further ::PN_DELIVERY events with more data.
+ *   - ::PN_STATE_ERR: The link has no current delivery
+ *   - ::PN_ABORTED: See pn_delivery_aborted()
  */
 PN_EXTERN ssize_t pn_link_recv(pn_link_t *receiver, char *bytes, size_t n);
 
@@ -647,7 +651,7 @@ PN_EXTERN ssize_t pn_link_recv(pn_link_t *receiver, char *bytes, size_t n);
 PN_EXTERN bool pn_link_draining(pn_link_t *receiver);
 
 /**
- * **Experimental** - Get the maximum message size for a link.
+ * **Unsettled API** - Get the maximum message size for a link.
  *
  * A zero maximum message size means the size is unlimited.
  *
@@ -657,7 +661,7 @@ PN_EXTERN bool pn_link_draining(pn_link_t *receiver);
 PN_EXTERN uint64_t pn_link_max_message_size(pn_link_t *link);
 
 /**
- * **Experimental** - Set the maximum message size for a link.
+ * **Unsettled API** - Set the maximum message size for a link.
  *
  * A zero maximum message size means the size is unlimited.
  *
@@ -667,7 +671,7 @@ PN_EXTERN uint64_t pn_link_max_message_size(pn_link_t *link);
 PN_EXTERN void pn_link_set_max_message_size(pn_link_t *link, uint64_t size);
 
 /**
- * **Experimental** - Get the remote view of the maximum message size for a link.
+ * **Unsettled API** - Get the remote view of the maximum message size for a link.
  *
  * A zero maximum message size means the size is unlimited.
  *

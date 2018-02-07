@@ -17,19 +17,8 @@
 # under the License.
 #
 
-begin
-  require "simplecov"
-  puts "simplecov available"
-
-  SimpleCov.start do
-    add_filter "/lib/*/*.rb"
-    add_filter "message_format.rb"
-  end
-
-rescue
-  puts "simplecov not available"
-end
-
+require 'minitest/spec'
+require 'minitest/autorun'
 require "securerandom"
 require "qpid_proton"
 
@@ -94,30 +83,24 @@ end
 # Generates a random array of a random type.
 # Returns both the array and the type.
 def random_array(length, described = false, description = nil)
-  result = []
-  type = rand(128) % 4
+  choice = rand(128) % 4
+  type = [Qpid::Proton::Types::INT,
+          Qpid::Proton::Types::STRING,
+          Qpid::Proton::Types::DOUBLE,
+          Qpid::Proton::Types::UUID][choice]
+  result = Qpid::Proton::Types::UniformArray.new(type)
+
   low = rand(512)
   high = rand(8192)
 
   (0...length).each do |element|
     case
-      when type == 0 then result << rand(1024)
-      when type == 1 then result << random_string(rand(128))
-      when type == 2 then result << rand * (low - high).abs + low
-      when type == 3 then result << SecureRandom.uuid
+      when choice == 0 then result << rand(1024)
+      when choice == 1 then result << random_string(rand(128))
+      when choice == 2 then result << rand * (low - high).abs + low
+      when choice == 3 then result << SecureRandom.uuid
     end
   end
-
-  # create the array header
-  case
-    when type == 0 then type = Qpid::Proton::Codec::INT
-    when type == 1 then type = Qpid::Proton::Codec::STRING
-    when type == 2 then type = Qpid::Proton::Codec::FLOAT
-    when type == 3 then type = Qpid::Proton::Codec::UUID
-  end
-
-  result.proton_array_header = Qpid::Proton::Types::ArrayHeader.new(type, description)
-
   return result
 end
 
@@ -131,25 +114,3 @@ def random_hash(length)
   return result
 end
 
-# taken from http://stackoverflow.com/questions/6855944/rounding-problem-with-rspec-tests-when-comparing-float-arrays
-RSpec::Matchers.define :be_close_array do |expected, truth|
-  match do |actual|
-    same = 0
-    for i in 0..actual.length-1
-      same +=1 if actual[i].round(truth) == expected[i].round(truth)
-    end
-    same == actual.length
-  end
-
-  failure_message_for_should do |actual|
-    "expected that #{actual} would be close to #{expected}"
-  end
-
-  failure_message_for_should_not do |actual|
-    "expected that #{actual} would not be close to #{expected}"
-  end
-
-  description do
-    "be a close to #{expected}"
-  end
-end
