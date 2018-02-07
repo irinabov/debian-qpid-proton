@@ -32,14 +32,41 @@
 #include "proton_bits.hpp"
 #include "types_internal.hpp"
 
-#include <proton/delivery.h>
-#include <proton/message.h>
+#include "core/message-internal.h"
+#include "proton/delivery.h"
 
 #include <string>
 #include <algorithm>
 #include <assert.h>
 
 namespace proton {
+
+struct message::impl {
+    value body;
+    property_map properties;
+    annotation_map annotations;
+    annotation_map instructions;
+
+    impl(pn_message_t *msg) {
+        body.reset(pn_message_body(msg));
+        properties.reset(pn_message_properties(msg));
+        annotations.reset(pn_message_annotations(msg));
+        instructions.reset(pn_message_instructions(msg));
+    }
+
+    void clear() {
+        properties.clear();
+        annotations.clear();
+        instructions.clear();
+    }
+
+    // Encode cached maps to the pn_data_t, always used an empty() value for an empty map
+    void flush() {
+        if (!properties.empty()) properties.value();
+        if (!annotations.empty()) annotations.value();
+        if (!instructions.empty()) instructions.value();
+    }
+};
 
 message::message() : pn_msg_(0) {}
 message::message(const message &m) : pn_msg_(0) { *this = m; }
@@ -55,24 +82,27 @@ message& message::operator=(message&& m) {
 message::message(const value& x) : pn_msg_(0) { body() = x; }
 
 message::~message() {
-    // Workaround proton bug: Must release all refs to body before calling pn_message_free()
-    body_.reset();
-    pn_message_free(pn_msg_);
+    if (pn_msg_) {
+        impl().~impl();               // destroy in-place
+        pn_message_free(pn_msg_);
+    }
 }
 
 void swap(message& x, message& y) {
-    using std::swap;
-    swap(x.pn_msg_, y.pn_msg_);
-    swap(x.body_, y.body_);
-    swap(x.application_properties_, y.application_properties_);
-    swap(x.message_annotations_, y.message_annotations_);
-    swap(x.delivery_annotations_, y.delivery_annotations_);
+    std::swap(x.pn_msg_, y.pn_msg_);
 }
 
 pn_message_t *message::pn_msg() const {
-    if (!pn_msg_) pn_msg_ = pn_message();
-    body_.refer(pn_message_body(pn_msg_));
+    if (!pn_msg_) {
+        pn_msg_ = pni_message_with_extra(sizeof(struct message::impl));
+        // Construct impl in extra storage allocated with pn_msg_
+        new (pni_message_get_extra(pn_msg_)) struct message::impl(pn_msg_);
+    }
     return pn_msg_;
+}
+
+struct message::impl& message::impl() const {
+    return *(struct message::impl*)pni_message_get_extra(pn_msg());
 }
 
 message& message::operator=(const message& m) {
@@ -85,7 +115,12 @@ message& message::operator=(const message& m) {
     return *this;
 }
 
-void message::clear() { if (pn_msg_) pn_message_clear(pn_msg_); }
+void message::clear() {
+    if (pn_msg_) {
+        impl().clear();
+        pn_message_clear(pn_msg_);
+    }
+}
 
 namespace {
 void check(int err) {
@@ -144,7 +179,7 @@ std::string message::reply_to() const {
 }
 
 void message::correlation_id(const message_id& id) {
-    internal::value_ref(pn_message_correlation_id(pn_msg())) = id;
+    value(pn_message_correlation_id(pn_msg())) = id;
 }
 
 message_id message::correlation_id() const {
@@ -207,65 +242,35 @@ void message::inferred(bool b) { pn_message_set_inferred(pn_msg(), b); }
 
 void message::body(const value& x) { body() = x; }
 
-const value& message::body() const { pn_msg(); return body_; }
-value& message::body() { pn_msg(); return body_; }
-
-// MAP CACHING: the properties and annotations maps can either be encoded in the
-// pn_message pn_data_t structures OR decoded as C++ map members of the message
-// but not both. At least one of the pn_data_t or the map member is always
-// empty, the non-empty one is the authority.
-
-// Decode a map on demand
-template<class M, class F> M& get_map(pn_message_t* msg, F get, M& map) {
-    codec::decoder d(make_wrapper(get(msg)));
-    if (map.empty() && !d.empty()) {
-        d.rewind();
-        d >> map;
-        d.clear();              // The map member is now the authority.
-    }
-    return map;
-}
-
-// Encode a map if necessary.
-template<class M, class F> M& put_map(pn_message_t* msg, F get, M& map) {
-    codec::encoder e(make_wrapper(get(msg)));
-    if (e.empty() && !map.empty()) {
-        e << map;
-        map.clear();            // The encoded pn_data_t  is now the authority.
-    }
-    return map;
-}
+const value& message::body() const { return impl().body; }
+value& message::body() { return impl().body; }
 
 message::property_map& message::properties() {
-    return get_map(pn_msg(), pn_message_properties, application_properties_);
+    return impl().properties;
 }
 
 const message::property_map& message::properties() const {
-    return get_map(pn_msg(), pn_message_properties, application_properties_);
+    return impl().properties;
 }
 
-
 message::annotation_map& message::message_annotations() {
-    return get_map(pn_msg(), pn_message_annotations, message_annotations_);
+    return impl().annotations;
 }
 
 const message::annotation_map& message::message_annotations() const {
-    return get_map(pn_msg(), pn_message_annotations, message_annotations_);
+    return impl().annotations;
 }
 
-
 message::annotation_map& message::delivery_annotations() {
-    return get_map(pn_msg(), pn_message_instructions, delivery_annotations_);
+    return impl().instructions;
 }
 
 const message::annotation_map& message::delivery_annotations() const {
-    return get_map(pn_msg(), pn_message_instructions, delivery_annotations_);
+    return impl().instructions;
 }
 
 void message::encode(std::vector<char> &s) const {
-    put_map(pn_msg(), pn_message_properties, application_properties_);
-    put_map(pn_msg(), pn_message_annotations, message_annotations_);
-    put_map(pn_msg(), pn_message_instructions, delivery_annotations_);
+    impl().flush();
     size_t sz = std::max(s.capacity(), size_t(512));
     while (true) {
         s.resize(sz);
@@ -291,25 +296,8 @@ std::vector<char> message::encode() const {
 void message::decode(const std::vector<char> &s) {
     if (s.empty())
         throw error("message decode: no data");
-    application_properties_.clear();
-    message_annotations_.clear();
-    delivery_annotations_.clear();
-    assert(!s.empty());
+    impl().clear();
     check(pn_message_decode(pn_msg(), &s[0], s.size()));
-}
-
-void message::decode(proton::delivery delivery) {
-    std::vector<char> buf;
-    buf.resize(pn_delivery_pending(unwrap(delivery)));
-    if (buf.empty())
-        throw error("message decode: no delivery pending on link");
-    proton::receiver link = delivery.receiver();
-    assert(!buf.empty());
-    ssize_t n = pn_link_recv(unwrap(link), const_cast<char *>(&buf[0]), buf.size());
-    if (n != ssize_t(buf.size())) throw error(MSG("receiver read failure"));
-    clear();
-    decode(buf);
-    pn_link_advance(unwrap(link));
 }
 
 bool message::durable() const { return pn_message_is_durable(pn_msg()); }

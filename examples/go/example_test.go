@@ -28,7 +28,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -153,7 +152,7 @@ func runExampleWant(t *testing.T, want string, prog string, args ...string) erro
 
 func exampleArgs(args ...string) []string {
 	for i := 0; i < *connections; i++ {
-		args = append(args, fmt.Sprintf("%s/%s%d", testBroker.addr, "q", i))
+		args = append(args, fmt.Sprintf("amqp://%s/%s%d", testBroker.addr, "q", i))
 	}
 	return args
 }
@@ -262,9 +261,6 @@ var dir = flag.String("dir", "electron", "Directory containing example sources o
 var expected int
 
 func TestMain(m *testing.M) {
-	if out, err := exec.Command("go", "install", "qpid.apache.org/...").CombinedOutput(); err != nil {
-		log.Fatalf("go install failed: %s\n%s", err, out)
-	}
 	expected = (*count) * (*connections)
 	rand.Seed(time.Now().UTC().UnixNano())
 	testBroker = &broker{} // Broker is started on-demand by tests.

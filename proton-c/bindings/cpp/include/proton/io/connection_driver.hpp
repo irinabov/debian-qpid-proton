@@ -22,30 +22,28 @@
  *
  */
 
-#include "../internal/config.hpp"
-#include "../connection.hpp"
 #include "../connection_options.hpp"
-#include "../error.hpp"
 #include "../error_condition.hpp"
-#include "../internal/export.hpp"
-#include "../internal/pn_unique_ptr.hpp"
-#include "../transport.hpp"
-#include "../types.hpp"
+#include "../fwd.hpp"
+#include "../internal/config.hpp"
+#include "../types_fwd.hpp"
 
 #include <proton/connection_driver.h>
 
-#include <cstddef>
-#include <utility>
 #include <string>
+
+/// @file
+/// @copybrief proton::io::connection_driver
 
 namespace proton {
 
-class event_loop;
+class work_queue;
 class proton_handler;
 
 namespace io {
 
-/// **Experimental** - Pointer to a mutable memory region with a size.
+/// **Unsettled API** - A pointer to a mutable memory region with a
+/// size.
 struct mutable_buffer {
     char* data;                 ///< Beginning of the buffered data.
     size_t size;                ///< Number of bytes in the buffer.
@@ -54,7 +52,8 @@ struct mutable_buffer {
     mutable_buffer(char* data_=0, size_t size_=0) : data(data_), size(size_) {}
 };
 
-/// **Experimental** - Pointer to a const memory region with a size.
+/// **Unsettled API** - A pointer to an immutable memory region with a
+/// size.
 struct const_buffer {
     const char* data;           ///< Beginning of the buffered data.
     size_t size;                ///< Number of bytes in the buffer.
@@ -63,7 +62,7 @@ struct const_buffer {
     const_buffer(const char* data_=0, size_t size_=0) : data(data_), size(size_) {}
 };
 
-/// **Experimental** - An AMQP driver for a single connection.
+/// **Unsettled API** - An AMQP driver for a single connection.
 ///
 /// io::connection_driver manages a single proton::connection and dispatches
 /// events to a proton::messaging_handler. It does no IO of its own, but allows you to
@@ -94,27 +93,11 @@ struct const_buffer {
 class
 PN_CPP_CLASS_EXTERN connection_driver {
   public:
-    /// An engine that is not associated with a proton::container or
-    /// proton::event_loop.
-    ///
-    /// Accessing the container or event_loop for this connection in
-    /// a proton::messaging_handler will throw a proton::error exception.
-    ///
+    /// An engine without a container id.
     PN_CPP_EXTERN connection_driver();
 
-    /// Create a connection driver associated with a proton::container and
-    /// optional event_loop. If the event_loop is not provided attempts to use
-    /// it will throw proton::error.
-    ///
-    /// Takes ownership of the event_loop. Note the proton::connection created
-    /// by this connection_driver can outlive the connection_driver itself if
-    /// the user pins it in memory using the proton::thread_safe<> template.
-    /// The event_loop is deleted when, and only when, the proton::connection is.
-    ///
-    PN_CPP_EXTERN connection_driver(proton::container&);
-#if PN_CPP_HAS_RVALUE_REFERENCES
-    PN_CPP_EXTERN connection_driver(proton::container&, event_loop&& loop);
-#endif
+    /// Create a connection driver associated with a container id.
+    PN_CPP_EXTERN connection_driver(const std::string&);
 
     PN_CPP_EXTERN ~connection_driver();
 
@@ -161,6 +144,15 @@ PN_CPP_CLASS_EXTERN connection_driver {
     /// Note that there may still be events to dispatch() or data to read.
     PN_CPP_EXTERN void write_close();
 
+    /// Indicate that time has passed
+    ///
+    /// @return the expiration time of the next unexpired timer. You must arrange to call tick()
+    /// no later than this expiration time. In practice this will mean calling tick() every time
+    /// there is anything read or written, and if nothing is read or written then as soon as possible
+    /// after the returned timestamp (so you will probably need to set a platform specific timeout to
+    /// know when this occurs).
+    PN_CPP_EXTERN timestamp tick(timestamp now);
+
     /// Inform the engine that the transport been disconnected unexpectedly,
     /// without completing the AMQP connection close sequence.
     ///
@@ -174,6 +166,9 @@ PN_CPP_CLASS_EXTERN connection_driver {
     /// a transport failure.
     ///
     PN_CPP_EXTERN void disconnected(const error_condition& = error_condition());
+
+    /// There are events to be dispatched by dispatch()
+    PN_CPP_EXTERN bool has_events() const;
 
     /// Dispatch all available events and call the corresponding \ref messaging_handler methods.
     ///
@@ -189,7 +184,6 @@ PN_CPP_CLASS_EXTERN connection_driver {
     PN_CPP_EXTERN bool dispatch();
 
     /// Get the AMQP connection associated with this connection_driver.
-    /// The event_loop is availabe via proton::thread_safe<connection>(connection())
     PN_CPP_EXTERN proton::connection connection() const;
 
     /// Get the transport associated with this connection_driver.
@@ -203,8 +197,8 @@ PN_CPP_CLASS_EXTERN connection_driver {
     connection_driver(const connection_driver&);
     connection_driver& operator=(const connection_driver&);
 
+    std::string container_id_;
     messaging_handler* handler_;
-    proton::container* container_;
     pn_connection_driver_t driver_;
 };
 

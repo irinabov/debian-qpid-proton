@@ -30,10 +30,17 @@
 #include <iosfwd>
 #include <string>
 
+/// @file
+/// **Deprecated** - Use a third-party URL library.
+
 namespace proton {
 
+/// **Deprecated** - Use a third-party URL library.
+///
 /// An error encountered during URL parsing.
+
 struct
+PN_CPP_DEPRECATED("Use a third-party URL library")
 PN_CPP_CLASS_EXTERN url_error : public error {
     /// @cond INTERNAL
     /// Construct a URL error with a message.
@@ -41,6 +48,8 @@ PN_CPP_CLASS_EXTERN url_error : public error {
     /// @endcond
 };
 
+/// **Deprecated** - Use a third-party URL library.
+///
 /// A URL parser.
 ///
 ///  Proton URLs take the form
@@ -53,7 +62,7 @@ PN_CPP_CLASS_EXTERN url_error : public error {
 ///
 /// - Path is normally used as a link source or target address.  On a
 ///   broker it typically corresponds to a queue or topic name.
-class url {
+class PN_CPP_DEPRECATED("Use a third-party URL library") url {
   public:
     static const std::string AMQP;     ///< "amqp" prefix
     static const std::string AMQPS;    ///< "amqps" prefix
@@ -70,7 +79,7 @@ class url {
     /// @cond INTERNAL
     /// XXX I want to understand why this is important to keep.
     ///
-    /// **Experimental** - Parse `url_str` as an AMQP URL. If
+    /// **Unsettled API** - Parse `url_str` as an AMQP URL. If
     /// `defaults` is true, fill in defaults for missing values.
     /// Otherwise, return an empty string for missing values.
     ///

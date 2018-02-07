@@ -58,6 +58,7 @@ struct pn_endpoint_t {
 
 typedef struct {
   pn_sequence_t id;
+  bool sending;
   bool sent;
   bool init;
 } pn_delivery_state_t;
@@ -163,10 +164,9 @@ struct pn_transport_t {
   pn_data_t *args;
   pn_data_t *output_args;
   pn_buffer_t *frame;  // frame under construction
-  // Temporary
-  size_t capacity;
-  size_t available; /* number of raw bytes pending output */
-  char *output;
+
+  // Temporary - ??
+  pn_buffer_t *output_buffer;
 
   /* statistics */
   uint64_t bytes_input;
@@ -338,6 +338,7 @@ struct pn_delivery_t {
   bool tpwork;
   bool done;
   bool referenced;
+  bool aborted;
 };
 
 #define PN_SET_LOCAL(OLD, NEW)                                          \

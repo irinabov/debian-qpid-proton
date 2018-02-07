@@ -31,6 +31,9 @@
 struct pn_link_t;
 struct pn_session_t;
 
+/// @file
+/// @copybrief proton::receiver
+
 namespace proton {
 
 /// A channel for receiving messages.
@@ -63,7 +66,7 @@ PN_CPP_CLASS_EXTERN receiver : public link {
     /// the drain completes.
     PN_CPP_EXTERN void add_credit(uint32_t);
 
-    /// **Experimental** - Commence a drain cycle.  If there is
+    /// **Unsettled API** - Commence a drain cycle.  If there is
     /// positive credit, a request is sent to the sender to
     /// immediately use up all of the existing credit balance by
     /// sending messages that are immediately available and releasing
@@ -76,12 +79,11 @@ PN_CPP_CLASS_EXTERN receiver : public link {
     /// @cond INTERNAL
   friend class internal::factory<receiver>;
   friend class receiver_iterator;
-  friend class thread_safe<receiver>;
     /// @endcond
 };
 
 /// @cond INTERNAL
-    
+
 /// An iterator of receivers.
 class receiver_iterator : public internal::iter_base<receiver, receiver_iterator> {
     explicit receiver_iterator(receiver r, pn_session_t* s = 0) :

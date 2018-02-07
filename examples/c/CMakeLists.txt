@@ -16,12 +16,34 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+cmake_minimum_required (VERSION 2.8.12)
 
-find_package(Proton REQUIRED)
-include(CheckCCompilerFlag)
+find_package(Proton REQUIRED Core Proactor)
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+find_package(Threads REQUIRED)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${Proton_INCLUDE_DIRS})
+add_definitions(${Proton_DEFINITIONS})
 
-add_subdirectory(proactor)
-add_subdirectory(messenger)
-add_subdirectory(reactor)
+foreach (name broker send receive direct send-abort send-ssl)
+  add_executable(c-${name} ${name}.c)
+  target_link_libraries(c-${name} ${Proton_Proactor_LIBRARIES} ${Proton_Core_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+  set_target_properties(c-${name} PROPERTIES
+    OUTPUT_NAME ${name})
+endforeach()
+
+
+# Add a test to run all examples
+
+# Make correct environment to find test executables and valgrind.
+if(WIN32)
+  set(test_path "$<TARGET_FILE_DIR:c-broker>;$<TARGET_FILE_DIR:qpid-proton-core>;$<TARGET_FILE_DIR:qpid-proton-proactor>")
+else()
+  set(test_path "$<TARGET_FILE_DIR:c-broker>:$ENV{PATH}")
+endif()
+
+set(run_env ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/proton-c/env.py ${EXAMPLE_ENV})
+add_test(
+  NAME c-example-tests
+  COMMAND ${run_env} "PATH=${test_path}"  ${VALGRIND_ENV} -- ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})

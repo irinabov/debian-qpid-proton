@@ -25,16 +25,20 @@
 #include "proton/error_condition.hpp"
 #include "proton/listen_handler.hpp"
 #include "proton/listener.hpp"
-#include "proton/thread_safe.hpp"
+#include "proton/uuid.hpp"
 
-#include "container_impl.hpp"
+#include "proactor_container_impl.hpp"
 
 namespace proton {
 
 container::container(messaging_handler& h, const std::string& id) :
     impl_(new impl(*this, id, &h)) {}
+container::container(messaging_handler& h) :
+    impl_(new impl(*this, uuid::random().str(), &h)) {}
 container::container(const std::string& id) :
     impl_(new impl(*this, id)) {}
+container::container() :
+    impl_(new impl(*this, uuid::random().str())) {}
 container::~container() {}
 
 returned<connection> container::connect(const std::string &url) {
@@ -65,24 +69,12 @@ returned<receiver> container::open_receiver(const std::string &url, const proton
     return open_receiver(url, receiver_options(), co);
 }
 
-namespace{
-    struct listen_opts : public listen_handler {
-        connection_options  opts;
-        listen_opts(const connection_options& o) : opts(o) {}
-        connection_options on_accept() { return opts; }
-        void on_close() { delete this; }
-    };
-}
-
 listener container::listen(const std::string& url, const connection_options& opts) {
-    // Note: listen_opts::on_close() calls delete(this) so this is not a leak.
-    // The container will always call on_closed() even if there are errors or exceptions.
-    listen_opts* lh = new listen_opts(opts);
-    return listen(url, *lh);
+    return impl_->listen(url, opts);
 }
 
 listener container::listen(const std::string &url) {
-    return listen(url, connection_options());
+    return impl_->listen(url);
 }
 
 void container::stop() { stop(error_condition()); }
@@ -93,9 +85,11 @@ returned<connection> container::connect(const std::string& url, const connection
 
 listener container::listen(const std::string& url, listen_handler& l) { return impl_->listen(url, l); }
 
-void container::stop_listening(const std::string& url) { impl_->stop_listening(url); }
+void container::run() { impl_->run(1); }
 
-void container::run() { impl_->run(); }
+#if PN_CPP_SUPPORTS_THREADS
+void container::run(int threads) { impl_->run(threads); }
+#endif
 
 void container::auto_stop(bool set) { impl_->auto_stop(set); }
 
@@ -117,11 +111,12 @@ returned<receiver> container::open_receiver(
 
 std::string container::id() const { return impl_->id(); }
 
-void container::schedule(duration d, void_function0& f) { return impl_->schedule(d, f); }
-
-#if PN_CPP_HAS_STD_FUNCTION
-void container::schedule(duration d, std::function<void()> f) { return impl_->schedule(d, f); }
+void container::schedule(duration d, internal::v03::work f) { return impl_->schedule(d, f); }
+#if PN_CPP_HAS_LAMBDAS && PN_CPP_HAS_VARIADIC_TEMPLATES
+void container::schedule(duration d, internal::v11::work f) { return impl_->schedule(d, f); }
 #endif
+
+void container::schedule(duration d, void_function0& f) { return impl_->schedule(d, make_work(&void_function0::operator(), &f)); }
 
 void container::client_connection_options(const connection_options& c) { impl_->client_connection_options(c); }
 connection_options container::client_connection_options() const { return impl_->client_connection_options(); }

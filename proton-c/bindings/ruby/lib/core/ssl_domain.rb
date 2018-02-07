@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
@@ -42,11 +41,6 @@ module Qpid::Proton
 
     # @private
     include Util::ErrorHandler
-
-    can_raise_error :credentials, :error_class => Qpid::Proton::SSLError
-    can_raise_error :trusted_ca_db, :error_class => Qpid::Proton::SSLError
-    can_raise_error :peer_authentication, :error_class => Qpid::Proton::SSLError
-    can_raise_error :allow_unsecured_client, :error_class => Qpid::Proton::SSLError
 
     # @private
     attr_reader :impl
@@ -123,7 +117,7 @@ module Qpid::Proton
     # call returns. SSL instances created before invoking this method will use
     # the domain's previous setting.
     #
-    # @param verify_mode [Fixnum] The level of validation to apply to the peer.
+    # @param verify_mode [Integer] The level of validation to apply to the peer.
     # @param trusted_CAs [String] The path to a database of trusted CAs that
     #   the server will advertise to the peer client if the server has been
     #   configured to verify its peer.
@@ -151,6 +145,9 @@ module Qpid::Proton
       Cproton.pn_ssl_domain_allow_unsecured_client(@impl);
     end
 
+    can_raise_error :credentials, :error_class => Qpid::Proton::SSLError
+    can_raise_error :trusted_ca_db, :error_class => Qpid::Proton::SSLError
+    can_raise_error :peer_authentication, :error_class => Qpid::Proton::SSLError
+    can_raise_error :allow_unsecured_client, :error_class => Qpid::Proton::SSLError
   end
-
 end

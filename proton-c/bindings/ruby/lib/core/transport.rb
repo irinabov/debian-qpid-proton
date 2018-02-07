@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,57 +14,18 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
-  # A transport is used by a connection to interface with the network.
-  #
-  # A transport is associated with, at most, one Connection.
-  #
-  # == Client And Server Mode
-  #
-  # Initially, a transport is configured to be a client tranpsort. It can be
-  # configured to act as a server when it is created.
-  #
-  # A client transport initiates outgoing connections.
-  #
-  # A client transport must be configured with the protocol layers to use and
-  # cannot configure itself automatically.
-  #
-  # A server transport accepts incoming connections. It can automatically
-  # configure itself to include the various protocol layers depending on the
-  # incoming protocol headers.
-  #
-  # == Tracing Data
-  #
-  # Data can be traced into and out of the transport programmatically by setting
-  # the #trace level to one of the defined trace values (TRACE_RAW, TRACE_FRM or
-  # TRACE_DRV). Tracing can also be turned off programmatically by setting the
-  # #trace level to TRACE_OFF.
-  #
-  # @example
-  #
-  #   # turns on frame tracing
-  #   @transport.trace = Qpid::Proton::Transport::TRACE_FRM
-  #
-  #   # ... do something where the frames are of interest, such as debugging
-  #
-  #   # turn tracing off again
-  #   @transport.trace = Qpid::Proton::Transport::TRACE_NONE
-  #
-  # Tracing can also be enabled from the command line by defining the similarly
-  # named environment variable before starting a Proton application:
-  #
-  # @example
-  #
-  #   # enable tracing from the command line
-  #   PN_TRACE_FRM=1 ruby my_proton_app.rb
-  #
+  # @deprecated all important features are available from {#Connection}
   class Transport
+    include Util::Deprecation
 
     # @private
-    include Util::Engine
+    PROTON_METHOD_PREFIX = "pn_transport"
+    # @private
+    include Util::Wrapper
 
     # Turn logging off entirely.
     TRACE_OFF = Cproton::PN_TRACE_OFF
@@ -76,52 +36,51 @@ module Qpid::Proton
     # Log driver related events; i.e., initialization, end of stream, etc.
     TRACE_DRV = Cproton::PN_TRACE_DRV
 
-    # @private
-    CLIENT = 1
-    # @private
-    SERVER = 2
-
-    # @private
-    include Util::SwigHelper
-
-    # @private
-    PROTON_METHOD_PREFIX = "pn_transport"
+    proton_get :user
 
     # @!attribute channel_max
     #
-    # @return [Fixnum] The maximum allowed channel.
+    # @return [Integer] The maximum allowed channel.
     #
-    proton_accessor :channel_max
+    proton_set_get :channel_max
 
     # @!attribute [r] remote_channel_max
     #
-    # @return [Fixnum] The maximum allowed channel of a transport's remote peer.
+    # @return [Integer] The maximum allowed channel of a transport's remote peer.
     #
     proton_caller :remote_channel_max
 
     # @!attribute max_frame_size
     #
-    # @return [Fixnum] The maximum frame size.
-    #
-    proton_accessor :max_frame_size
+    # @return [Integer] The maximum frame size.
+    proton_set_get :max_frame
+    proton_get :remote_max_frame
 
     # @!attribute [r] remote_max_frame_size
     #
-    # @return [Fixnum] The maximum frame size of the transport's remote peer.
+    # @return [Integer] The maximum frame size of the transport's remote peer.
     #
-    proton_reader :remote_max_frame_size
+    proton_get :remote_max_frame_size
 
     # @!attribute idle_timeout
     #
-    # @return [Fixnum] The idle timeout.
+    # @deprecated use {Connection#open} with the +:idle_timeout+ option to set
+    # the timeout, and {Connection#idle_timeout} to query the remote timeout.
     #
-    proton_accessor :idle_timeout
+    # The Connection timeout values are in *seconds* and are automatically
+    # converted.
+    #
+    # @return [Integer] The idle timeout in *milliseconds*.
+    #
+    proton_set_get :idle_timeout
 
-    # @!attribute [r] remote_idle_timeout
+    # @!attribute [r] remote_idle_timeout in milliseconds
     #
-    # @return [Fixnum] The idle timeout for the transport's remote peer.
+    # @deprecated Use {Connection#idle_timeout} to query the remote timeout.
     #
-    proton_accessor :remote_idle_timeout
+    # @return [Integer] The idle timeout for the transport's remote peer.
+    #
+    proton_set_get :remote_idle_timeout
 
     # @!attribute [r] capacity
     #
@@ -135,7 +94,7 @@ module Qpid::Proton
     # Calls to #process may alter the value of this value. See #process for
     # more details
     #
-    # @return [Fixnum] The amount of free space for input following the
+    # @return [Integer] The amount of free space for input following the
     # transport's tail pointer.
     #
     proton_caller :capacity
@@ -170,7 +129,7 @@ module Qpid::Proton
     #
     # Calls to #pop may alter the value of this pointer as well.
     #
-    # @return [Fixnum] The number of pending output bytes following the header
+    # @return [Integer] The number of pending output bytes following the header
     # pointer.
     #
     # @raise [TransportError] If any error other than an end of stream occurs.
@@ -188,50 +147,35 @@ module Qpid::Proton
 
     # @!attribute [r] frames_output
     #
-    # @return [Fixnum] The number of frames output by a transport.
+    # @return [Integer] The number of frames output by a transport.
     #
-    proton_reader :frames_output
+    proton_get :frames_output
 
     # @!attribute [r] frames_input
     #
-    # @return [Fixnum] The number of frames input by a transport.
+    # @return [Integer] The number of frames input by a transport.
     #
-    proton_reader :frames_input
+    proton_get :frames_input
 
     # @private
     include Util::ErrorHandler
-
-    can_raise_error :process, :error_class => TransportError
-    can_raise_error :close_tail, :error_class => TransportError
-    can_raise_error :pending, :error_class => TransportError, :below => Error::EOS
-    can_raise_error :close_head, :error_class => TransportError
-
-    # @private
-    include Util::Wrapper
 
     # @private
     def self.wrap(impl)
       return nil if impl.nil?
 
-      self.fetch_instance(impl, :pn_transport_attachments) || Transport.new(nil, impl)
+      self.fetch_instance(impl, :pn_transport_attachments) || Transport.new(impl)
     end
 
     # Creates a new transport instance.
-    #
-    # @param mode [Fixnum] The transport mode, either CLIENT or SERVER
-    # @param impl [pn_transport_t] Should not be used.
-    #
-    # @raise [TransportError] If the mode is invalid.
-    #
-    def initialize(mode = nil, impl = Cproton.pn_transport)
+    def initialize(impl = Cproton.pn_transport)
       @impl = impl
-      if mode == SERVER
-        Cproton.pn_transport_set_server(@impl)
-      elsif (!mode.nil? && mode != CLIENT)
-        raise TransportError.new("cannot create transport for mode: #{mode}")
-      end
       self.class.store_instance(self, :pn_transport_attachments)
     end
+
+    # Set server mode for this tranport - enables protocol detection
+    # and server-side authentication for incoming connections
+    def set_server() Cproton.pn_transport_set_server(@impl); end
 
     # Returns whether the transport has any buffered data.
     #
@@ -241,15 +185,15 @@ module Qpid::Proton
       Cproton.pn_transport_quiesced(@impl)
     end
 
-    # Returns additional information about the condition of the transport.
-    #
-    # When a TRANSPORT_ERROR event occurs, this operaiton can be used to
-    # access the details of the error condition.
-    #
-    # The object returned is valid until the Transport is discarded.
-    #
+    # @return [Condition, nil] transport error condition or nil if there is no error.
     def condition
-      condition_to_object Cproton.pn_transport_condition(@impl)
+      Condition.convert(Cproton.pn_transport_condition(@impl))
+    end
+
+    # Set the error condition for the transport.
+    # @param c [Condition] The condition to set
+    def condition=(c)
+      Condition.assign(Cproton.pn_transport_condition(@impl), c)
     end
 
     # Binds to the given connection.
@@ -268,7 +212,7 @@ module Qpid::Proton
 
     # Updates the transports trace flags.
     #
-    # @param level [Fixnum] The trace level.
+    # @param level [Integer] The trace level.
     #
     # @see TRACE_OFF
     # @see TRACE_RAW
@@ -302,7 +246,7 @@ module Qpid::Proton
     #
     # @param data [String] The bytes to be pushed.
     #
-    # @return [Fixnum] The number of bytes pushed.
+    # @return [Integer] The number of bytes pushed.
     #
     def push(data)
       Cproton.pn_transport_push(@impl, data, data.length)
@@ -315,7 +259,7 @@ module Qpid::Proton
     # pointer. It may also change the value for #tail, as well as the amount of
     # free space reported by #capacity.
     #
-    # @param size [Fixnum] The number of bytes to process.
+    # @param size [Integer] The number of bytes to process.
     #
     # @raise [TransportError] If an error occurs.
     #
@@ -335,7 +279,7 @@ module Qpid::Proton
 
     # Returns the specified number of bytes from the transport's buffers.
     #
-    # @param size [Fixnum] The number of bytes to return.
+    # @param size [Integer] The number of bytes to return.
     #
     # @return [String] The data peeked.
     #
@@ -351,7 +295,7 @@ module Qpid::Proton
     # Removes the specified number of bytes from the pending output queue
     # following the transport's head pointer.
     #
-    # @param size [Fixnum] The number of bytes to remove.
+    # @param size [Integer] The number of bytes to remove.
     #
     def pop(size)
       Cproton.pn_transport_pop(@impl, size)
@@ -378,7 +322,7 @@ module Qpid::Proton
     #
     # @param now [Time] The timestamp.
     #
-    # @return [Fixnum] If non-zero, the expiration time of the next pending
+    # @return [Integer] If non-zero, the expiration time of the next pending
     #   timer event for the transport. The caller must invoke #tick again at
     #   least once at or before this deadline occurs.
     #
@@ -386,6 +330,8 @@ module Qpid::Proton
       Cproton.pn_transport_tick(@impl, now)
     end
 
+    # Create, or return existing, SSL object for the transport.
+    # @return [SASL] the SASL object
     def sasl
       SASL.new(self)
     end
@@ -398,7 +344,7 @@ module Qpid::Proton
     # @return [SSL] The SSL object.
     #
     def ssl(domain = nil, session_details = nil)
-      @ssl ||= SSL.create(self, domain, session_details) if @ssl.nil?
+      @ssl ||= SSL.create(self, domain, session_details)
     end
 
     # @private
@@ -406,6 +352,27 @@ module Qpid::Proton
       !@ssl.nil?
     end
 
-  end
+    # @private
+    # Options are documented {Connection#open}, keep that consistent with this
+    def apply opts
+      sasl if opts[:sasl_enabled]                                 # Explicitly enabled
+      unless opts.include?(:sasl_enabled) && !opts[:sasl_enabled] # Not explicitly disabled
+        sasl.allowed_mechs = opts[:sasl_allowed_mechs] if opts.include? :sasl_allowed_mechs
+        sasl.allow_insecure_mechs = opts[:sasl_allow_insecure_mechs] if opts.include? :sasl_allow_insecure_mechs
+      end
+      self.channel_max= opts[:max_sessions] if opts.include? :max_sessions
+      self.max_frame = opts[:max_frame_size] if opts.include? :max_frame_size
+      # NOTE: The idle_timeout option is in Numeric *seconds*, can be Integer, Float or Rational.
+      # This is consistent with idiomatic ruby.
+      # The transport #idle_timeout property is in *milliseconds* passed direct to C.
+      # Direct use of the transport is deprecated.
+      self.idle_timeout= (opts[:idle_timeout]*1000).round if opts.include? :idle_timeout
+      self.ssl(opts[:ssl_domain]) if opts[:ssl_domain]
+    end
 
+    can_raise_error :process, :error_class => TransportError
+    can_raise_error :close_tail, :error_class => TransportError
+    can_raise_error :pending, :error_class => TransportError, :below => Error::EOS
+    can_raise_error :close_head, :error_class => TransportError
+  end
 end

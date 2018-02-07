@@ -20,18 +20,25 @@
  * under the License.
  */
 
+/// @file
+/// **Deprecated** - Use the API in `work_queue.hpp`.
+
+/// @cond INTERNAL
+
 namespace proton {
 
-/// A C++03 compatible void no-argument callback function object.
+/// **Deprecated** - Use `proton::work`.
 ///
-/// Used by container::schedule() and event_loop::inject().  In C++11
-/// you can use std::bind, std::function or a void-no-argument lambda
-/// instead.
+/// A C++03-compatible void no-argument callback function object.
 ///
-/// void_function0 is passed by reference, so instances of sub-classes
-/// do not have to be heap allocated.  Once passed, the instance must
-/// not be deleted until its operator() is called or the container has
-/// stopped.
+/// Used by `container::schedule()` and `work_queue::add()`.  In C++11
+/// you can use `std::bind`, `std::function`, or a void-no-argument
+/// lambda instead.
+///
+/// `void_function0` is passed by reference, so instances of
+/// subclasses do not have to be heap allocated.  Once passed, the
+/// instance must not be deleted until its `operator()` is called or
+/// the container has stopped.
 class void_function0 {
   public:
     virtual ~void_function0() {}
@@ -39,6 +46,8 @@ class void_function0 {
     virtual void operator()() = 0;
 };
 
-}
+} // proton
+
+/// @endcond
 
 #endif // PROTON_FUNCTION_HPP

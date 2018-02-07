@@ -68,7 +68,7 @@ PN_EXTERN pn_delivery_tag_t pn_dtag(const char *bytes, size_t size);
 PN_EXTERN pn_delivery_t *pn_delivery(pn_link_t *link, pn_delivery_tag_t tag);
 
 /**
- * @deprecated
+ * **Deprecated** - Use ::pn_delivery_attachments().
  *
  * Get the application context that is associated with a delivery object.
  *
@@ -81,7 +81,7 @@ PN_EXTERN pn_delivery_t *pn_delivery(pn_link_t *link, pn_delivery_tag_t tag);
 PN_EXTERN void *pn_delivery_get_context(pn_delivery_t *delivery);
 
 /**
- * @deprecated
+ * **Deprecated** - Use ::pn_delivery_attachments().
  *
  * Set a new application context for a delivery object.
  *
@@ -174,10 +174,33 @@ PN_EXTERN size_t pn_delivery_pending(pn_delivery_t *delivery);
 /**
  * Check if a delivery only has partial message data.
  *
+ * The receiver can expect more ::PN_DELIVERY events for this delivery containing
+ * the remainder of this message.
+ *
  * @param[in] delivery a delivery object
  * @return true if the delivery only contains part of a message, false otherwise
  */
 PN_EXTERN bool pn_delivery_partial(pn_delivery_t *delivery);
+
+/**
+ * Check if a received delivery has been aborted.
+ *
+ * An aborted delivery means the sender cannot complete this message and the
+ * receiver should discard any data already received. The link remains open for
+ * future messages.
+ *
+ * You must still call pn_delivery_settle() to free local resources. An aborted
+ * delivery consumes a credit, use pn_link_flow() to issue new credit as for a
+ * successful delivery.
+ *
+ * Calling pn_link_recv() when the current delivery is aborted returns
+ * ::PN_ABORTED.
+ *
+ * @see pn_delivery_abort()
+ * @param[in] delivery a delivery object
+ * @return true if the delivery has been aborted, false otherwise
+ */
+PN_EXTERN bool pn_delivery_aborted(pn_delivery_t *delivery);
 
 /**
  * Check if a delivery is writable.
@@ -242,6 +265,25 @@ PN_EXTERN void pn_delivery_clear(pn_delivery_t *delivery);
 PN_EXTERN bool pn_delivery_current(pn_delivery_t *delivery);
 
 /**
+ * Abort a delivery being sent.
+ *
+ * Aborting means the sender cannot complete this message. It will not send any
+ * more data, and data sent so far should be discarded by the receiver.  The
+ * link remains open for future messages.
+ *
+ * If some data has already been sent on the network, an AMQP "aborted" frame
+ * will be sent to inform the peer. If no data has yet been sent, the delivery
+ * will simply be forgotten.
+ *
+ * The delivery will be freed, and cannot be used after the call.
+ *
+ * @see pn_delivery_aborted()
+ *
+ * @param[in] delivery a delivery object
+ */
+PN_EXTERN void pn_delivery_abort(pn_delivery_t *delivery);
+
+/**
  * Settle a delivery.
  *
  * A settled delivery can never be used again.
@@ -282,8 +324,8 @@ PN_EXTERN bool pn_delivery_buffered(pn_delivery_t *delivery);
  * operations. A readable delivery indicates message data is waiting
  * to be read. A writable delivery indicates that message data may be
  * sent. An updated delivery indicates that the delivery's disposition
- * has changed. A delivery will never be both readable and writible,
- * but it may be both readable and updated or both writiable and
+ * has changed. A delivery will never be both readable and writable,
+ * but it may be both readable and updated or both writable and
  * updated.
  *
  * @param[in] connection the connection

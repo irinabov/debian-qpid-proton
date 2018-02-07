@@ -25,6 +25,9 @@
  *
  * @copybrief connection_driver
  *
+ * @addtogroup connection_driver
+ * @{
+ *
  * Associate a @ref connection and @ref transport with AMQP byte
  * streams from any source.
  *
@@ -32,22 +35,22 @@
  * - generate ::pn_event_t events for your application to handle
  * - encode resulting AMQP output bytes for some output byte stream
  *
- * The pn_connection_driver_() functions provide a simplified API and
+ * The `pn_connection_driver_*` functions provide a simplified API and
  * extra logic to use ::pn_connection_t and ::pn_transport_t as a
  * unit.  You can also access them directly for features that do not
- * have pn_connection_driver_() functions.
+ * have `pn_connection_driver_*` functions.
  *
- * The driver buffers events and data, you should run it until
+ * The driver buffers events and data.  You should run it until
  * pn_connection_driver_finished() is true, to ensure all reading,
- * writing and event handling (including ERROR and FINAL events) is
- * finished.
+ * writing, and event handling (including `ERROR` and `FINAL` events)
+ * is finished.
  *
  * ## Error handling
  *
- * The pn_connection_driver_*() functions do not return an error
- * code. IO errors set the transport condition and are returned as a
- * PN_TRANSPORT_ERROR. The integration code can set errors using
- * pn_connection_driver_errorf().
+ * The `pn_connection_driver_*` functions do not return an error
+ * code. IO errors are set on the transport condition and are returned
+ * as a `PN_TRANSPORT_ERROR`. The integration code can set errors
+ * using pn_connection_driver_errorf().
  *
  * ## IO patterns
  *
@@ -57,7 +60,7 @@
  * all available events before calling
  * pn_connection_driver_read_buffer() and check that `size` is
  * non-zero before starting a blocking or asynchronous read call. A
- * `read` started while there are unprocessed CLOSE events in the
+ * `read` started while there are unprocessed `CLOSE` events in the
  * buffer may never complete.
  *
  * AMQP is a full-duplex, asynchronous protocol. The "read" and
@@ -66,12 +69,9 @@
  * ## Thread safety
  *
  * The @ref connection_driver types are not thread safe, but each
- * connection and its associated types forms an independent
+ * connection and its associated types form an independent
  * unit. Different connections can be processed concurrently by
  * different threads.
- *
- * @addtogroup connection_driver
- * @{
  */
 
 #include <proton/import_export.h>
@@ -90,6 +90,7 @@ extern "C" {
 typedef struct pn_connection_driver_t {
   pn_connection_t *connection;
   pn_transport_t *transport;
+  pn_collector_t *collector;
   pn_event_batch_t batch;
 } pn_connection_driver_t;
 
@@ -97,7 +98,7 @@ typedef struct pn_connection_driver_t {
  * Set connection and transport to the provided values, or create a new
  * @ref pn_connection_t or @ref pn_transport_t if either is NULL.
  * The provided values belong to the connection driver and will be freed by
- * pn_connection_driver_destroy()
+ * pn_connection_driver_destroy().
  *
  * The transport is bound automatically after the PN_CONNECTION_INIT has been is
  * handled by the application. It can be bound earlier with
@@ -105,14 +106,15 @@ typedef struct pn_connection_driver_t {
  *
  * The following functions must be called before the transport is
  * bound to have effect: pn_connection_set_username(), pn_connection_set_password(),
- * pn_transport_set_server()
+ * pn_transport_set_server().
  *
  * @return PN_OUT_OF_MEMORY if any allocation fails.
  */
 PN_EXTERN int pn_connection_driver_init(pn_connection_driver_t*, pn_connection_t*, pn_transport_t*);
 
-/** Force binding of the transport.
- * This happens automatically after the PN_CONNECTION_INIT is processed.
+/**
+ * Force binding of the transport.  This happens automatically after
+ * the PN_CONNECTION_INIT is processed.
  *
  * @return PN_STATE_ERR if the transport is already bound.
  */
@@ -123,6 +125,18 @@ PN_EXTERN int pn_connection_driver_bind(pn_connection_driver_t *d);
  * NULL.  Does not free the @ref pn_connection_driver_t struct itself.
  */
 PN_EXTERN void pn_connection_driver_destroy(pn_connection_driver_t *);
+
+/**
+ * Disassociate the driver's connection from its transport and collector and
+ * sets d->connection = NULL.  Returns the previous value, which must be freed
+ * by the caller.
+ *
+ * The transport and collector are still owned by the driver and will be freed by
+ * pn_connection_driver_destroy().
+ *
+ * @note This has nothing to do with pn_connection_release()
+ */
+PN_EXTERN pn_connection_t *pn_connection_driver_release_connection(pn_connection_driver_t *d);
 
 /**
  * Get the read buffer.
@@ -177,7 +191,7 @@ PN_EXTERN void pn_connection_driver_write_close(pn_connection_driver_t *);
 PN_EXTERN bool pn_connection_driver_write_closed(pn_connection_driver_t *);
 
 /**
- * Close both sides side.
+ * Close both sides.
  */
 PN_EXTERN void pn_connection_driver_close(pn_connection_driver_t * c);
 
@@ -204,7 +218,7 @@ PN_EXTERN bool pn_connection_driver_has_event(pn_connection_driver_t *);
 PN_EXTERN bool pn_connection_driver_finished(pn_connection_driver_t *);
 
 /**
- * Set IO error information.
+ * Set transport error.
  *
  * The name and formatted description are set on the transport condition, and
  * returned as a PN_TRANSPORT_ERROR event from pn_connection_driver_next_event().
@@ -215,30 +229,42 @@ PN_EXTERN bool pn_connection_driver_finished(pn_connection_driver_t *);
 PN_EXTERN void pn_connection_driver_errorf(pn_connection_driver_t *d, const char *name, const char *fmt, ...);
 
 /**
- * Set IO error information via a va_list, see pn_connection_driver_errorf()
+ * Set transport error via a va_list, see pn_connection_driver_errorf()
  */
 PN_EXTERN void pn_connection_driver_verrorf(pn_connection_driver_t *d, const char *name, const char *fmt, va_list);
-
-/**
- * Log a string message using the connection's transport log.
- */
-PN_EXTERN void pn_connection_driver_log(pn_connection_driver_t *d, const char *msg);
-
-/**
- * Log a printf formatted message using the connection's transport log.
- */
-PN_EXTERN void pn_connection_driver_logf(pn_connection_driver_t *d, char *fmt, ...);
-
-/**
- * Log a printf formatted message using the connection's transport log.
- */
-PN_EXTERN void pn_connection_driver_vlogf(pn_connection_driver_t *d, const char *fmt, va_list ap);
 
 /**
  * If batch is part of a connection_driver, return the connection_driver address,
  * else return NULL
  */
 PN_EXTERN pn_connection_driver_t* pn_event_batch_connection_driver(pn_event_batch_t *batch);
+
+/**
+ * The write side of the transport is closed, it will no longer produce bytes to write to
+ * external IO. Synonym for PN_TRANSPORT_HEAD_CLOSED
+ */
+#define PN_TRANSPORT_WRITE_CLOSED PN_TRANSPORT_HEAD_CLOSED
+
+/**
+ * The read side of the transport is closed, it will no longer read bytes from external
+ * IO. Alias for PN_TRANSPORT_TAIL_CLOSED
+ */
+#define PN_TRANSPORT_READ_CLOSED PN_TRANSPORT_TAIL_CLOSED
+
+/**
+ * **Deprecated** - Use pn_transport_log().
+ */
+PN_EXTERN void pn_connection_driver_log(pn_connection_driver_t *d, const char *msg);
+
+/**
+ * **Deprecated** - Use pn_transport_logf().
+ */
+PN_EXTERN void pn_connection_driver_logf(pn_connection_driver_t *d, const char *fmt, ...);
+
+/**
+ * **Deprecated** - Use pn_transport_vlogf().
+ */
+PN_EXTERN void pn_connection_driver_vlogf(pn_connection_driver_t *d, const char *fmt, va_list ap);
 
 /**
  * @}

@@ -23,16 +23,17 @@
  */
 
 #include "./internal/export.hpp"
+#include "./internal/config.hpp"
+
 
 #include <proton/ssl.h>
 
 #include <string>
 
-namespace proton {
+/// @file
+/// @copybrief proton::ssl
 
-namespace internal {
-template <class T> class factory;
-}
+namespace proton {
 
 /// SSL information.
 class ssl {
@@ -40,10 +41,13 @@ class ssl {
     ssl(pn_ssl_t* s) : object_(s) {}
     /// @endcond
 
-  public:
-    /// Create an empty ssl object.
-    ssl() : object_(0) {}
+#if PN_CPP_HAS_DELETED_FUNCTIONS
+    ssl() = delete;
+#else
+    ssl();
+#endif
 
+  public:
     /// Determines the level of peer validation.
     enum verify_mode {
         /// Require peer to provide a valid identifying certificate
@@ -85,14 +89,14 @@ class ssl {
     /// @endcond
 
   private:
-    pn_ssl_t* object_;
+    pn_ssl_t* const object_;
 
     /// @cond INTERNAL
-  friend class internal::factory<ssl>;
+  friend class transport;
     /// @endcond
 };
 
-/// **Experimental** - An SSL certificate.
+/// **Unsettled API** - An SSL certificate.
 class ssl_certificate {
   public:
     /// Create an SSL certificate.
@@ -141,7 +145,7 @@ class ssl_domain {
 
 }
 
-/// **Experimental** - SSL configuration for inbound connections.
+/// **Unsettled API** - SSL configuration for inbound connections.
 class ssl_server_options : private internal::ssl_domain {
   public:
     /// Server SSL options based on the supplied X.509 certificate
@@ -168,7 +172,7 @@ class ssl_server_options : private internal::ssl_domain {
     /// @endcond
 };
 
-/// **Experimental** - SSL configuration for outbound connections.
+/// **Unsettled API** - SSL configuration for outbound connections.
 class ssl_client_options : private internal::ssl_domain {
   public:
     /// Create SSL client options (no client certificate).

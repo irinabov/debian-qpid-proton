@@ -24,12 +24,15 @@
 
 #include "./fwd.hpp"
 #include "./internal/export.hpp"
-#include "./internal/cached_map.hpp"
+#include "./map.hpp"
 #include "./symbol.hpp"
 #include "./terminus.hpp"
 #include "./value.hpp"
 
 #include <string>
+
+/// @file
+/// @copybrief proton::source
 
 struct pn_terminus_t;
 
@@ -40,9 +43,9 @@ namespace proton {
 /// @see proton::sender, proton::receiver, proton::target
 class source : public terminus {
   public:
-    /// **Experimental** - A map of AMQP symbol keys and filter
+    /// **Unsettled API** - A map of AMQP symbol keys and filter
     /// specifiers.
-    class filter_map : public internal::cached_map<symbol, value> {};
+    typedef map<symbol, value> filter_map;
 
     /// Create an empty source.
     source() : terminus() {}
@@ -68,13 +71,15 @@ class source : public terminus {
     /// Get the distribution mode.
     PN_CPP_EXTERN enum distribution_mode distribution_mode() const;
 
-    /// **Experimental** - Obtain the set of message filters.
-    PN_CPP_EXTERN filter_map filters() const;
+    /// **Unsettled API** - Obtain the set of message filters.
+    PN_CPP_EXTERN const filter_map& filters() const;
 
   private:
     source(pn_terminus_t* t);
     source(const sender&);
     source(const receiver&);
+
+    filter_map filters_;
 
     /// @cond INTERNAL
   friend class proton::internal::factory<source>;

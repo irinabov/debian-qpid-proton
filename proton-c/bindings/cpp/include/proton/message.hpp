@@ -27,14 +27,17 @@
 #include "./duration.hpp"
 #include "./timestamp.hpp"
 #include "./value.hpp"
+#include "./map.hpp"
 
-#include "./internal/cached_map.hpp"
 #include "./internal/pn_unique_ptr.hpp"
 
 #include <proton/type_compat.h>
 
 #include <string>
 #include <vector>
+
+/// @file
+/// @copybrief proton::message
 
 struct pn_message_t;
 
@@ -46,13 +49,11 @@ namespace proton {
 /// message.
 class message {
   public:
-    /// **Experimental** - A map of string keys and AMQP scalar
-    /// values.
-    class property_map : public internal::cached_map<std::string, scalar> {};
+    /// A map of string keys and AMQP scalar values.
+    typedef map<std::string, scalar> property_map;
 
-    /// **Experimental** - A map of AMQP annotation keys and AMQP
-    /// values.
-    class annotation_map : public internal::cached_map<annotation_key, value> {};
+    /// A map of AMQP annotation keys and AMQP values.
+    typedef map<annotation_key, value> annotation_map;
 
     /// Create an empty message.
     PN_CPP_EXTERN message();
@@ -87,26 +88,26 @@ class message {
     ///
     /// The message ID uniquely identifies a message within a
     /// messaging system.
-    PN_CPP_EXTERN void id(const message_id& id);
+    PN_CPP_EXTERN void id(const message_id&);
 
     /// Get the message ID.
     PN_CPP_EXTERN message_id id() const;
 
     /// Set the user name or ID.
-    PN_CPP_EXTERN void user(const std::string &user);
+    PN_CPP_EXTERN void user(const std::string&);
 
     /// Get the user name or ID.
     PN_CPP_EXTERN std::string user() const;
 
     /// Encode entire message into a byte vector, growing it if
     /// necessary.
-    PN_CPP_EXTERN void encode(std::vector<char> &bytes) const;
+    PN_CPP_EXTERN void encode(std::vector<char>&) const;
 
     /// Return encoded message as a byte vector.
     PN_CPP_EXTERN std::vector<char> encode() const;
 
     /// Decode from string data into the message.
-    PN_CPP_EXTERN void decode(const std::vector<char> &bytes);
+    PN_CPP_EXTERN void decode(const std::vector<char>&);
 
     /// @}
 
@@ -114,19 +115,19 @@ class message {
     /// @{
 
     /// Set the destination address.
-    PN_CPP_EXTERN void to(const std::string &addr);
+    PN_CPP_EXTERN void to(const std::string&);
 
     /// Get the destination address.
     PN_CPP_EXTERN std::string to() const;
 
     /// @cond INTERNAL
     /// These are aliases for to()
-    PN_CPP_EXTERN void address(const std::string &addr);
+    PN_CPP_EXTERN void address(const std::string&);
     PN_CPP_EXTERN std::string address() const;
     /// @endcond
 
     /// Set the address for replies.
-    PN_CPP_EXTERN void reply_to(const std::string &addr);
+    PN_CPP_EXTERN void reply_to(const std::string&);
 
     /// Get the address for replies.
     PN_CPP_EXTERN std::string reply_to() const;
@@ -152,31 +153,31 @@ class message {
     PN_CPP_EXTERN value& body();
 
     /// Set the subject.
-    PN_CPP_EXTERN void subject(const std::string &s);
+    PN_CPP_EXTERN void subject(const std::string&);
 
     /// Get the subject.
     PN_CPP_EXTERN std::string subject() const;
 
     /// Set the content type of the body.
-    PN_CPP_EXTERN void content_type(const std::string &s);
+    PN_CPP_EXTERN void content_type(const std::string&);
 
     /// Get the content type of the body.
     PN_CPP_EXTERN std::string content_type() const;
 
     /// Set the content encoding of the body.
-    PN_CPP_EXTERN void content_encoding(const std::string &s);
+    PN_CPP_EXTERN void content_encoding(const std::string&);
 
     /// Get the content encoding of the body.
     PN_CPP_EXTERN std::string content_encoding() const;
 
     /// Set the expiration time.
-    PN_CPP_EXTERN void expiry_time(timestamp t);
+    PN_CPP_EXTERN void expiry_time(timestamp);
 
     /// Get the expiration time.
     PN_CPP_EXTERN timestamp expiry_time() const;
 
     /// Set the creation time.
-    PN_CPP_EXTERN void creation_time(timestamp t);
+    PN_CPP_EXTERN void creation_time(timestamp);
 
     /// Get the creation time.
     PN_CPP_EXTERN timestamp creation_time() const;
@@ -243,7 +244,7 @@ class message {
     /// acquired, by other recipients.
 
     // XXX The triple-not in the last sentence above is confusing.
-    
+
     PN_CPP_EXTERN bool first_acquirer() const;
 
     /// Set the first acquirer flag.
@@ -264,13 +265,13 @@ class message {
     /// @{
 
     /// Set the message group ID.
-    PN_CPP_EXTERN void group_id(const std::string &s);
+    PN_CPP_EXTERN void group_id(const std::string&);
 
     /// Get the message group ID.
     PN_CPP_EXTERN std::string group_id() const;
 
     /// Set the reply-to group ID.
-    PN_CPP_EXTERN void reply_to_group_id(const std::string &s);
+    PN_CPP_EXTERN void reply_to_group_id(const std::string&);
 
     /// Get the reply-to group ID.
     PN_CPP_EXTERN std::string reply_to_group_id() const;
@@ -290,28 +291,25 @@ class message {
     /// @name Extended attributes
     /// @{
 
-    /// **Experimental** - Get the application properties map.  It can
+    /// Get the application properties map.  It can
     /// be modified in place.
     PN_CPP_EXTERN property_map& properties();
 
-    /// **Experimental** - Get the application properties map.  It can
-    /// be modified in place.
+    /// Examine the application properties map.
     PN_CPP_EXTERN const property_map& properties() const;
 
-    /// **Experimental** - Get the message annotations map.  It can be
-    /// modified in place.
+    /// Get the message annotations map.  It can
+    /// be modified in place.
     PN_CPP_EXTERN annotation_map& message_annotations();
 
-    /// **Experimental** - Get the message annotations map.  It can be
-    /// modified in place.
+    /// Examine the message annotations map.
     PN_CPP_EXTERN const annotation_map& message_annotations() const;
 
-    /// **Experimental** - Get the delivery annotations map.  It can
+    /// Get the delivery annotations map.  It can
     /// be modified in place.
     PN_CPP_EXTERN annotation_map& delivery_annotations();
 
-    /// **Experimental** - Get the delivery annotations map.  It can
-    /// be modified in place.
+    /// Examine the delivery annotations map.
     PN_CPP_EXTERN const annotation_map& delivery_annotations() const;
 
     /// @}
@@ -321,19 +319,13 @@ class message {
 
     /// @cond INTERNAL
   private:
-    pn_message_t *pn_msg() const;
+    struct impl;
+    pn_message_t* pn_msg() const;
+    struct impl& impl() const;
 
-    mutable pn_message_t *pn_msg_;
-    mutable internal::value_ref body_;
-    mutable property_map application_properties_;
-    mutable annotation_map message_annotations_;
-    mutable annotation_map delivery_annotations_;
-
-    /// Decode the message corresponding to a delivery from a link.
-    void decode(proton::delivery);
+    mutable pn_message_t* pn_msg_;
 
   PN_CPP_EXTERN friend void swap(message&, message&);
-  friend class messaging_adapter;
     /// @endcond
 };
 

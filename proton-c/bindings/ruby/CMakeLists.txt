@@ -17,16 +17,17 @@
 # under the License.
 #
 
-if (NOT DEFAULT_RUBY_TESTING)
-  message(FATAL_ERROR "Ruby bindings cannot be tested while missing dependencies")
-endif (NOT DEFAULT_RUBY_TESTING)
+set(src "${CMAKE_CURRENT_SOURCE_DIR}")
+set(bin "${CMAKE_CURRENT_BINARY_DIR}")
+
+## Build the swig library
+
 list(APPEND SWIG_MODULE_cproton-ruby_EXTRA_DEPS
     ${CMAKE_SOURCE_DIR}/proton-c/include/proton/cproton.i
     ${PROTON_HEADERS}
 )
-
 include_directories (${RUBY_INCLUDE_PATH})
-swig_add_module(cproton-ruby ruby ruby.i)
+swig_add_library(cproton-ruby LANGUAGE ruby SOURCES cproton.i)
 swig_link_libraries(cproton-ruby ${BINDING_DEPS} ${RUBY_LIBRARY})
 
 # set a compiler macro to relay the Ruby version to the extension.
@@ -41,6 +42,30 @@ set_target_properties(cproton-ruby
     PREFIX ""
     OUTPUT_NAME "cproton"
     LINK_FLAGS "${CATCH_UNDEFINED}" )
+
+##  Make a gem
+
+file(GLOB_RECURSE RUBY_SRC RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.rb *.rdoc)
+
+find_program(GEM_EXE gem DOC "Program to build and install ruby gem packages")
+mark_as_advanced(GEM_EXE)
+if (GEM_EXE)
+  # Copy source and generated files to the build tree so we can build the gem in one place
+  configure_file(${src}/qpid_proton.gemspec.in ${bin}/gem/qpid_proton.gemspec)
+  add_custom_command(
+    OUTPUT ${bin}/qpid_proton-${PN_VERSION}.gem
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${src} ${bin}/gem
+    COMMAND ${CMAKE_COMMAND} -E copy ${bin}/cprotonRUBY_wrap.c ${bin}/gem/ext/cproton/cproton.c
+    COMMAND ${GEM_EXE} build qpid_proton.gemspec
+    COMMAND ${CMAKE_COMMAND} -E copy ${bin}/gem/qpid_proton-${PN_VERSION}.gem ${bin}
+    WORKING_DIRECTORY ${bin}/gem
+    DEPENDS ${RUBY_SRC} ${src}/LICENSE ${src}/TODO ${src}/ChangeLog cproton-ruby ${bin}/cprotonRUBY_wrap.c
+    )
+
+  add_custom_target(ruby-gem ALL DEPENDS ${bin}/qpid_proton-${PN_VERSION}.gem )
+endif ()
+
+## CMake-based install
 
 if (CHECK_SYSINSTALL_RUBY)
   execute_process(COMMAND ${RUBY_EXECUTABLE}
@@ -64,33 +89,60 @@ if (NOT RUBY_ARCHLIB_DIR)
   set (RUBY_ARCHLIB_DIR ${RUBY_ARCHLIB_DIR_DEFAULT})
 endif()
 
-install(TARGETS cproton-ruby
-        DESTINATION ${RUBY_ARCHLIB_DIR}
-        COMPONENT Ruby)
-install(FILES lib/qpid_proton.rb
-        DESTINATION ${RUBY_ARCHLIB_DIR}
-        COMPONENT Ruby)
-install(DIRECTORY lib/codec
-        DESTINATION ${RUBY_ARCHLIB_DIR}
-        COMPONENT Ruby)
-install(DIRECTORY lib/core
-        DESTINATION ${RUBY_ARCHLIB_DIR}
-        COMPONENT Ruby)
-install(DIRECTORY lib/event
-        DESTINATION ${RUBY_ARCHLIB_DIR}
-        COMPONENT Ruby)
-install(DIRECTORY lib/handler
-        DESTINATION ${RUBY_ARCHLIB_DIR}
-        COMPONENT Ruby)
-install(DIRECTORY lib/messenger
-        DESTINATION ${RUBY_ARCHLIB_DIR}
-        COMPONENT Ruby)
-install(DIRECTORY lib/reactor
-        DESTINATION ${RUBY_ARCHLIB_DIR}
-        COMPONENT Ruby)
-install(DIRECTORY lib/types
-        DESTINATION ${RUBY_ARCHLIB_DIR}
-        COMPONENT Ruby)
-install(DIRECTORY lib/util
-        DESTINATION ${RUBY_ARCHLIB_DIR}
-        COMPONENT Ruby)
+install(TARGETS cproton-ruby DESTINATION ${RUBY_ARCHLIB_DIR} COMPONENT Ruby)
+install(DIRECTORY lib DESTINATION ${RUBY_ARCHLIB_DIR} COMPONENT Ruby)
+
+## Tests
+
+set(bld "$<TARGET_FILE_DIR:qpid-proton>")
+
+to_native_path("$ENV{RUBYLIB};${src}/lib;${src}/tests;${src}/spec;${bin};${bld}" RUBYLIB)
+to_native_path("$ENV{PATH};${bin};${bld}" PATH)
+
+execute_process(COMMAND ${RUBY_EXECUTABLE} -r minitest -e ""
+  RESULT_VARIABLE result OUTPUT_QUIET ERROR_QUIET)
+if (result EQUAL 0)  # Have minitest
+  set(test_env ${env_py} -- "PATH=${PATH}" "RUBYLIB=${RUBYLIB}" "SASLPASSWD=${SASLPASSWD_EXE}")
+
+  macro(add_ruby_test script)
+    if(${script} MATCHES "old")
+      set(opt "RUBYOPT=-W0")    # Suppress deprecation warnings
+    endif()
+    get_filename_component(name ${script} NAME_WE)
+    string(REPLACE "_" "-" name "ruby-${name}")
+    add_test(
+      NAME ${name}
+      COMMAND ${test_env} ${opt} ${RUBY_EXECUTABLE} ${script} -v
+      ${ARGN})
+
+  endmacro()
+  add_ruby_test(example_test.rb WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/examples/ruby)
+  add_ruby_test(old_example_test.rb WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/old_examples)
+  file(GLOB TESTS tests/test_*.rb)
+  file(GLOB SPECS spec/*_spec.rb)
+  foreach(t ${TESTS} ${SPECS})
+    add_ruby_test(${t})
+  endforeach()
+else()
+  # No minitest
+  message(STATUS "Ruby tests will not run, minitest is not installed")
+endif()
+
+## Documentation
+
+find_program(YARD_EXE "yard")
+if (YARD_EXE)
+  add_custom_command(
+    OUTPUT ${bin}/doc
+    WORKING_DIRECTORY ${src}
+    COMMAND ${YARD_EXE} -q -o ${bin}/doc -b ${bin}/.yardoc --no-progress --yardopts ${src}/.yardopts
+    DEPENDS ${RUBY_SRC}
+    )
+  add_custom_target(docs-ruby DEPENDS ${bin}/doc)
+  add_dependencies (docs docs-ruby)
+  install(DIRECTORY "${bin}/doc/"
+    DESTINATION "${PROTON_SHARE}/docs/api-ruby"
+    COMPONENT documentation
+    OPTIONAL)
+  set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES doc)
+endif()

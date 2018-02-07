@@ -26,18 +26,21 @@ import (
 	"os"
 	"qpid.apache.org/amqp"
 	"qpid.apache.org/electron"
+	"strings"
 	"sync"
 )
 
 // Usage and command-line flags
 func usage() {
 	fmt.Fprintf(os.Stderr, `Usage: %s url [url ...]
-Receive messages from all the listed URLs concurrently and print them.
+Receive messages from all URLs concurrently and print them.
+URLs are of the form "amqp://<host>:<port>/<amqp-address>"
 `, os.Args[0])
 	flag.PrintDefaults()
 }
 
-var count = flag.Uint64("count", 1, "Stop after receiving this many messages.")
+var count = flag.Uint64("count", 1, "Stop after receiving this many messages in total")
+var prefetch = flag.Int("prefetch", 0, "enable a pre-fetch window to improve throughput")
 var debug = flag.Bool("debug", false, "Print detailed debug output")
 var debugf = func(format string, data ...interface{}) {} // Default no debugging output
 
@@ -72,10 +75,15 @@ func main() {
 			defer wait.Done() // Notify main() when this goroutine is done.
 			url, err := amqp.ParseURL(urlStr)
 			fatalIf(err)
-			c, err := container.Dial("tcp", url.Host)
+			c, err := container.Dial("tcp", url.Host) // NOTE: Dial takes just the Host part of the URL
 			fatalIf(err)
 			connections <- c // Save connection so we can Close() when main() ends
-			r, err := c.Receiver(electron.Source(url.Path))
+			addr := strings.TrimPrefix(url.Path, "/")
+			opts := []electron.LinkOption{electron.Source(addr)}
+			if *prefetch > 0 {
+				opts = append(opts, electron.Capacity(*prefetch), electron.Prefetch(true))
+			}
+			r, err := c.Receiver(opts...)
 			fatalIf(err)
 			// Loop receiving messages and sending them to the main() goroutine
 			for {
@@ -85,7 +93,7 @@ func main() {
 				} else if err == electron.Closed {
 					return
 				} else {
-					log.Fatal("receive error %v: %v", urlStr, err)
+					log.Fatalf("receive error %v: %v", urlStr, err)
 				}
 			}
 		}(urlStr)

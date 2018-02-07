@@ -61,6 +61,25 @@ static void ssl_log(pn_transport_t *transport, const char *fmt, ...);
 static void ssl_log_error_status(HRESULT status, const char *fmt, ...);
 static HCERTSTORE open_cert_db(const char *store_name, const char *passwd, int *error);
 
+// Thread support.  Some SChannel objects are shared or ref-counted.
+// Consistent with the rest of Proton, we assume a connection (and
+// therefore its pn_ssl_t) will not be accessed concurrently by
+// multiple threads.
+class csguard {
+  public:
+    csguard(CRITICAL_SECTION *cs) : cs_(cs), set_(true) { EnterCriticalSection(cs_); }
+    ~csguard() { if (set_) LeaveCriticalSection(cs_); }
+    void release() {
+        if (set_) {
+            set_ = false;
+            LeaveCriticalSection(cs_);
+        }
+    }
+  private:
+    LPCRITICAL_SECTION cs_;
+    bool set_;
+};
+
 /*
  * win_credential_t: SChannel context that must accompany TLS connections.
  *
@@ -73,6 +92,7 @@ static HCERTSTORE open_cert_db(const char *store_name, const char *passwd, int *
  * Ref counted by parent ssl_domain_t and each derived connection.
  */
 struct win_credential_t {
+  CRITICAL_SECTION cslock;
   pn_ssl_mode_t mode;
   PCCERT_CONTEXT cert_context;  // Particulars of the certificate (if any)
   CredHandle cred_handle;       // Bound session parameters, certificate, CAs, verification_mode
@@ -88,6 +108,7 @@ struct win_credential_t {
 static void win_credential_initialize(void *object)
 {
   win_credential_t *c = (win_credential_t *) object;
+  InitializeCriticalSectionAndSpinCount(&c->cslock, 4000);
   SecInvalidateHandle(&c->cred_handle);
   c->cert_context = 0;
   c->trust_store = 0;
@@ -106,6 +127,7 @@ static void win_credential_finalize(void *object)
     CertCloseStore(c->trust_store, 0);
   if (c->server_CA_certs)
     CertCloseStore(c->server_CA_certs, 0);
+  DeleteCriticalSection(&c->cslock);
   free(c->trust_store_name);
 }
 
@@ -115,7 +137,26 @@ static win_credential_t *win_credential(pn_ssl_mode_t m)
   static const pn_class_t clazz = PN_CLASS(win_credential);
   win_credential_t *c = (win_credential_t *) pn_class_new(&clazz, sizeof(win_credential_t));
   c->mode = m;
+  csguard g(&c->cslock);
+  pn_incref(c);  // See next comment regarding refcounting and locks
   return c;
+}
+
+// Hack strategy for Proton object refcounting.  Just hold the lock for incref.
+// Use the next two functions for decref, one with, the other without the lock.
+// The refcount is artificially bumped by one in win_credential() so that we
+// can use refcount == 1 to actually delete (by calling decref one last time).
+static bool win_credential_decref(win_credential_t *c)
+{
+  // Call with lock held.  Caller MUST call win_credential_delete if this returns true.
+  return pn_decref(c) == 1;
+}
+
+static void win_credential_delete(win_credential_t *c)
+{
+  // Call without lock held.
+  assert(pn_refcount(c) == 1);
+  pn_decref(c);
 }
 
 static int win_credential_load_cert(win_credential_t *cred, const char *store_name, const char *cert_name, const char *passwd)
@@ -136,7 +177,7 @@ static int win_credential_load_cert(win_credential_t *cred, const char *store_na
   char *fn = name_len ? (char *) malloc(name_len + 1) : 0;
   while (tmpctx = CertEnumCertificatesInStore(cert_store, tmpctx)) {
     cert_count++;
-    if (cert_name) {
+    if (cert_name && *cert_name) {
       DWORD len = CertGetNameString(tmpctx, CERT_NAME_FRIENDLY_DISPLAY_TYPE,
                                     0, NULL, NULL, 0);
       if (len != name_len + 1)
@@ -174,6 +215,7 @@ static int win_credential_load_cert(win_credential_t *cred, const char *store_na
 }
 
 
+// call with win_credential lock held
 static CredHandle win_credential_cred_handle(win_credential_t *cred, pn_ssl_verify_mode_t verify_mode,
                                              const char *session_id, SECURITY_STATUS *status)
 {
@@ -227,6 +269,7 @@ typedef enum { UNKNOWN_CONNECTION, SSL_CONNECTION, CLEAR_CONNECTION } connection
 typedef struct pn_ssl_session_t pn_ssl_session_t;
 
 struct pn_ssl_domain_t {
+  CRITICAL_SECTION cslock;
   int ref_count;
   pn_ssl_mode_t mode;
   bool has_ca_db;       // true when CA database configured
@@ -420,6 +463,8 @@ pn_ssl_domain_t *pn_ssl_domain( pn_ssl_mode_t mode )
   pn_ssl_domain_t *domain = (pn_ssl_domain_t *) calloc(1, sizeof(pn_ssl_domain_t));
   if (!domain) return NULL;
 
+  InitializeCriticalSectionAndSpinCount(&domain->cslock, 4000);
+  csguard(&domain->cslock);
   domain->ref_count = 1;
   domain->mode = mode;
   switch(mode) {
@@ -436,14 +481,24 @@ pn_ssl_domain_t *pn_ssl_domain( pn_ssl_mode_t mode )
   return domain;
 }
 
+// call with no locks
 void pn_ssl_domain_free( pn_ssl_domain_t *domain )
 {
   if (!domain) return;
-
-  if (--domain->ref_count == 0) {
-    pn_decref(domain->cred);
-    free(domain);
+  {
+    csguard g(&domain->cslock);
+    if (--domain->ref_count)
+      return;
   }
+  {
+    csguard g2(&domain->cred->cslock);
+    if (win_credential_decref(domain->cred)) {
+      g2.release();
+      win_credential_delete(domain->cred);
+    }
+  }
+  DeleteCriticalSection(&domain->cslock);
+  free(domain);
 }
 
 
@@ -453,10 +508,15 @@ int pn_ssl_domain_set_credentials( pn_ssl_domain_t *domain,
                                const char *password)
 {
   if (!domain) return -1;
+  csguard g(&domain->cslock);
+  csguard g2(&domain->cred->cslock);
 
   if (win_credential_has_certificate(domain->cred)) {
     // Need a new win_credential_t to hold new certificate
-    pn_decref(domain->cred);
+    if (win_credential_decref(domain->cred)) {
+      g2.release();
+      win_credential_delete(domain->cred);
+    }
     domain->cred = win_credential(domain->mode);
     if (!domain->cred)
       return -1;
@@ -469,6 +529,7 @@ int pn_ssl_domain_set_trusted_ca_db(pn_ssl_domain_t *domain,
                                     const char *certificate_db)
 {
   if (!domain || !certificate_db) return -1;
+  csguard g(&domain->cslock);
 
   int ec = 0;
   HCERTSTORE store = open_cert_db(certificate_db, NULL, &ec);
@@ -476,14 +537,21 @@ int pn_ssl_domain_set_trusted_ca_db(pn_ssl_domain_t *domain,
     return ec;
 
   if (domain->has_ca_db) {
+    csguard g2(&domain->cred->cslock);
     win_credential_t *new_cred = win_credential(domain->mode);
-    if (!new_cred)
+    if (!new_cred) {
+      CertCloseStore(store, 0);
       return -1;
+    }
     new_cred->cert_context = CertDuplicateCertificateContext(domain->cred->cert_context);
-    pn_decref(domain->cred);
+    if (win_credential_decref(domain->cred)) {
+      g2.release();
+      win_credential_delete(domain->cred);
+    }
     domain->cred = new_cred;
   }
 
+  csguard g3(&domain->cred->cslock);
   domain->cred->trust_store = store;
   domain->cred->trust_store_name = pn_strdup(certificate_db);
   domain->has_ca_db = true;
@@ -496,6 +564,9 @@ int pn_ssl_domain_set_peer_authentication(pn_ssl_domain_t *domain,
                                           const char *trusted_CAs)
 {
   if (!domain) return -1;
+  csguard g(&domain->cslock);
+  csguard g2(&domain->cred->cslock);
+
   if (!domain->has_ca_db && (mode == PN_SSL_VERIFY_PEER || mode == PN_SSL_VERIFY_PEER_NAME)) {
     ssl_log_error("Error: cannot verify peer without a trusted CA configured.\n"
                   "       Use pn_ssl_domain_set_trusted_ca_db()\n");
@@ -520,29 +591,11 @@ int pn_ssl_domain_set_peer_authentication(pn_ssl_domain_t *domain,
       }
       int ec = 0;
       if (!strcmp(trusted_CAs, domain->cred->trust_store_name)) {
+        changed = true;
         store = open_cert_db(trusted_CAs, NULL, &ec);
         if (!store)
           return ec;
-      } else {
-        store = CertDuplicateStore(domain->cred->trust_store);
       }
-
-      if (domain->cred->server_CA_certs) {
-        // Already have one
-        changed = true;
-        win_credential_t *new_cred = win_credential(domain->mode);
-        if (!new_cred) {
-          CertCloseStore(store, 0);
-          return -1;
-        }
-        new_cred->cert_context = CertDuplicateCertificateContext(domain->cred->cert_context);
-        new_cred->trust_store = CertDuplicateStore(domain->cred->trust_store);
-        new_cred->trust_store_name = pn_strdup(domain->cred->trust_store_name);
-        pn_decref(domain->cred);
-        domain->cred = new_cred;
-      }
-
-      domain->cred->server_CA_certs = store;
     }
     break;
 
@@ -557,20 +610,34 @@ int pn_ssl_domain_set_peer_authentication(pn_ssl_domain_t *domain,
   if (changed) {
     win_credential_t *new_cred = win_credential(domain->mode);
     if (!new_cred) {
-      CertCloseStore(store, 0);
+      if (store)
+        CertCloseStore(store, 0);
       return -1;
     }
     new_cred->cert_context = CertDuplicateCertificateContext(domain->cred->cert_context);
     new_cred->trust_store = CertDuplicateStore(domain->cred->trust_store);
     new_cred->trust_store_name = pn_strdup(domain->cred->trust_store_name);
-    pn_decref(domain->cred);
+    if (win_credential_decref(domain->cred)) {
+      g2.release();
+      win_credential_delete(domain->cred);
+    }
     domain->cred = new_cred;
+    domain->cred->server_CA_certs = store;
   }
 
   domain->verify_mode = mode;
-  domain->cred->server_CA_certs = store;
 
   return 0;
+}
+
+int pn_ssl_domain_set_ciphers(pn_ssl_domain_t *domain, const char *ciphers)
+{
+  return PN_ERR;
+}
+
+int pn_ssl_domain_set_protocols(pn_ssl_domain_t *domain, const char *protocols)
+{
+  return PN_ERR;
 }
 
 const pn_io_layer_t ssl_layer = {
@@ -612,6 +679,8 @@ int pn_ssl_init(pn_ssl_t *ssl0, pn_ssl_domain_t *domain, const char *session_id)
   if (!ssl || !domain || ssl->domain) return -1;
   if (ssl->state != CREATED) return -1;
 
+  csguard g(&domain->cslock);
+  csguard g2(&domain->cred->cslock);
   ssl->domain = domain;
   domain->ref_count++;
   if (session_id && domain->mode == PN_SSL_MODE_CLIENT)
@@ -668,9 +737,9 @@ int pn_ssl_get_ssf(pn_ssl_t *ssl0)
 bool pn_ssl_get_cipher_name(pn_ssl_t *ssl0, char *buffer, size_t size )
 {
   pni_ssl_t *ssl = get_ssl_internal(ssl0);
+  *buffer = '\0';
   if (ssl->state != RUNNING || !SecIsValidHandle(&ssl->ctxt_handle))
     return false;
-  *buffer = '\0';
   SecPkgContext_ConnectionInfo info;
   if (QueryContextAttributes(&ssl->ctxt_handle, SECPKG_ATTR_CONNECTION_INFO, &info) == SEC_E_OK) {
     // TODO: come up with string for all permutations?
@@ -686,9 +755,9 @@ bool pn_ssl_get_cipher_name(pn_ssl_t *ssl0, char *buffer, size_t size )
 bool pn_ssl_get_protocol_name(pn_ssl_t *ssl0, char *buffer, size_t size )
 {
   pni_ssl_t *ssl = get_ssl_internal(ssl0);
+  *buffer = '\0';
   if (ssl->state != RUNNING || !SecIsValidHandle(&ssl->ctxt_handle))
     return false;
-  *buffer = '\0';
   SecPkgContext_ConnectionInfo info;
   if (QueryContextAttributes(&ssl->ctxt_handle, SECPKG_ATTR_CONNECTION_INFO, &info) == SEC_E_OK) {
     if (info.dwProtocol & (SP_PROT_TLS1_CLIENT | SP_PROT_TLS1_SERVER))
@@ -714,6 +783,8 @@ void pn_ssl_free( pn_transport_t *transport)
   if (!ssl) return;
   ssl_log( transport, "SSL socket freed.\n" );
   // clean up Windows per TLS session data before releasing the domain count
+  csguard g(&ssl->domain->cslock);
+  csguard g2(&ssl->cred->cslock);
   if (SecIsValidHandle(&ssl->ctxt_handle))
     DeleteSecurityContext(&ssl->ctxt_handle);
   if (ssl->cred) {
@@ -722,10 +793,16 @@ void pn_ssl_free( pn_transport_t *transport)
       if (SecIsValidHandle(&ssl->cred_handle))
         FreeCredentialsHandle(&ssl->cred_handle);
     }
-    pn_decref(ssl->cred);
+    if (win_credential_decref(ssl->cred)) {
+      g2.release();
+      win_credential_delete(ssl->cred);
+    }
   }
 
-  if (ssl->domain) pn_ssl_domain_free(ssl->domain);
+  g2.release();
+  g.release();
+  pn_ssl_domain_free(ssl->domain);
+
   if (ssl->session_id) free((void *)ssl->session_id);
   if (ssl->peer_hostname) free((void *)ssl->peer_hostname);
   if (ssl->sc_inbuf) free((void *)ssl->sc_inbuf);
@@ -978,7 +1055,7 @@ static void client_handshake_init(pn_transport_t *transport)
   pni_ssl_t *ssl = transport->ssl;
   // Tell SChannel to create the first handshake token (ClientHello)
   // and place it in sc_outbuf
-  SEC_CHAR *host = const_cast<SEC_CHAR *>(ssl->peer_hostname);
+  SEC_CHAR *host = (SEC_CHAR *)(ssl->peer_hostname);
   ULONG ctxt_requested = ISC_REQ_STREAM | ISC_REQ_USE_SUPPLIED_CREDS | ISC_REQ_EXTENDED_ERROR;
   ULONG ctxt_attrs;
 
@@ -993,6 +1070,7 @@ static void client_handshake_init(pn_transport_t *transport)
   send_buff_desc.ulVersion = SECBUFFER_VERSION;
   send_buff_desc.cBuffers = 2;
   send_buff_desc.pBuffers = send_buffs;
+  csguard g(&ssl->cred->cslock);
   SECURITY_STATUS status = InitializeSecurityContext(&ssl->cred_handle,
                                NULL, host, ctxt_requested, 0, 0, NULL, 0,
                                &ssl->ctxt_handle, &send_buff_desc,
@@ -1013,7 +1091,7 @@ static void client_handshake_init(pn_transport_t *transport)
 static void client_handshake( pn_transport_t* transport) {
   pni_ssl_t *ssl = transport->ssl;
   // Feed SChannel ongoing responses from the server until the handshake is complete.
-  SEC_CHAR *host = const_cast<SEC_CHAR *>(ssl->peer_hostname);
+  SEC_CHAR *host = (SEC_CHAR *)(ssl->peer_hostname);
   ULONG ctxt_requested = ISC_REQ_STREAM | ISC_REQ_USE_SUPPLIED_CREDS;
   ULONG ctxt_attrs;
   size_t max = 0;
@@ -1046,10 +1124,15 @@ static void client_handshake( pn_transport_t* transport) {
   send_buff_desc.cBuffers = 2;
   send_buff_desc.pBuffers = send_buffs;
 
-  SECURITY_STATUS status = InitializeSecurityContext(&ssl->cred_handle,
+  SECURITY_STATUS status;
+  {
+    csguard g(&ssl->cred->cslock);
+    status = InitializeSecurityContext(&ssl->cred_handle,
                                &ssl->ctxt_handle, host, ctxt_requested, 0, 0,
                                &token_buff_desc, 0, NULL, &send_buff_desc,
                                &ctxt_attrs, NULL);
+  }
+
   switch (status) {
   case SEC_E_INCOMPLETE_MESSAGE:
     // Not enough - get more data from the server then try again.
@@ -1205,10 +1288,13 @@ static void server_handshake(pn_transport_t* transport)
   send_buff_desc.pBuffers = send_buffs;
   PCtxtHandle ctxt_handle_ptr = (SecIsValidHandle(&ssl->ctxt_handle)) ? &ssl->ctxt_handle : 0;
 
-  SECURITY_STATUS status = AcceptSecurityContext(&ssl->cred_handle, ctxt_handle_ptr,
+  SECURITY_STATUS status;
+  {
+    csguard g(&ssl->cred->cslock);
+    status = AcceptSecurityContext(&ssl->cred_handle, ctxt_handle_ptr,
                                &token_buff_desc, ctxt_requested, 0, &ssl->ctxt_handle,
                                &send_buff_desc, &ctxt_attrs, NULL);
-
+  }
   bool outbound_token = false;
   switch(status) {
   case SEC_E_INCOMPLETE_MESSAGE:
@@ -1323,7 +1409,7 @@ static bool grow_inbuf2(pn_transport_t *transport, size_t minimum_size) {
     if (old_capacity >= max_frame) {
       //  already big enough
       ssl_log(transport, "Application expecting %d bytes (> negotiated maximum frame)\n", new_capacity);
-      ssl_failed(transport, "TLS: transport maximimum frame size error");
+      ssl_failed(transport, "TLS: transport maximum frame size error");
       return false;
     }
   }
@@ -1364,7 +1450,7 @@ static void start_ssl_shutdown(pn_transport_t *transport)
   desc.pBuffers = &shutBuff;
   ApplyControlToken(&ssl->ctxt_handle, &desc);
 
-  // Next handshake will generate the shudown alert token
+  // Next handshake will generate the shutdown alert token
   ssl_handshake(transport);
 }
 
@@ -2000,6 +2086,7 @@ int pn_ssl_get_cert_fingerprint(pn_ssl_t *ssl0,
                                           size_t fingerprint_length,
                                           pn_ssl_hash_alg hash_alg)
 {
+    *fingerprint = '\0';
     return -1;
 }
 

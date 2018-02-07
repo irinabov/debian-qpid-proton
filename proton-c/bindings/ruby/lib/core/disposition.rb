@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,38 +14,31 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
-  # Disposition records the current state and/or final outcome of a transfer.
-  #
-  # Every delivery contains both a local and a remote disposition. The local
-  # disposition holds the local state of the delivery, and the remote
-  # disposition holds the *last known* remote state of the delivery.
-  #
+  # @deprecated use {Delivery}
   class Disposition
-
-    include Util::Constants
-
-    # Indicates the delivery was received.
-    self.add_constant(:RECEIVED, Cproton::PN_RECEIVED)
-    # Indicates the delivery was accepted.
-    self.add_constant(:ACCEPTED, Cproton::PN_ACCEPTED)
-    # Indicates the delivery was rejected.
-    self.add_constant(:REJECTED, Cproton::PN_REJECTED)
-    # Indicates the delivery was released.
-    self.add_constant(:RELEASED, Cproton::PN_RELEASED)
-    # Indicates the delivery was modified.
-    self.add_constant(:MODIFIED, Cproton::PN_MODIFIED)
+    include Util::Deprecation
 
     # @private
-    include Util::Engine
+    PROTON_METHOD_PREFIX = "pn_disposition"
+    # @private
+    include Util::Wrapper
+
+
+    ACCEPTED = Cproton::PN_ACCEPTED
+    REJECTED = Cproton::PN_REJECTED
+    RELEASED = Cproton::PN_RELEASED
+    MODIFIED = Cproton::PN_MODIFIED
+    RECEIVED =  Cproton::PN_RECEIVED
 
     attr_reader :impl
 
     # @private
     def initialize(impl, local)
+      deprecated self.class, Delivery
       @impl = impl
       @local = local
       @data = nil
@@ -54,35 +46,29 @@ module Qpid::Proton
       @annotations = nil
     end
 
-    # @private
-    include Util::SwigHelper
-
-    # @private
-    PROTON_METHOD_PREFIX = "pn_disposition"
-
     # @!attribute section_number
     #
-    # @return [Fixnum] The section number of the disposition.
+    # @return [Integer] The section number of the disposition.
     #
-    proton_accessor :section_number
+    proton_set_get :section_number
 
     # @!attribute section_offset
     #
-    #  @return [Fixnum] The section offset of the disposition.
+    #  @return [Integer] The section offset of the disposition.
     #
-    proton_accessor :section_offset
+    proton_set_get :section_offset
 
     # @!attribute failed?
     #
     # @return [Boolean] The failed flag.
     #
-    proton_accessor :failed, :is_or_get => :is
+    proton_set_is :failed
 
     # @!attribute undeliverable?
     #
     # @return [Boolean] The undeliverable flag.
     #
-    proton_accessor :undeliverable, :is_or_get => :is
+    proton_set_is :undeliverable
 
     # Sets the data for the disposition.
     #
@@ -103,7 +89,7 @@ module Qpid::Proton
       if @local
         @data
       else
-        data_to_object(Cproton.pn_disposition_data(@impl))
+        Codec::Data.to_object(Cproton.pn_disposition_data(@impl))
       end
     end
 
@@ -126,11 +112,11 @@ module Qpid::Proton
       if @local
         @annotations
       else
-        data_to_object(Cproton.pn_disposition_annotations(@impl))
+        Codec::Data.to_object(Cproton.pn_disposition_annotations(@impl))
       end
     end
 
-    # Sets the condition for the disposition.
+   # Sets the condition for the disposition.
     #
     # @param condition [Codec::Data] The condition.
     #
@@ -149,7 +135,7 @@ module Qpid::Proton
       if @local
         @condition
       else
-        condition_to_object(Cproton.pn_disposition_condition(@impl))
+        Condition.convert(Cproton.pn_disposition_condition(@impl))
       end
     end
 

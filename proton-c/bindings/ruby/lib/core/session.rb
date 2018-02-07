@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
@@ -24,15 +23,12 @@ module Qpid::Proton
   # A Session has a single parent Qpid::Proton::Connection instance.
   #
   class Session < Endpoint
-
-    # @private
-    include Util::Wrapper
-
-    # @private
-    include Util::SwigHelper
+    include Util::Deprecation
 
     # @private
     PROTON_METHOD_PREFIX = "pn_session"
+    # @private
+    include Util::Wrapper
 
     # @!attribute incoming_capacity
     #
@@ -41,37 +37,31 @@ module Qpid::Proton
     # negotatied frame size of the transport, it will be rounded up to one full
     # frame.
     #
-    # @return [Fixnum] The incoing capacity of the session, measured in bytes.
+    # @return [Integer] The incoing capacity of the session, measured in bytes.
     #
-    proton_accessor :incoming_capacity
+    proton_set_get :incoming_capacity
 
     # @private
-    proton_reader :attachments
+    proton_get :attachments
 
     # @!attribute [r] outgoing_bytes
     #
-    # @return [Fixnum] The number of outgoing bytes currently being buffered.
+    # @return [Integer] The number of outgoing bytes currently being buffered.
     #
     proton_caller :outgoing_bytes
 
     # @!attribute [r] incoming_bytes
     #
-    # @return [Fixnum] The number of incomign bytes currently being buffered.
+    # @return [Integer] The number of incomign bytes currently being buffered.
     #
     proton_caller :incoming_bytes
 
-    # @!method open
-    # Opens the session.
-    #
-    # Once this operaton has completed, the state flag is updated.
-    #
-    # @see LOCAL_ACTIVE
-    #
+    # Open the session
     proton_caller :open
 
     # @!attribute [r] state
     #
-    # @return [Fixnum] The endpoint state.
+    # @return [Integer] The endpoint state.
     #
     proton_caller :state
 
@@ -87,28 +77,16 @@ module Qpid::Proton
       self.class.store_instance(self, :pn_session_attachments)
     end
 
-    # Closed the session.
-    #
-    # Once this operation has completed, the state flag will be set. This may be
-    # called without calling #open, in which case it is the equivalence of
-    # calling #open and then close immediately.
-    #
-    def close
-      self._update_condition
+    # Close the local end of the session. The remote end may or may not be closed.
+    # @param error [Condition] Optional error condition to send with the close.
+    def close(error=nil)
+      Condition.assign(_local_condition, error)
       Cproton.pn_session_close(@impl)
     end
 
-    # Retrieves the next session from a given connection that matches the
-    # specified state mask.
-    #
-    # When uses with Connection#session_head an application can access all of
-    # the session son the connection that match the given state.
-    #
-    # @param state_mask [Fixnum] The state mask to match.
-    #
-    # @return [Session, nil] The next session if one matches, or nil.
-    #
+    # @deprecated use {Connection#each_session}
     def next(state_mask)
+      deprecated __method__, "Connection#each_session"
       Session.wrap(Cproton.pn_session_next(@impl, state_mask))
     end
 
@@ -120,40 +98,62 @@ module Qpid::Proton
       Connection.wrap(Cproton.pn_session_connection(@impl))
     end
 
-    # Constructs a new sender.
-    #
-    # Each sender between two AMQP containers must be uniquely named. Note that
-    # this uniqueness cannot be enforced at the library level, so some
-    # consideration should be taken in choosing link names.
-    #
-    # @param name [String] The link name.
-    #
-    # @return [Sender, nil] The sender, or nil if an error occurred.
-    #
+    # @deprecated use {#open_sender}
     def sender(name)
-      Sender.new(Cproton.pn_sender(@impl, name))
+      deprecated __method__, "open_sender"
+      Sender.new(Cproton.pn_sender(@impl, name));
     end
 
-    # Constructs a new receiver.
-    #
-    # Each receiver between two AMQP containers must be uniquely named. Note
-    # that this uniqueness cannot be enforced at the library level, so some
-    # consideration should be taken in choosing link names.
-    #
-    # @param name [String] The link name.
-    #
-    # @return [Receiver, nil] The receiver, or nil if an error occurred.
-    #
+    # @deprecated use {#open_receiver}
     def receiver(name)
+      deprecated __method__, "open_receiver"
       Receiver.new(Cproton.pn_receiver(@impl, name))
     end
 
-    # @private
+    # Create and open a {Receiver} link, see {Receiver#open}
+    # @param opts [Hash] receiver options, see {Receiver#open}
+    # @return [Receiver]
+    def open_receiver(opts=nil) 
+      name = opts[:name] rescue connection.link_name
+      Receiver.new(Cproton.pn_receiver(@impl, name)).open(opts)
+    end
+
+    # Create and open a {Sender} link, see {#open}
+    # @param opts [Hash] sender options, see {Sender#open}
+    # @return [Sender]
+    def open_sender(opts=nil)
+      name = opts[:name] rescue connection.link_name
+      Sender.new(Cproton.pn_sender(@impl, name)).open(opts)
+    end
+
+    # Get the links on this Session.
+    # @overload each_link
+    #   @yieldparam l [Link] pass each link to block
+    # @overload each_link
+    #   @return [Enumerator] enumerator over links
+    def each_link
+      return enum_for(:each_link) unless block_given?
+      l = Cproton.pn_link_head(Cproton.pn_session_connection(@impl), 0);
+      while l
+        link = Link.wrap(l)
+        yield link if link.session == self
+        l = Cproton.pn_link_next(l, 0)
+      end
+      self
+    end
+
+    # Get the {Sender} links - see {#each_link}
+    def each_sender() each_link.select { |l| l.sender? }; end
+
+    # Get the {Receiver} links - see {#each_link}
+    def each_receiver() each_link.select { |l| l.receiver? }; end
+
+    private
+
     def _local_condition
       Cproton.pn_session_condition(@impl)
     end
 
-    # @private
     def _remote_condition # :nodoc:
       Cproton.pn_session_remote_condition(@impl)
     end

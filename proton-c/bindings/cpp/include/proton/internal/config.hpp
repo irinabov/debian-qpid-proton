@@ -33,24 +33,35 @@
 /// default.  Otherwise they can be enabled or disabled separately
 /// with -D on the compile line.
 
+// Read library compilation presets -
+// This sets the options the library itself was compiled with
+// and sets up the compilation options is we are compiling the library itself
+#include "config_presets.hpp"
+
+/// Whether the library supports threads depends on the configuration of the library compilation only
+#define PN_CPP_SUPPORTS_THREADS PN_CPP_LIB_HAS_CPP11 || (PN_CPP_LIB_HAS_STD_THREAD && PN_CPP_LIB_HAS_STD_MUTEX)
+/// @endcond
+
+/// The Apple clang compiler doesn't really support PN_CPP_HAS_THREAD_LOCAL
+/// before Xcode 8 even though it claims to be C++11 compatible
+#if defined(__clang__) && defined(__apple_build_version__) && ((__clang_major__ * 100) + __clang_minor__) >= 301
+#if __has_feature(cxx_thread_local)
+#define PN_CPP_HAS_THREAD_LOCAL 1
+#else
+#define PN_CPP_HAS_THREAD_LOCAL 0
+#endif
+#endif
+
 #ifndef PN_CPP_HAS_CPP11
-#if defined(__cplusplus) && __cplusplus >= 201100
+#if defined(__cplusplus) && __cplusplus >= 201103
 #define PN_CPP_HAS_CPP11 1
 #else
 #define PN_CPP_HAS_CPP11 0
 #endif
 #endif
 
-#ifndef PN_CPP_HAS_SHARED_PTR
-#define PN_CPP_HAS_SHARED_PTR PN_CPP_HAS_CPP11
-#endif
-
-#ifndef PN_CPP_HAS_UNIQUE_PTR
-#define PN_CPP_HAS_UNIQUE_PTR PN_CPP_HAS_CPP11
-#endif
-
-#ifndef PN_CPP_HAS_LONG_LONG
-#define PN_CPP_HAS_LONG_LONG PN_CPP_HAS_CPP11
+#ifndef PN_CPP_HAS_LONG_LONG_TYPE
+#define PN_CPP_HAS_LONG_LONG_TYPE PN_CPP_HAS_CPP11
 #endif
 
 #ifndef PN_CPP_HAS_NULLPTR
@@ -79,20 +90,46 @@
 #define PN_CPP_HAS_DEFAULTED_FUNCTIONS PN_CPP_HAS_CPP11
 #endif
 
+#ifndef PN_CPP_HAS_DEFAULTED_MOVE_INITIALIZERS
+#define PN_CPP_HAS_DEFAULTED_MOVE_INITIALIZERS PN_CPP_HAS_CPP11
+#endif
+
 #ifndef PN_CPP_HAS_DELETED_FUNCTIONS
 #define PN_CPP_HAS_DELETED_FUNCTIONS PN_CPP_HAS_CPP11
 #endif
 
-#ifndef PN_CPP_HAS_STD_FUNCTION
-#define PN_CPP_HAS_STD_FUNCTION PN_CPP_HAS_CPP11
+#ifndef PN_CPP_HAS_THREAD_LOCAL
+#define PN_CPP_HAS_THREAD_LOCAL PN_CPP_HAS_CPP11
 #endif
 
-#ifndef PN_CPP_HAS_STD_BIND
-#define PN_CPP_HAS_STD_BIND PN_CPP_HAS_CPP11
+#ifndef PN_CPP_HAS_VARIADIC_TEMPLATES
+#define PN_CPP_HAS_VARIADIC_TEMPLATES PN_CPP_HAS_CPP11
 #endif
 
-#ifndef PN_CPP_HAS_CHRONO
-#define PN_CPP_HAS_CHRONO PN_CPP_HAS_CPP11
+#ifndef PN_CPP_HAS_LAMBDAS
+#define PN_CPP_HAS_LAMBDAS PN_CPP_HAS_CPP11
+#endif
+
+// Library features
+
+#ifndef PN_CPP_HAS_HEADER_RANDOM
+#define PN_CPP_HAS_HEADER_RANDOM PN_CPP_HAS_CPP11
+#endif
+
+#ifndef PN_CPP_HAS_STD_UNIQUE_PTR
+#define PN_CPP_HAS_STD_UNIQUE_PTR PN_CPP_HAS_CPP11
+#endif
+
+#ifndef PN_CPP_HAS_STD_MUTEX
+#define PN_CPP_HAS_STD_MUTEX PN_CPP_HAS_CPP11
+#endif
+
+#ifndef PN_CPP_HAS_STD_ATOMIC
+#define PN_CPP_HAS_STD_ATOMIC PN_CPP_HAS_CPP11
+#endif
+
+#ifndef PN_CPP_HAS_STD_THREAD
+#define PN_CPP_HAS_STD_THREAD PN_CPP_HAS_CPP11
 #endif
 
 #endif // PROTON_INTERNAL_CONFIG_HPP

@@ -29,6 +29,9 @@
 
 #include <proton/type_compat.h>
 
+/// @file
+/// @copybrief proton::codec::encoder
+
 namespace proton {
 class scalar_base;
 
@@ -38,7 +41,7 @@ class value_base;
 
 namespace codec {
 
-/// **Experimental** - Stream-like encoder from C++ values to AMQP
+/// **Unsettled API** - A stream-like encoder from C++ values to AMQP
 /// bytes.
 ///
 /// For internal use only.
@@ -193,6 +196,19 @@ template <> struct is_encodable<value> : public true_type {};
 } // is_encodable_impl
 
 using is_encodable_impl::is_encodable;
+
+// Metafunction to test if a class looks like an encodable map from K to T.
+template <class M, class K, class T, class Enable = void>
+struct is_encodable_map : public internal::false_type {};
+
+template <class M, class K, class T> struct is_encodable_map<
+    M, K, T, typename internal::enable_if<
+                 internal::is_same<K, typename M::key_type>::value &&
+                 internal::is_same<T, typename M::mapped_type>::value &&
+                 is_encodable<M>::value
+                 >::type
+    > : public internal::true_type {};
+
 
 /// @endcond
 

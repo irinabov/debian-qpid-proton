@@ -83,11 +83,17 @@ type Connection interface {
 	WaitTimeout(time.Duration) error
 
 	// Incoming returns a channel for incoming endpoints opened by the remote peer.
-	// See the Incoming interface for more.
+	// See the Incoming interface for more detail.
 	//
-	// Not receiving from Incoming() and calling Accept/Reject will block the
-	// electron event loop. You should run a loop to handle the types that
-	// interest you in a switch{} and and Accept() all others.
+	// Note: this channel will first return an *IncomingConnection for the
+	// connection itself which allows you to look at security information and
+	// decide whether to Accept() or Reject() the connection. Then it will return
+	// *IncomingSession, *IncomingSender and *IncomingReceiver as they are opened
+	// by the remote end.
+	//
+	// Note 2: you must receiving from Incoming() and call Accept/Reject to avoid
+	// blocking electron event loop. Normally you would run a loop in a goroutine
+	// to handle incoming types that interest and Accept() those that don't.
 	Incoming() <-chan Incoming
 }
 
@@ -124,7 +130,7 @@ func VirtualHost(virtualHost string) ConnectionOption {
 // connection.  Only applies to outbound client connection.
 //
 // The connection will erase its copy of the password from memory as soon as it
-// has been used to authenticate. If you are concerned about paswords staying in
+// has been used to authenticate. If you are concerned about passwords staying in
 // memory you should never store them as strings, and should overwrite your
 // copy as soon as you are done with it.
 //
@@ -276,7 +282,7 @@ func (c *connection) WaitTimeout(timeout time.Duration) error {
 }
 
 func (c *connection) Incoming() <-chan Incoming {
-	assert(c.incoming != nil, "electron.Connection.Incoming() disabled for %s", c)
+	assert(c.incoming != nil, "Incoming() is only allowed for a Connection created with the Server() option: %s", c)
 	return c.incoming
 }
 
@@ -368,6 +374,14 @@ func GlobalSASLConfigDir(dir string) { globalSASLConfigDir = dir }
 //
 func GlobalSASLConfigName(dir string) { globalSASLConfigName = dir }
 
+// Do we support extended SASL negotiation?
+// All implementations of Proton support ANONYMOUS and EXTERNAL on both
+// client and server sides and PLAIN on the client side.
+//
+// Extended SASL implememtations use an external library (Cyrus SASL)
+// to support other mechanisms beyond these basic ones.
+func SASLExtended() bool { return proton.SASLExtended() }
+
 var (
 	globalSASLConfigName string
 	globalSASLConfigDir  string
@@ -387,8 +401,9 @@ func globalSASLInit(eng *proton.Engine) {
 }
 
 // Dial is shorthand for using net.Dial() then NewConnection()
-func Dial(network, addr string, opts ...ConnectionOption) (c Connection, err error) {
-	conn, err := net.Dial(network, addr)
+// See net.Dial() for the meaning of the network, address arguments.
+func Dial(network, address string, opts ...ConnectionOption) (c Connection, err error) {
+	conn, err := net.Dial(network, address)
 	if err == nil {
 		c, err = NewConnection(conn, opts...)
 	}
@@ -396,8 +411,9 @@ func Dial(network, addr string, opts ...ConnectionOption) (c Connection, err err
 }
 
 // DialWithDialer is shorthand for using dialer.Dial() then NewConnection()
-func DialWithDialer(dialer *net.Dialer, network, addr string, opts ...ConnectionOption) (c Connection, err error) {
-	conn, err := dialer.Dial(network, addr)
+// See net.Dial() for the meaning of the network, address arguments.
+func DialWithDialer(dialer *net.Dialer, network, address string, opts ...ConnectionOption) (c Connection, err error) {
+	conn, err := dialer.Dial(network, address)
 	if err == nil {
 		c, err = NewConnection(conn, opts...)
 	}

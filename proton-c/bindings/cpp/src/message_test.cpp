@@ -139,29 +139,59 @@ void test_message_maps() {
 
     m.properties().put("foo", 12);
     m.delivery_annotations().put("bar", "xyz");
+    m.message_annotations().put(23, int8_t(42));
 
-    m.message_annotations().put(23, "23");
     ASSERT_EQUAL(m.properties().get("foo"), scalar(12));
     ASSERT_EQUAL(m.delivery_annotations().get("bar"), scalar("xyz"));
-    ASSERT_EQUAL(m.message_annotations().get(23), scalar("23"));
+
+    ASSERT_EQUAL(m.message_annotations().get(23), scalar(int8_t(42)));
+    ASSERT_EQUAL(proton::get<int8_t>(m.message_annotations().get(23)), 42);
+    ASSERT_EQUAL(m.message_annotations().get(23).get<int8_t>(), 42);
 
     message m2(m);
 
+    ASSERT_EQUAL(m.properties().get("foo"), scalar(12)); // Decoding shouldn't change it
+
     ASSERT_EQUAL(m2.properties().get("foo"), scalar(12));
     ASSERT_EQUAL(m2.delivery_annotations().get("bar"), scalar("xyz"));
-    ASSERT_EQUAL(m2.message_annotations().get(23), scalar("23"));
+    ASSERT_EQUAL(m2.message_annotations().get(23), scalar(int8_t(42)));
 
     m.properties().put("foo","newfoo");
     m.delivery_annotations().put(24, 1000);
     m.message_annotations().erase(23);
 
-    m2 = m;
-    ASSERT_EQUAL(1u, m2.properties().size());
-    ASSERT_EQUAL(m2.properties().get("foo"), scalar("newfoo"));
-    ASSERT_EQUAL(2u, m2.delivery_annotations().size());
-    ASSERT_EQUAL(m2.delivery_annotations().get("bar"), scalar("xyz"));
-    ASSERT_EQUAL(m2.delivery_annotations().get(24), scalar(1000));
-    ASSERT(m2.message_annotations().empty());
+    message m3 = m;
+    size_t size = m3.properties().size();
+    ASSERT_EQUAL(1u, size);
+    ASSERT_EQUAL(m3.properties().get("foo"), scalar("newfoo"));
+    ASSERT_EQUAL(2u, m3.delivery_annotations().size());
+    ASSERT_EQUAL(m3.delivery_annotations().get("bar"), scalar("xyz"));
+    ASSERT_EQUAL(m3.delivery_annotations().get(24), scalar(1000));
+    ASSERT(m3.message_annotations().empty());
+
+    // PROTON-1498
+    message msg;
+    msg.message_annotations().put("x-opt-jms-msg-type", int8_t(1));
+
+    proton::message::annotation_map& am_ref = msg.message_annotations();
+    uint8_t t = am_ref.get(proton::symbol("x-opt-jms-msg-type")).get<int8_t>();
+    ASSERT_EQUAL(1, t);
+
+    proton::message::annotation_map am_val = msg.message_annotations();
+    t = am_val.get(proton::symbol("x-opt-jms-msg-type")).get<int8_t>();
+    ASSERT_EQUAL(1, t);
+}
+
+void test_message_reuse() {
+    message m1("one");
+    m1.properties().put("x", "y");
+
+    message m2("two");
+    m2.properties().put("a", "b");
+
+    m1.decode(m2.encode());     // Use m1 for a newly decoded message
+    ASSERT_EQUAL(value("two"), m1.body());
+    ASSERT_EQUAL(value("b"), m1.properties().get("a"));
 }
 
 }
@@ -172,5 +202,6 @@ int main(int, char**) {
     RUN_TEST(failed, test_message_defaults());
     RUN_TEST(failed, test_message_body());
     RUN_TEST(failed, test_message_maps());
+    RUN_TEST(failed, test_message_reuse());
     return failed;
 }

@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
@@ -31,6 +30,7 @@ module Qpid::Proton
   #   puts "Remote connection flags: #{conn.state || Qpid::Proton::Endpoint::REMOTE_MASK}"
   #
   class Endpoint
+    include Util::Deprecation
 
     # The local connection is uninitialized.
     LOCAL_UNINIT = Cproton::PN_LOCAL_UNINIT
@@ -47,32 +47,17 @@ module Qpid::Proton
     REMOTE_CLOSED = Cproton::PN_REMOTE_CLOSED
 
     # Bitmask for the local-only flags.
-    LOCAL_MASK = Cproton::PN_LOCAL_UNINIT |
-                 Cproton::PN_LOCAL_ACTIVE |
-                 Cproton::PN_LOCAL_CLOSED
+    LOCAL_MASK = Cproton::PN_LOCAL_UNINIT | Cproton::PN_LOCAL_ACTIVE | Cproton::PN_LOCAL_CLOSED
 
     # Bitmask for the remote-only flags.
-    REMOTE_MASK = Cproton::PN_REMOTE_UNINIT |
-                  Cproton::PN_REMOTE_ACTIVE |
-                  Cproton::PN_REMOTE_CLOSED
+    REMOTE_MASK = Cproton::PN_REMOTE_UNINIT | Cproton::PN_REMOTE_ACTIVE | Cproton::PN_REMOTE_CLOSED
 
     # @private
-    include Util::Engine
-
+    def condition; remote_condition || local_condition; end
     # @private
-    def initialize
-      @condition = nil
-    end
-
+    def remote_condition; Condition.convert(_remote_condition); end
     # @private
-    def _update_condition
-      object_to_condition(@condition, self._local_condition)
-    end
-
-    # @private
-    def remote_condition
-      condition_to_object(self._remote_condition)
-    end
+    def local_condition; Condition.convert(_local_condition); end
 
     # Return the transport associated with this endpoint.
     #
@@ -82,11 +67,21 @@ module Qpid::Proton
       self.connection.transport
     end
 
+    # @private
+    # @return [Bool] true if {#state} has all the bits of `mask` set
+    def check_state(mask) (self.state & mask) == mask; end
+
+    # @return [Bool] true if endpoint has sent and received a CLOSE frame
+    def closed?() check_state(LOCAL_CLOSED | REMOTE_CLOSED); end
+
+    # @return [Bool] true if endpoint has sent and received an OPEN frame
+    def open?() check_state(LOCAL_ACTIVE | REMOTE_ACTIVE); end
+
     def local_uninit?
       check_state(LOCAL_UNINIT)
     end
 
-    def local_active?
+    def local_open?
       check_state(LOCAL_ACTIVE)
     end
 
@@ -98,7 +93,7 @@ module Qpid::Proton
       check_state(REMOTE_UNINIT)
     end
 
-    def remote_active?
+    def remote_open?
       check_state(REMOTE_ACTIVE)
     end
 
@@ -106,35 +101,8 @@ module Qpid::Proton
       check_state(REMOTE_CLOSED)
     end
 
-    def check_state(state_mask)
-      !(self.state & state_mask).zero?
-    end
-
-    def handler
-      reactor = Qpid::Proton::Reactor::Reactor.wrap(Cproton.pn_object_reactor(@impl))
-      if reactor.nil?
-        on_error = nil
-      else
-        on_error = reactor.method(:on_error)
-      end
-      record = self.attachments
-      puts "record=#{record}"
-      WrappedHandler.wrap(Cproton.pn_record_get_handler(record), on_error)
-    end
-
-    def handler=(handler)
-      reactor = Qpid::Proton::Reactor::Reactor.wrap(Cproton.pn_object_reactor(@impl))
-      if reactor.nil?
-        on_error = nil
-      else
-        on_error = reactor.method(:on_error)
-      end
-      impl = chandler(handler, on_error)
-      record = self.attachments
-      Cproton.pn_record_set_handler(record, impl)
-      Cproton.pn_decref(impl)
-    end
+    alias local_active? local_open?
+    alias remote_active? remote_open?
 
   end
-
 end

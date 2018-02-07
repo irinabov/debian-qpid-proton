@@ -25,6 +25,9 @@
 #include "./internal/export.hpp"
 #include "./transfer.hpp"
 
+/// @file
+/// @copybrief proton::tracker
+
 struct pn_delivery_t;
 
 namespace proton {
@@ -46,9 +49,9 @@ class tracker : public transfer {
     /// Get the sender for this tracker.
     PN_CPP_EXTERN class sender sender() const;
 
-    // @cond INTERNAL
+    /// @cond INTERNAL
   friend class internal::factory<tracker>;
-    // @endcond
+    /// @endcond
 };
 
 } // proton

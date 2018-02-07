@@ -8,7 +8,7 @@ simple API for writing concurrent AMQP clients and servers.
 - [receive.go](electron/receive.go) receive from many connections concurrently.
 - [send.go](electron/send.go) send to many connections concurrently.
 - [broker.go](electron/broker.go) a simple broker using the electron API
-n
+
 ## Proton examples
 
 [qpid.apache.org/proton](http://godoc.org/qpid.apache.org/proton) is an
@@ -59,18 +59,18 @@ You can compile the program first and then run the executable to avoid the delay
 All the examples take a `-h` flag to show usage information, and the comments in
 the example source have more details.
 
-First start the broker (the optional `-debug` flag will print extra information about
-what the broker is doing)
+First start the broker on the default AMQP port 5672 (the optional `-debug` flag
+will print extra information about what the broker is doing)
 
-    go run broker.go -debug
+    go run broker.go -addr=:5672 -debug   # Use a different port if 5672 is not available.
 
 Send messages concurrently to queues "foo" and "bar", 10 messages to each queue:
 
-    go run send.go -count 10 localhost:/foo localhost:/bar
+    go run send.go -count 10 amqp://localhost:5672/foo amqp://localhost:5672/bar
 
 Receive messages concurrently from "foo" and "bar". Note -count 20 for 10 messages each on 2 queues:
 
-    go run receive.go -count 20 localhost:/foo localhost:/bar
+    go run receive.go -count 20 amqp://localhost:5672/foo amqp://localhost:5672/bar
 
 The broker and clients use the standard AMQP port (5672) on the local host by
 default, to use a different address use the `-addr host:port` flag.
@@ -118,7 +118,7 @@ messages and the sender link for available credit.
 [electron/broker.go](electron/broker.go) does not need any "upside-down"
 event-driven code, it is implemented as straightforward loops. The broker is a
 loop listening for connections. Each connection is a loop accepting for incoming
-sender or recdiver links. Each receiving link is a loop that receives a message
+sender or receiver links. Each receiving link is a loop that receives a message
 and pushes it to a queue.  Each sending link is a loop that pops a message from
 a queue and sends it.
 

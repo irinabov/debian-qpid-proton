@@ -26,18 +26,20 @@ import (
 	"os"
 	"qpid.apache.org/amqp"
 	"qpid.apache.org/electron"
+	"strings"
 	"sync"
 )
 
 // Usage and command-line flags
 func usage() {
 	fmt.Fprintf(os.Stderr, `Usage: %s url [url ...]
-Send messages to each URL concurrently with body "<url-path>-<n>" where n is the message number.
+Send messages to each URL concurrently.
+URLs are of the form "amqp://<host>:<port>/<amqp-address>"
 `, os.Args[0])
 	flag.PrintDefaults()
 }
 
-var count = flag.Int64("count", 1, "Send this may messages per address.")
+var count = flag.Int64("count", 1, "Send this many messages to each address.")
 var debug = flag.Bool("debug", false, "Print detailed debug output")
 var Debugf = func(format string, data ...interface{}) {} // Default no debugging output
 
@@ -62,7 +64,7 @@ func main() {
 	wait.Add(len(urls)) // Wait for one goroutine per URL.
 
 	container := electron.NewContainer(fmt.Sprintf("send[%v]", os.Getpid()))
-	connections := make(chan electron.Connection, len(urls)) // Connctions to close on exit
+	connections := make(chan electron.Connection, len(urls)) // Connections to close on exit
 
 	// Start a goroutine for each URL to send messages.
 	for _, urlStr := range urls {
@@ -71,15 +73,16 @@ func main() {
 			defer wait.Done() // Notify main() when this goroutine is done.
 			url, err := amqp.ParseURL(urlStr)
 			fatalIf(err)
-			c, err := container.Dial("tcp", url.Host)
+			c, err := container.Dial("tcp", url.Host) // NOTE: Dial takes just the Host part of the URL
 			fatalIf(err)
 			connections <- c // Save connection so we can Close() when main() ends
-			s, err := c.Sender(electron.Target(url.Path))
+			addr := strings.TrimPrefix(url.Path, "/")
+			s, err := c.Sender(electron.Target(addr))
 			fatalIf(err)
 			// Loop sending messages.
 			for i := int64(0); i < *count; i++ {
 				m := amqp.NewMessage()
-				body := fmt.Sprintf("%v%v", url.Path, i)
+				body := fmt.Sprintf("%v%v", addr, i)
 				m.Marshal(body)
 				s.SendAsync(m, sentChan, body) // Outcome will be sent to sentChan
 			}
@@ -92,7 +95,9 @@ func main() {
 	for i := 0; i < expect; i++ {
 		out := <-sentChan // Outcome of async sends.
 		if out.Error != nil {
-			log.Fatalf("acknowledgement[%v] %v error: %v\n", i, out.Value, out.Error)
+			log.Fatalf("acknowledgement[%v] %v error: %v", i, out.Value, out.Error)
+		} else if out.Status != electron.Accepted {
+			log.Fatalf("acknowledgement[%v] unexpected status: %v", i, out.Status)
 		} else {
 			Debugf("acknowledgement[%v]  %v (%v)\n", i, out.Value, out.Status)
 		}

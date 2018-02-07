@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,36 +14,40 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 require "cproton"
 require "date"
 require "weakref"
 
-if RUBY_VERSION < "1.9"
-require "kconv"
-else
+begin
   require "securerandom"
+rescue LoadError
+  require "kconv"               # Ruby < 1.9
+end
+
+# Qpid is the top level module for the Qpid project http://qpid.apache.org
+# Definitions for this library are in module {Qpid::Proton}
+module Qpid
+  # Proton is a ruby API for sending and receiving AMQP messages in clients or servers.
+  # See the {overview}[../file.README.html] for more.
+  module Proton
+    # Only opened here for module doc comment
+  end
 end
 
 # Exception classes
 require "core/exceptions"
 
 # Utility classes
+require "util/deprecation"
 require "util/version"
 require "util/error_handler"
-require "util/constants"
-require "util/swig_helper"
-require "util/condition"
 require "util/wrapper"
-require "util/class_wrapper"
-require "util/engine"
-require "util/uuid"
 require "util/timeout"
-require "util/handler"
-require "util/reactor"
 
 # Types
+require "types/type"
 require "types/strings"
 require "types/hash"
 require "types/array"
@@ -54,20 +57,18 @@ require "types/described"
 require "codec/mapping"
 require "codec/data"
 
-# Event API classes
-require "event/event_type"
-require "event/event_base"
-require "event/event"
-require "event/collector"
-
 # Main Proton classes
-require "core/selectable"
+require "core/condition"
+require "core/event"
+require "core/uri"
 require "core/message"
 require "core/endpoint"
 require "core/session"
 require "core/terminus"
 require "core/disposition"
+require "core/transfer"
 require "core/delivery"
+require "core/tracker"
 require "core/link"
 require "core/sender"
 require "core/receiver"
@@ -77,56 +78,25 @@ require "core/ssl_domain"
 require "core/ssl_details"
 require "core/ssl"
 require "core/transport"
-require "core/base_handler"
 require "core/url"
+require "core/connection_driver"
 
-# Messenger API classes
+# Handlers and adapters
+require "handler/adapter"
+require "handler/messaging_adapter"
+require "core/messaging_handler"
+
+# Main container class
+require "core/container"
+
+# DEPRECATED Backwards compatibility shims for Reactor API
+require "handler/reactor_messaging_adapter"
+require "handler/messaging_handler" # Keep original name for compatibility
+require "reactor/container"
+
+# DEPRECATED Messenger API classes
 require "messenger/subscription"
 require "messenger/tracker_status"
 require "messenger/tracker"
 require "messenger/messenger"
 
-# Handler classes
-require "handler/c_adaptor"
-require "handler/wrapped_handler"
-require "handler/acking"
-require "handler/endpoint_state_handler"
-require "handler/incoming_message_handler"
-require "handler/outgoing_message_handler"
-require "handler/c_flow_controller"
-require "handler/messaging_handler"
-
-# Reactor classes
-require "reactor/task"
-require "reactor/acceptor"
-require "reactor/reactor"
-require "reactor/ssl_config"
-require "reactor/global_overrides"
-require "reactor/urls"
-require "reactor/connector"
-require "reactor/backoff"
-require "reactor/session_per_connection"
-require "reactor/container"
-require "reactor/link_option"
-
-module Qpid::Proton
-  # @private
-  def self.registry
-    @registry ||= {}
-  end
-
-  # @private
-  def self.add_to_registry(key, value)
-    self.registry[key] = value
-  end
-
-  # @private
-  def self.get_from_registry(key)
-    self.registry[key]
-  end
-
-  # @private
-  def self.delete_from_registry(key)
-    self.registry.delete(key)
-  end
-end

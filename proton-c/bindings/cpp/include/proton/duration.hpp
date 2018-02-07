@@ -30,33 +30,37 @@
 
 #include <iosfwd>
 
+/// @file
+/// @copybrief proton::duration
+
 namespace proton {
 
 /// A span of time in milliseconds.
 class duration : private internal::comparable<duration> {
   public:
-    /// Numeric type used to store milliseconds    
+    /// A numeric type holding a value in milliseconds.
     typedef int64_t numeric_type;
 
-    /// Construct from milliseconds
+    /// Construct from a value in milliseconds.
     explicit duration(numeric_type ms = 0) : ms_(ms) {}
 
-    /// Assign
+    /// Assign a value in milliseconds.
     duration& operator=(numeric_type ms) { ms_ = ms; return *this; }
 
-    /// Return milliseconds
+    /// Get the value in milliseconds.
     numeric_type milliseconds() const { return ms_; }
 
     PN_CPP_EXTERN static const duration FOREVER;   ///< Wait forever
     PN_CPP_EXTERN static const duration IMMEDIATE; ///< Don't wait at all
     PN_CPP_EXTERN static const duration SECOND;    ///< One second
+    PN_CPP_EXTERN static const duration MILLISECOND; ///< One millisecond
     PN_CPP_EXTERN static const duration MINUTE;    ///< One minute
 
   private:
     numeric_type ms_;
 };
 
-/// Print duration
+/// Print a duration.
 PN_CPP_EXTERN std::ostream& operator<<(std::ostream&, duration);
 
 /// @name Comparison and arithmetic operators
@@ -68,6 +72,7 @@ inline duration operator+(duration x, duration y) { return duration(x.millisecon
 inline duration operator-(duration x, duration y) { return duration(x.milliseconds() - y.milliseconds()); }
 inline duration operator*(duration d, uint64_t n) { return duration(d.milliseconds()*n); }
 inline duration operator*(uint64_t n, duration d) { return d * n; }
+inline duration operator/(duration d, uint64_t n) { return duration(d.milliseconds() / n); }
 /// @}
 
 } // proton

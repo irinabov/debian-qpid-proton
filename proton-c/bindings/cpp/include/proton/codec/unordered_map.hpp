@@ -22,6 +22,9 @@
  *
  */
 
+/// @file
+/// **Unsettled API** - Enable conversions between `proton::value` and `std::unordered_map`.
+
 #include "./encoder.hpp"
 #include "./decoder.hpp"
 
