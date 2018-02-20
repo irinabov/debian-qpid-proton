@@ -80,8 +80,8 @@ Description: Example applications for writign messaging apps with Qpid Proton
 
 Package: libqpid-proton11-dev-doc
 Provides: libqpid-proton-dev-doc
-Replaces: libqpid-proton-doc
-Conflicts: libqpid-proton-doc
+Replaces: libqpid-proton-dev-doc
+Conflicts: libqpid-proton-dev-doc
 Architecture: all
 Section: doc
 Depends: ${misc:Depends}
@@ -138,6 +138,8 @@ Description: C++ libraries for Qpid Proton
 
 Package: libqpid-proton-cpp11-dev
 Provides: libqpid-proton-cpp-dev
+Replaces: libqpid-proton-cpp-dev
+Conflicts: libqpid-proton-cpp-dev
 Architecture: any
 Section: libdevel
 Depends: libqpid-proton-cpp11 (= ${binary:Version}), ${misc:Depends}
@@ -167,6 +169,8 @@ Description: Example applications for writign messaging apps in C++ with Qpid Pr
 
 Package: libqpid-proton-cpp11-dev-doc
 Provides: libqpid-proton-cpp-doc
+Replaces: libqpid-proton-cpp-doc
+Conflicts: libqpid-proton-cpp-doc
 Architecture: all
 Section: doc
 Depends: ${misc:Depends}
