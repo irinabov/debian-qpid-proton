@@ -108,6 +108,24 @@ Description: C core library for Qpid Proton
  .
  This package provides core shared library for Qpid Proton.
 
+Package: libqpid-proton-core10-dev
+Provides: libqpid-proton-core-dev
+Replaces: libqpid-proton-core-dev
+Conflicts: libqpid-proton-core-dev
+Architecture: any
+Section: libdevel
+Depends: libqpid-proton11-dev (>= ${binary:Version}), libqpid-proton-core10 (= ${binary:Version}), ${misc:Depends}
+Multi-Arch: same
+Description: C core development library for writing messaging apps with Qpid Proton
+ Qpid Proton is a high-performance, lightweight messaging library. It can be
+ used in the widest range of messaging applications, including brokers, client
+ libraries, routers, bridges, proxies, and more. Proton makes it trivial to
+ integrate with the AMQP 1.0 ecosystem from any platform, environment, or
+ language.
+ .
+ This package provides the C core development library for Qpid Proton.
+
+
 Package: libqpid-proton-proactor1
 Architecture: any
 Depends: libqpid-proton-core10 (>= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
@@ -121,6 +139,23 @@ Description: C proactor library for Qpid Proton
  language.
  .
  This package provides proactor shared library for Qpid Proton.
+
+Package: libqpid-proton-proactor1-dev
+Provides: libqpid-proton-proactor-dev
+Replaces: libqpid-proton-proactor-dev
+Conflicts: libqpid-proton-proactor-dev
+Architecture: any
+Section: libdevel
+Depends: libqpid-proton11-dev (>= ${binary:Version}), libqpid-proton-proactor1 (= ${binary:Version}), ${misc:Depends}
+Multi-Arch: same
+Description: C proactor development library for writing messaging apps with Qpid Proton
+ Qpid Proton is a high-performance, lightweight messaging library. It can be
+ used in the widest range of messaging applications, including brokers, client
+ libraries, routers, bridges, proxies, and more. Proton makes it trivial to
+ integrate with the AMQP 1.0 ecosystem from any platform, environment, or
+ language.
+ .
+ This package provides the C proactor development library for Qpid Proton.
 
 Package: libqpid-proton-cpp11
 Architecture: any
@@ -142,7 +177,7 @@ Replaces: libqpid-proton-cpp-dev
 Conflicts: libqpid-proton-cpp-dev
 Architecture: any
 Section: libdevel
-Depends: libqpid-proton-cpp11 (= ${binary:Version}), ${misc:Depends}
+Depends: libqpid-proton-cpp11 (= ${binary:Version}), libqpid-proton-core10-dev (>= ${binary:Version}), libqpid-proton-proactor1-dev (>= ${binary:Version}), ${misc:Depends}
 Multi-Arch: same
 Description: Development libraries for writing messaging apps in C++ with Qpid Proton
  Qpid Proton is a high-performance, lightweight messaging library. It can be
