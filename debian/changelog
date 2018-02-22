@@ -1,8 +1,8 @@
-qpid-proton (0.20.0-2trusty+qpid1) trusty; urgency=medium
+qpid-proton (0.20.0-3trusty+qpid1) trusty; urgency=medium
 
   * Rebased on Proton 0.20.0
 
- -- Irina Boverman <iboverma@redhat.com>  Mon,  5 Feb 2018 15:34:57 -0400
+ -- Irina Boverman <iboverma@redhat.com>  Thu, 22 Feb 2018 12:54:02 -0400
 
 qpid-proton (0.17.0-1trusty+qpid1) trusty; urgency=medium
 

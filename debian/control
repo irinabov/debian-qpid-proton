@@ -5,8 +5,8 @@ Maintainer: Debian Middleware Maintainers <pkg-middleware-maintainers@lists.alio
 Uploaders: Irina Boverman <iboverma@redhat.com>, Daniel Pocock <daniel@pocock.pro>
 Build-Depends: debhelper (>= 9.0.0~),
                dh-python,
-               gcc (>=4:5.3.1-1~),
-               g++ (>=4:5.3.1-1~),
+               gcc (>=4:4.8~),
+               g++ (>=4:4.8~),
                cmake,
 	       swig,
 	       pkg-config,
