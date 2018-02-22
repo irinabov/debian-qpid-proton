@@ -1,5 +1,5 @@
 [tox]
-envlist = py26,py27,py33,py34,py35
+envlist = @TOX_ENVLIST@
 minversion = 1.4
 skipdist = True
 setupdir = @py_bin@/dist
@@ -14,9 +14,8 @@ passenv =
     CFLAGS
     SASLPASSWD
     VALGRIND
-    CLASSPATH
 commands =
-    @CMAKE_SOURCE_DIR@/tests/python/proton-test {posargs}
+    @CMAKE_SOURCE_DIR@/tests/python/proton-test '{posargs:--ignore-file=@CMAKE_SOURCE_DIR@/tests/python/tox-blacklist}'
 deps =
     unittest2
 

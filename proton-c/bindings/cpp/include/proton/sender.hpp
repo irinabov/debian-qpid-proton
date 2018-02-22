@@ -25,6 +25,10 @@
 #include "./fwd.hpp"
 #include "./internal/export.hpp"
 #include "./link.hpp"
+#include "./tracker.hpp"
+
+/// @file
+/// @copybrief proton::sender
 
 struct pn_link_t;
 struct pn_session_t;
@@ -59,7 +63,7 @@ PN_CPP_CLASS_EXTERN sender : public link {
     /// Get the target node.
     PN_CPP_EXTERN class target target() const;
 
-    /// **Experimental** - Return all unused credit to the receiver in
+    /// **Unsettled API** - Return all unused credit to the receiver in
     /// response to a drain request.  Has no effect unless there has
     /// been a drain request and there is remaining credit to use or
     /// return.
@@ -70,7 +74,6 @@ PN_CPP_CLASS_EXTERN sender : public link {
     /// @cond INTERNAL
   friend class internal::factory<sender>;
   friend class sender_iterator;
-  friend class thread_safe<sender>;
     /// @endcond
 };
 

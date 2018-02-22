@@ -27,7 +27,7 @@ include_directories (${PYTHON_INCLUDE_PATH})
 set_source_files_properties(cproton.i PROPERTIES CPLUSPLUS NO)
 
 # Suppress warnings in swig generated code.
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
 
 # Set Compiler extra flags for Solaris when using SunStudio
 if (CMAKE_C_COMPILER_ID STREQUAL "SunPro")
@@ -40,7 +40,7 @@ list(APPEND SWIG_MODULE_cproton_EXTRA_DEPS
     ${PROTON_HEADERS}
 )
 
-swig_add_module(cproton python cproton.i)
+swig_add_library(cproton LANGUAGE python SOURCES cproton.i)
 swig_link_libraries(cproton ${BINDING_DEPS} ${PYTHON_LIBRARIES})
 set_target_properties(${SWIG_MODULE_cproton_REAL_NAME}
     PROPERTIES
@@ -80,9 +80,9 @@ set(py_dist_files
 
 macro (py_compile directory files artifacts)
   foreach (src_file ${files})
-    install(CODE "execute_process(COMMAND ${PYTHON_EXECUTABLE} -c \"import py_compile; py_compile.compile('${src_file}', cfile='${src_file}c')\"
+    install(CODE "execute_process(COMMAND \"${PYTHON_EXECUTABLE}\" -c \"import py_compile; py_compile.compile('${src_file}', cfile='${src_file}c')\"
                                   WORKING_DIRECTORY ${directory})")
-    install(CODE "execute_process(COMMAND ${PYTHON_EXECUTABLE} -O -c \"import py_compile; py_compile.compile('${src_file}', cfile='${src_file}o')\"
+    install(CODE "execute_process(COMMAND \"${PYTHON_EXECUTABLE}\" -O -c \"import py_compile; py_compile.compile('${src_file}', cfile='${src_file}o')\"
                                   WORKING_DIRECTORY ${directory})")
     list(APPEND ${artifacts} ${directory}/${src_file}
       ${directory}/${src_file}c
@@ -99,7 +99,7 @@ if (EPYDOC_EXE)
    foreach (py_src_doc ${pysrc})
      list(APPEND PY_DOC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${py_src_doc}")
    endforeach(py_src_doc)
-   add_custom_target(docs-py COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../env.py --
+   add_custom_target(docs-py COMMAND "${PYTHON_EXECUTABLE}" ${CMAKE_CURRENT_SOURCE_DIR}/../../env.py --
      PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_CURRENT_SOURCE_DIR}
      ${EPYDOC_EXE} -v --no-private --html -o ${CMAKE_CURRENT_BINARY_DIR}/html
      ${PY_DOC_FILES}
@@ -114,7 +114,7 @@ endif (EPYDOC_EXE)
 find_program(SPHINX_EXE sphinx-build)
 mark_as_advanced (SPHINX_EXE)
 if (SPHINX_EXE)
-   add_custom_target(tutorial-py COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../env.py --
+   add_custom_target(tutorial-py COMMAND "${PYTHON_EXECUTABLE}" ${CMAKE_CURRENT_SOURCE_DIR}/../../env.py --
      PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_CURRENT_SOURCE_DIR}
      ${SPHINX_EXE} -b html ${CMAKE_CURRENT_SOURCE_DIR}/docs ${CMAKE_CURRENT_BINARY_DIR}/tutorial)
    add_dependencies(docs tutorial-py)
@@ -143,13 +143,6 @@ set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "html;tutorial")
 
 set(py_dist_dir ${CMAKE_CURRENT_BINARY_DIR}/dist)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/setup.py.in
-               ${py_dist_dir}/setup.py
-)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/README.rst.in
-               ${py_dist_dir}/README.rst
-)
-
 file(COPY ${py_dist_files} DESTINATION ${py_dist_dir})
 
 file(MAKE_DIRECTORY ${py_dist_dir}/proton)
@@ -175,6 +168,7 @@ set (all_src
   ${qpid-proton-include-extra}
   ${qpid-proton-layers-all}
   ${qpid-proton-platform-all}
+  ${qpid-proton-proactor}
   ${qpid-proton-private-includes}
   include/proton/cproton.i
 )
@@ -183,3 +177,10 @@ foreach(sfile ${all_src})
                      COMMAND ${CMAKE_COMMAND} -E
                          copy ${CMAKE_SOURCE_DIR}/proton-c/${sfile} ${py_dist_dir}/proton-c/${sfile})
 endforeach()
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/setup.py.in
+               ${py_dist_dir}/setup.py
+)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/README.rst.in
+               ${py_dist_dir}/README.rst
+)

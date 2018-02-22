@@ -11,7 +11,7 @@
 # build-arch and build-indep targets  by Bill Allombert 2001
 
 # Uncomment this to turn on verbose mode.
-# export DH_VERBOSE=1
+export DH_VERBOSE=1
 
 # DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 # DPKG_EXPORT_BUILDFLAGS = 1
@@ -22,8 +22,17 @@ export DH_OPTIONS
 export DH_ALWAYS_EXCLUDE=LICENSE
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
+include /usr/share/dpkg/pkg-info.mk
+
+PYTHON2_VERSIONS = $(shell pyversions -r)
+PYTHON3_VERSIONS = $(shell py3versions -r)
+
 %:
-	dh $@ --with python2
+	dh $@ --with python2,python3
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf build
 
 override_dh_auto_configure:
 	dh_auto_configure -- \
@@ -33,6 +42,11 @@ override_dh_auto_configure:
 
 override_dh_auto_build:
 	dh_auto_build -- all docs
+	pwd
+	set -ex; for python in $(PYTHON3_VERSIONS); do \
+		cd obj-$(DEB_BUILD_GNU_TYPE)/proton-c/bindings/python/dist; \
+		$$python setup.py build '--executable=/usr/bin/python3 -s'; \
+	done
 
 override_dh_auto_test:
 	# TODO enable them when they work again
@@ -43,19 +57,10 @@ override_dh_auto_test:
 override_dh_auto_install:
 	dh_auto_install
 	mkdir -p debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)
-	# mv debian/tmp/usr/lib/lib*.so* debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)
-	mv debian/tmp/usr/share/proton-0.17.0 debian/tmp/usr/share/proton
-	chmod +x debian/tmp/usr/share/proton/examples/perl/messenger/client.pl
-	chmod +x debian/tmp/usr/share/proton/examples/perl/messenger/recv.pl
-	chmod +x debian/tmp/usr/share/proton/examples/perl/messenger/send.pl
-	chmod +x debian/tmp/usr/share/proton/examples/perl/messenger/server.pl
+	mv debian/tmp/usr/share/proton-0.20.0 debian/tmp/usr/share/proton
 	rm -rf debian/tmp/usr/share/proton/examples/ruby
-	chmod +x debian/tmp/usr/share/proton/examples/javascript/messenger/client.js
-	chmod +x debian/tmp/usr/share/proton/examples/javascript/messenger/drain.js
-	chmod +x debian/tmp/usr/share/proton/examples/javascript/messenger/proxy.js
-	chmod +x debian/tmp/usr/share/proton/examples/javascript/messenger/qpid-config.js
-	chmod +x debian/tmp/usr/share/proton/examples/javascript/messenger/recv.js
-	chmod +x debian/tmp/usr/share/proton/examples/javascript/messenger/send.js
-	chmod +x debian/tmp/usr/share/proton/examples/javascript/messenger/server.js
-	chmod +x debian/tmp/usr/share/proton/examples/javascript/messenger/spout.js
-
+	pwd
+	set -ex; for python in $(PYTHON3_VERSIONS); do \
+		cd obj-$(DEB_BUILD_GNU_TYPE)/proton-c/bindings/python/dist; \
+		$$python setup.py install -O1 --skip-build --root=$(CURDIR)/debian/tmp --install-layout=deb; \
+	done

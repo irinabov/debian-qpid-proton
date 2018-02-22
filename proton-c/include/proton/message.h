@@ -138,8 +138,6 @@ PN_EXTERN bool           pn_message_is_inferred(pn_message_t *msg);
  */
 PN_EXTERN int            pn_message_set_inferred(pn_message_t *msg, bool inferred);
 
-// standard message headers and properties
-
 /**
  * Get the durable flag for a message.
  *
@@ -282,7 +280,7 @@ PN_EXTERN pn_data_t *    pn_message_id                    (pn_message_t *msg);
  * The message id provides a globally unique identifier for a message.
  * A message id can be an a string, an unsigned long, a uuid or a
  * binary value. This operation returns the value of the id using the
- * ::pn_atom_t descriminated union. See ::pn_atom_t for details on how
+ * ::pn_atom_t discriminated union. See ::pn_atom_t for details on how
  * to access the value.
  *
  * @param[in] msg a message object
@@ -439,7 +437,7 @@ PN_EXTERN pn_data_t *    pn_message_correlation_id        (pn_message_t *msg);
  *
  * A correlation id can be an a string, an unsigned long, a uuid or a
  * binary value. This operation returns the value of the id using the
- * ::pn_atom_t descriminated union. See ::pn_atom_t for details on how
+ * ::pn_atom_t discriminated union. See ::pn_atom_t for details on how
  * to access the value.
  *
  * @param[in] msg a message object
@@ -682,7 +680,7 @@ PN_EXTERN pn_data_t *pn_message_instructions(pn_message_t *msg);
 PN_EXTERN pn_data_t *pn_message_annotations(pn_message_t *msg);
 
 /**
- * Get/set the properties for a message.
+ * Get and set the properties for a message.
  *
  * This operation returns a pointer to a ::pn_data_t representing the
  * content of the properties section of a message. The pointer is
@@ -698,7 +696,7 @@ PN_EXTERN pn_data_t *pn_message_annotations(pn_message_t *msg);
 PN_EXTERN pn_data_t *pn_message_properties(pn_message_t *msg);
 
 /**
- * Get/set the body of a message.
+ * Get and set the body of a message.
  *
  * This operation returns a pointer to a ::pn_data_t representing the
  * body of a message. The pointer is valid until the message is freed

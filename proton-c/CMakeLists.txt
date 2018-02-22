@@ -20,13 +20,15 @@
 include(CheckLibraryExists)
 include(CheckSymbolExists)
 
-include(soversion.cmake)
+include(versions.cmake)
 
 add_custom_target(docs)
 add_custom_target(doc DEPENDS docs)
 
 # Set the default SSL/TLS implementation
 find_package(OpenSSL)
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+find_package(Threads)
 find_package(PythonInterp REQUIRED)
 find_package(SWIG)
 # FindSwig.cmake "forgets" make its outputs advanced like a good citizen
@@ -52,15 +54,15 @@ if(PN_WINAPI)
   set(ssl_impl schannel)
   set(ssl_providers "'none','schannel','openssl'")
 else(PN_WINAPI)
-  if (OPENSSL_FOUND)
+  if (OPENSSL_FOUND AND Threads_FOUND)
     set(ssl_impl openssl)
-  endif (OPENSSL_FOUND)
+  endif ()
   set(ssl_providers "'none','openssl'")
 endif(PN_WINAPI)
 set(SSL_IMPL ${ssl_impl} CACHE STRING "Library to use for SSL/TLS support. Valid values: ${ssl_providers}")
 
 set(sasl_providers cyrus none)
-if (CYRUSSASL_FOUND)
+if (CYRUSSASL_FOUND AND Threads_FOUND)
   set (sasl_impl cyrus)
 else ()
   set (sasl_impl none)
@@ -107,16 +109,16 @@ endif(PN_WINAPI)
 
 # Link in SASL if present
 if (SASL_IMPL STREQUAL cyrus)
-  set(pn_sasl_impl src/sasl/sasl.c src/sasl/cyrus_sasl.c)
+  set(pn_sasl_impl src/sasl/sasl.c src/sasl/default_sasl.c src/sasl/cyrus_sasl.c)
   include_directories (${CYRUS_SASL_INCLUDE_DIR})
-  set(SASL_LIB ${CYRUS_SASL_LIBRARY} -lpthread)
+  set(SASL_LIB ${CYRUS_SASL_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
 elseif (SASL_IMPL STREQUAL none)
-  set(pn_sasl_impl src/sasl/sasl.c src/sasl/none_sasl.c)
+  set(pn_sasl_impl src/sasl/sasl.c src/sasl/default_sasl.c src/sasl/cyrus_stub.c)
 endif ()
 
 # Set Compiler extra flags for Solaris when using SunStudio
 if(CMAKE_CXX_COMPILER_ID STREQUAL "SunPro" )
-    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mt" )
+  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mt" )
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "SunPro" )
@@ -127,7 +129,7 @@ endif()
 if (SSL_IMPL STREQUAL openssl)
   set (pn_ssl_impl src/ssl/openssl.c)
   include_directories (${OPENSSL_INCLUDE_DIR})
-  set (SSL_LIB ${OPENSSL_LIBRARIES})
+  set (SSL_LIB ${OPENSSL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 elseif (SSL_IMPL STREQUAL schannel)
   set (pn_ssl_impl src/ssl/schannel.c)
   set (SSL_LIB Crypt32.lib Secur32.lib)
@@ -230,18 +232,9 @@ if (CMAKE_COMPILER_IS_GNUCC)
   # C++ allow "%z" format specifier and variadic macros
   set (CXX_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wno-format -Wno-variadic-macros")
   if (NOT BUILD_WITH_CXX)
-    set (COMPILE_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wstrict-prototypes")
+    set (COMPILE_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wstrict-prototypes -Wc++-compat -Wvla -Wsign-compare -Wwrite-strings")
     set (COMPILE_LANGUAGE_FLAGS "-std=c99")
     set (COMPILE_PLATFORM_FLAGS "-std=gnu99")
-
-    execute_process(COMMAND ${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1} ${CMAKE_C_COMPILER_ARG2} -dumpversion OUTPUT_VARIABLE GCC_VERSION
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if (${GCC_VERSION} VERSION_LESS "4.3.0")
-      # Only a concern if contibuting code back.
-      message (STATUS "Old gcc version detected.  C++ compatibility checks disabled")
-    else (${GCC_VERSION} VERSION_LESS "4.3.0")
-      set (COMPILE_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wc++-compat -Wvla -Wsign-compare -Wwrite-strings")
-    endif (${GCC_VERSION} VERSION_LESS "4.3.0")
   else (NOT BUILD_WITH_CXX)
     set (COMPILE_WARNING_FLAGS "${CXX_WARNING_FLAGS}")
   endif (NOT BUILD_WITH_CXX)
@@ -267,26 +260,41 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "SunPro")
 endif (CMAKE_COMPILER_IS_GNUCC)
 
 if (CMAKE_C_COMPILER_ID MATCHES "Clang")
+  set (COMPILE_WARNING_FLAGS  "-Wall -pedantic")
+  set (COMPILE_LANGUAGE_FLAGS "-std=c99")
   if (ENABLE_WARNING_ERROR)
-    set (COMPILE_WARNING_FLAGS "-Werror -Wall -pedantic")
-  endif (ENABLE_WARNING_ERROR)
-endif()
-
-if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  if (ENABLE_WARNING_ERROR)
-    set (WERROR "-Werror")
+    set (COMPILE_WARNING_FLAGS "-Werror ${COMPILE_WARNING_FLAGS}")
   endif (ENABLE_WARNING_ERROR)
   # TODO aconway 2016-01-06: we should be able to clean up the code and turn on
   # some of these warnings.
-  set (CXX_WARNING_FLAGS "${WERROR} -pedantic -Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-float-equal -Wno-padded -Wno-sign-conversion -Wno-switch-enum -Wno-weak-vtables -Wno-exit-time-destructors -Wno-global-constructors -Wno-shorten-64-to-32 -Wno-documentation -Wno-documentation-unknown-command -Wno-old-style-cast -Wno-missing-noreturn")
+  set (CXX_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-float-equal -Wno-padded -Wno-sign-conversion -Wno-switch-enum -Wno-weak-vtables -Wno-exit-time-destructors -Wno-global-constructors -Wno-shorten-64-to-32 -Wno-documentation -Wno-documentation-unknown-command -Wno-old-style-cast -Wno-missing-noreturn")
 endif()
 
-# Make flags visible to examples.
-set(CXX_WARNING_FLAGS "${CXX_WARNING_FLAGS}" PARENT_SCOPE)
-set(COMPILE_WARNING_FLAGS "${COMPILE_WARNING_FLAGS}" PARENT_SCOPE)
-set(COMPILE_LANGUAGE_FLAGS "${COMPILE_LANGUAGE_FLAGS}" PARENT_SCOPE)
-set(LINK_TIME_OPTIMIZATION "${LTO}" PARENT_SCOPE)
+# Sanitizer flags apply to to both GNU and clang, C and C++
+if(ENABLE_SANITIZERS)
+  set(SANITIZE_FLAGS "-g -fno-omit-frame-pointer -fsanitize=address -fsanitize=leak -fsanitize=undefined")
+endif()
+if(ENABLE_TSAN)
+  set(SANITIZE_FLAGS "-g -fno-omit-frame-pointer -fsanitize=thread")
+endif()
+if (SANITIZE_FLAGS)
+  mark_as_advanced(SANITIZE_FLAGS)
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SANITIZE_FLAGS}")
+  endif()
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZE_FLAGS}")
+  endif()
+endif()
 
+# Flags for example self-test build, CACHE INTERNAL for visibility
+set(C_EXAMPLE_FLAGS "${COMPILE_WARNING_FLAGS} ${CMAKE_C_FLAGS}" CACHE INTERNAL "")
+set(C_EXAMPLE_LINK_FLAGS "${SANITIZE_FLAGS}" CACHE INTERNAL "")
+
+if (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_COMPILER_IS_GNUCC)
+  # Ensure that examples build with c90, to deal with older c++03-as-c compilers.
+  set(C_EXAMPLE_FLAGS "${C_EXAMPLE_FLAGS} -std=iso9899:1990 -pedantic")
+endif()
 
 if (MSVC)
     set(CMAKE_DEBUG_POSTFIX "d")
@@ -315,6 +323,21 @@ pn_absolute_install_dir(EXEC_PREFIX "." ${CMAKE_INSTALL_PREFIX})
 pn_absolute_install_dir(LIBDIR ${LIB_INSTALL_DIR} ${CMAKE_INSTALL_PREFIX})
 pn_absolute_install_dir(INCLUDEDIR ${INCLUDE_INSTALL_DIR} ${CMAKE_INSTALL_PREFIX})
 
+if (CMAKE_SYSTEM_NAME STREQUAL Windows)
+  # No change needed for windows already use correct separator
+  function(to_native_path path result)
+    file (TO_NATIVE_PATH "${path}" path)
+    set (${result} ${path} PARENT_SCOPE)
+  endfunction()
+else (CMAKE_SYSTEM_NAME STREQUAL Windows)
+  # Just change ';'->':'
+  function(to_native_path path result)
+    file (TO_NATIVE_PATH "${path}" path)
+    string (REGEX REPLACE ";" ":" path "${path}")
+    set (${result} ${path} PARENT_SCOPE)
+  endfunction()
+endif (CMAKE_SYSTEM_NAME STREQUAL Windows)
+
 add_subdirectory(docs/api)
 add_subdirectory(../tests/tools/apps/c ../tests/tools/apps/c)
 
@@ -339,8 +362,9 @@ set (qpid-proton-platform-io
 # for full source distribution:
 set (qpid-proton-layers-all
   src/sasl/sasl.c
+  src/sasl/default_sasl.c
   src/sasl/cyrus_sasl.c
-  src/sasl/none_sasl.c
+  src/sasl/cyrus_stub.c
   src/ssl/openssl.c
   src/ssl/schannel.c
   src/ssl/ssl_stub.c
@@ -379,7 +403,7 @@ set (qpid-proton-core
   src/core/autodetect.c
   src/core/transport.c
   src/core/message.c
-  )
+)
 
 set (qpid-proton-include-generated
   ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
@@ -388,7 +412,6 @@ set (qpid-proton-include-generated
   )
 
 set (qpid-proton-private-includes
-  src/extra/scanner.h
   src/messenger/store.h
   src/messenger/subscription.h
   src/messenger/messenger.h
@@ -408,6 +431,8 @@ set (qpid-proton-private-includes
   src/core/dispatcher.h
   src/core/data.h
   src/core/decoder.h
+  src/core/max_align.h
+  src/core/message-internal.h
   src/reactor/io/windows/iocp.h
   src/reactor/selector.h
   src/reactor/io.h
@@ -415,11 +440,11 @@ set (qpid-proton-private-includes
   src/reactor/selectable.h
   src/platform/platform.h
   src/platform/platform_fmt.h
+  src/proactor/netaddr-internal.h
+  src/proactor/proactor-internal.h
   )
 
 set (qpid-proton-extra
-  src/extra/parser.c
-  src/extra/scanner.c
   src/extra/url.c
 
   src/reactor/reactor.c
@@ -452,10 +477,14 @@ set (qpid-proton-include
   include/proton/event.h
   include/proton/import_export.h
   include/proton/link.h
+  include/proton/listener.h
   include/proton/log.h
   include/proton/message.h
+  include/proton/netaddr.h
   include/proton/object.h
+  include/proton/proactor.h
   include/proton/sasl.h
+  include/proton/sasl-plugin.h
   include/proton/session.h
   include/proton/ssl.h
   include/proton/terminus.h
@@ -467,11 +496,75 @@ set (qpid-proton-include
 set (qpid-proton-include-extra
   include/proton/handlers.h
   include/proton/messenger.h
-  include/proton/parser.h
   include/proton/reactor.h
   include/proton/selectable.h
   include/proton/url.h
 )
+
+#
+# Choose a proactor: user can set PROACTOR, or if not set pick a default.
+# The default is the first one that passes its build test, in order listed below.
+# "none" disables the proactor even if a default is available.
+#
+set(PROACTOR "" CACHE STRING "Override default proactor, one of: epoll, libuv, iocp, none")
+string(TOLOWER "${PROACTOR}" PROACTOR)
+
+if (PROACTOR STREQUAL "epoll" OR (NOT PROACTOR AND NOT BUILD_PROACTOR))
+  check_symbol_exists(epoll_wait "sys/epoll.h" HAVE_EPOLL)
+  if (HAVE_EPOLL)
+    set (PROACTOR_OK epoll)
+    set (qpid-proton-proactor src/proactor/epoll.c src/proactor/proactor-internal.c)
+    set (PROACTOR_LIBS ${CMAKE_THREAD_LIBS_INIT} ${TIME_LIB})
+    set_source_files_properties (${qpid-proton-proactor} PROPERTIES
+      COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS} ${LTO}"
+      )
+  endif()
+endif()
+
+if (PROACTOR STREQUAL "iocp" OR (NOT PROACTOR AND NOT PROACTOR_OK))
+  if(WIN32 AND NOT CYGWIN)
+    set (PROACTOR_OK iocp)
+    set (qpid-proton-proactor src/proactor/win_iocp.c src/proactor/proactor-internal.c)
+    set_source_files_properties (${qpid-proton-proactor} PROPERTIES
+      COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_PLATFORM_FLAGS} ${LTO}"
+      COMPILE_DEFINITIONS "${PLATFORM_DEFINITIONS}"
+      )
+  endif(WIN32 AND NOT CYGWIN)
+endif()
+
+if (PROACTOR STREQUAL "libuv" OR (NOT PROACTOR AND NOT PROACTOR_OK))
+  find_package(Libuv)
+  if (LIBUV_FOUND)
+    set (PROACTOR_OK libuv)
+    set (qpid-proton-proactor src/proactor/libuv.c src/proactor/proactor-internal.c)
+    set (PROACTOR_LIBS ${Libuv_LIBRARIES})
+    set_source_files_properties (${qpid-proton-proactor} PROPERTIES
+      COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS} ${LTO}"
+      )
+    include_directories(${Libuv_INCLUDE_DIRS})
+  endif()
+endif()
+
+if (PROACTOR_OK)
+  message(STATUS "Building the ${PROACTOR_OK} proactor")
+elseif (PROACTOR AND NOT PROACTOR STREQUAL "none")
+  message(FATAL_ERROR "Cannot build the ${PROACTOR} proactor")
+endif()
+
+if (CMAKE_SYSTEM_NAME STREQUAL Windows)
+  # No change needed for windows already use correct separator
+  function(to_native_path path result)
+    file (TO_NATIVE_PATH "${path}" path)
+    set (${result} ${path} PARENT_SCOPE)
+  endfunction()
+else (CMAKE_SYSTEM_NAME STREQUAL Windows)
+  # Just change ';'->':'
+  function(to_native_path path result)
+    file (TO_NATIVE_PATH "${path}" path)
+    string (REGEX REPLACE ";" ":" path "${path}")
+    set (${result} ${path} PARENT_SCOPE)
+  endfunction()
+endif (CMAKE_SYSTEM_NAME STREQUAL Windows)
 
 # note: process bindings after the source lists have been defined so
 # the bindings can reference them
@@ -498,6 +591,7 @@ set_source_files_properties (
 if (BUILD_WITH_CXX)
   set_source_files_properties (
     ${qpid-proton-core}
+    ${qpid-proton-proactor}
     ${qpid-proton-layers}
     ${qpid-proton-extra}
     ${qpid-proton-platform}
@@ -516,13 +610,13 @@ add_library (
   )
 add_dependencies(qpid-proton-core generated_c_files)
 
-target_link_libraries (qpid-proton-core ${UUID_LIB} ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS})
+target_link_libraries (qpid-proton-core LINK_PRIVATE ${SSL_LIB} ${SASL_LIB})
 
 set_target_properties (
   qpid-proton-core
   PROPERTIES
-  VERSION   "${PN_LIB_SOMAJOR}.${PN_LIB_SOMINOR}"
-  SOVERSION "${PN_LIB_SOMAJOR}"
+  VERSION   "${PN_LIB_CORE_VERSION}"
+  SOVERSION "${PN_LIB_CORE_MAJOR_VERSION}"
   LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
   )
 
@@ -534,7 +628,8 @@ add_library(
   ${qpid-proton-platform}
   ${qpid-proton-include}
   ${qpid-proton-include-generated}
-
+  # Proactor
+  ${qpid-proton-proactor}
   # Proton Reactor/Messenger
   ${qpid-proton-extra}
   ${qpid-proton-platform-io}
@@ -550,13 +645,13 @@ if (MSVC)
   add_dependencies(qpid-proton qpid-proton-core)
 endif (MSVC)
 
-target_link_libraries (qpid-proton ${UUID_LIB} ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS})
+target_link_libraries (qpid-proton LINK_PRIVATE ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS} ${PROACTOR_LIBS})
 
 set_target_properties (
   qpid-proton
   PROPERTIES
-  VERSION   "${PN_LIB_SOMAJOR}.${PN_LIB_SOMINOR}"
-  SOVERSION "${PN_LIB_SOMAJOR}"
+  VERSION   "${PN_LIB_LEGACY_VERSION}"
+  SOVERSION "${PN_LIB_LEGACY_MAJOR_VERSION}"
   LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
   )
 
@@ -565,8 +660,26 @@ if (MSVC)
   include(WindowsC99CheckDef)
 endif(MSVC)
 
+if (qpid-proton-proactor)
+  # Bizarre CMake variable setting
+  set(HAS_PROACTOR True)
+  set(HAS_PROACTOR ${HAS_PROACTOR} PARENT_SCOPE)
+  add_library (
+    qpid-proton-proactor SHARED ${qpid-proton-proactor})
+  target_link_libraries (qpid-proton-proactor  LINK_PUBLIC qpid-proton-core)
+  target_link_libraries (qpid-proton-proactor  LINK_PRIVATE ${PLATFORM_LIBS} ${PROACTOR_LIBS})
+  list(APPEND LIB_TARGETS qpid-proton-proactor)
+  set_target_properties (
+    qpid-proton-proactor
+    PROPERTIES
+    VERSION   "${PN_LIB_PROACTOR_VERSION}"
+    SOVERSION "${PN_LIB_PROACTOR_MAJOR_VERSION}"
+    LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
+    )
+endif()
+
 # Install executables and libraries
-install (TARGETS qpid-proton qpid-proton-core
+install(TARGETS qpid-proton qpid-proton-core ${LIB_TARGETS}
   EXPORT  proton
   RUNTIME DESTINATION bin
   ARCHIVE DESTINATION ${LIB_INSTALL_DIR}
@@ -586,32 +699,28 @@ install (FILES ${headers} DESTINATION ${INCLUDE_INSTALL_DIR}/proton)
 install (FILES  ${CMAKE_CURRENT_BINARY_DIR}/include/proton/version.h
          DESTINATION ${INCLUDE_INSTALL_DIR}/proton)
 
-# Pkg config file
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/libqpid-proton.pc.in
-  ${CMAKE_CURRENT_BINARY_DIR}/libqpid-proton.pc @ONLY)
-install (FILES
-  ${CMAKE_CURRENT_BINARY_DIR}/libqpid-proton.pc
-  DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/libqpid-proton-core.pc.in
-  ${CMAKE_CURRENT_BINARY_DIR}/libqpid-proton-core.pc @ONLY)
-install (FILES
-  ${CMAKE_CURRENT_BINARY_DIR}/libqpid-proton-core.pc
-  DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
+# Set ${VAR}/${VAR}DEBUG variables, configure and install the packageconf files for LIB
+macro(configure_lib VAR LIB)
+  if(DEFINED CMAKE_IMPORT_LIBRARY_PREFIX)
+    set(LIB_PREFIX ${CMAKE_IMPORT_LIBRARY_PREFIX})
+    set(LIB_SUFFIX ${CMAKE_IMPORT_LIBRARY_SUFFIX})
+  else()
+    set(LIB_PREFIX ${CMAKE_SHARED_LIBRARY_PREFIX})
+    set(LIB_SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
+  endif()
+  set(${VAR} ${LIB_PREFIX}${LIB}${LIB_SUFFIX})
+  set("${VAR}DEBUG" ${LIB_PREFIX}${LIB}${CMAKE_DEBUG_POSTFIX}${LIB_SUFFIX})
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/lib${LIB}.pc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/lib${LIB}.pc @ONLY)
+  install (FILES ${CMAKE_CURRENT_BINARY_DIR}/lib${LIB}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
+endmacro()
 
-
-if (DEFINED CMAKE_IMPORT_LIBRARY_PREFIX)
-set(PROTONLIB ${CMAKE_IMPORT_LIBRARY_PREFIX}qpid-proton${CMAKE_IMPORT_LIBRARY_SUFFIX})
-set(PROTONLIBDEBUG ${CMAKE_IMPORT_LIBRARY_PREFIX}qpid-proton${CMAKE_DEBUG_POSTFIX}${CMAKE_IMPORT_LIBRARY_SUFFIX})
-set(PROTONCORELIB ${CMAKE_IMPORT_LIBRARY_PREFIX}qpid-proton-core${CMAKE_IMPORT_LIBRARY_SUFFIX})
-set(PROTONCORELIBDEBUG ${CMAKE_IMPORT_LIBRARY_PREFIX}qpid-proton-core${CMAKE_DEBUG_POSTFIX}${CMAKE_IMPORT_LIBRARY_SUFFIX})
-else ()
-set(PROTONLIB ${CMAKE_SHARED_LIBRARY_PREFIX}qpid-proton${CMAKE_SHARED_LIBRARY_SUFFIX})
-set(PROTONLIBDEBUG ${CMAKE_SHARED_LIBRARY_PREFIX}qpid-proton${CMAKE_DEBUG_POSTFIX}${CMAKE_SHARED_LIBRARY_SUFFIX})
-set(PROTONCORELIB ${CMAKE_SHARED_LIBRARY_PREFIX}qpid-proton-core${CMAKE_SHARED_LIBRARY_SUFFIX})
-set(PROTONCORELIBDEBUG ${CMAKE_SHARED_LIBRARY_PREFIX}qpid-proton-core${CMAKE_DEBUG_POSTFIX}${CMAKE_SHARED_LIBRARY_SUFFIX})
-endif ()
+configure_lib(PROTONLIB qpid-proton)
+configure_lib(PROTONCORELIB qpid-proton-core)
+if(HAS_PROACTOR)
+  configure_lib(PROTONPROACTORLIB qpid-proton-proactor)
+endif(HAS_PROACTOR)
 
 include(WriteBasicConfigVersionFile)
 
@@ -631,21 +740,6 @@ install (FILES
 
 add_subdirectory(src/tests)
 
-if (CMAKE_SYSTEM_NAME STREQUAL Windows)
-  # No change needed for windows already use correct separator
-  function(to_native_path path result)
-    file (TO_NATIVE_PATH "${path}" path)
-    set (${result} ${path} PARENT_SCOPE)
-  endfunction()
-else (CMAKE_SYSTEM_NAME STREQUAL Windows)
-  # Just change ';'->':'
-  function(to_native_path path result)
-    file (TO_NATIVE_PATH "${path}" path)
-    string (REGEX REPLACE ";" ":" path "${path}")
-    set (${result} ${path} PARENT_SCOPE)
-  endfunction()
-endif (CMAKE_SYSTEM_NAME STREQUAL Windows)
-
 # python test: tests/python/proton-test
 if (BUILD_PYTHON)
   set (py_root "${pn_test_root}/python")
@@ -659,13 +753,16 @@ if (BUILD_PYTHON)
   to_native_path ("${py_pythonpath}" py_pythonpath)
   to_native_path ("${py_path}" py_path)
 
+  if (CMAKE_BUILD_TYPE MATCHES "Coverage")
+    set (python_coverage_options -m coverage run)
+  endif(CMAKE_BUILD_TYPE MATCHES "Coverage")
+
   add_test (NAME python-test
             COMMAND ${env_py}
               "PATH=${py_path}" "PYTHONPATH=${py_pythonpath}"
-              "CLASSPATH=${CMAKE_BINARY_DIR}/proton-j/proton-j.jar"
               "SASLPASSWD=${SASLPASSWD_EXE}"
               ${VALGRIND_ENV}
-              ${PYTHON_EXECUTABLE} "${py_root}/proton-test")
+              ${PYTHON_EXECUTABLE} -- ${python_coverage_options} "${py_root}/proton-test")
   set_tests_properties(python-test PROPERTIES PASS_REGULAR_EXPRESSION "Totals: .* 0 failed")
 
   # Eventually, we'll get rid of this check when other
@@ -673,6 +770,11 @@ if (BUILD_PYTHON)
   # the build for non linux plaforms, it doesn't make sense
   # to try to run them.
   option(TOX_TEST "Enable muti-version python testing with TOX" ON)
+  set(tox_default "py26,py27,py33,py34,py35,py36")
+  set(TOX_ENVLIST ${tox_default} CACHE STRING "List of python environments for TOX tests" )
+  if (NOT (TOX_ENVLIST STREQUAL tox_default))
+    message(WARNING "non-default TOX test set '${TOX_ENVLIST}' (default '${tox_default}')")
+  endif()
   if (CMAKE_SYSTEM_NAME STREQUAL Linux AND TOX_TEST)
     find_program(TOX_EXE "tox")
     if (CMAKE_BUILD_TYPE MATCHES "Coverage")
@@ -684,7 +786,6 @@ if (BUILD_PYTHON)
       add_test (NAME python-tox-test
                 COMMAND ${env_py}
                   "PATH=${py_path}"
-                  "CLASSPATH=${CMAKE_BINARY_DIR}/proton-j/proton-j.jar"
                   "SASLPASSWD=${SASLPASSWD_EXE}"
                   "SWIG=${SWIG_EXECUTABLE}"
                   ${VALGRIND_ENV}
@@ -711,51 +812,6 @@ if (BUILD_PYTHON)
   add_dependencies(quick_perf_py reactor-recv _cproton)
 
 endif (BUILD_PYTHON)
-
-find_program(RUBY_EXE "ruby")
-if (RUBY_EXE AND BUILD_RUBY)
-  set (rb_root "${pn_test_root}/ruby")
-  set (rb_src "${CMAKE_CURRENT_SOURCE_DIR}/bindings/ruby")
-  set (rb_lib "${CMAKE_CURRENT_SOURCE_DIR}/bindings/ruby/lib")
-  set (rb_bin "${CMAKE_CURRENT_BINARY_DIR}/bindings/ruby")
-  set (rb_bld "$<TARGET_FILE_DIR:qpid-proton>")
-  set (rb_path $ENV{PATH} ${rb_bin} ${rb_bld})
-  set (rb_rubylib ${rb_root} ${rb_src} ${rb_bin} ${rb_bld} ${rb_lib})
-  to_native_path("${rb_path}" rb_path)
-  to_native_path("${rb_rubylib}" rb_rubylib)
-
-  # ruby example tests have no dependencies other than standard ruby.
-  add_test(NAME ruby-example-test
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/examples/ruby
-    COMMAND ${env_py} -- "PATH=${rb_path}" "RUBYLIB=${rb_rubylib}"
-    ${RUBY_EXE} example_test.rb -v)
-
-  # ruby unit tests:  tests/ruby/proton-test
-  # only enable the tests if the Ruby gem dependencies were found
-  if (DEFAULT_RUBY_TESTING)
-    add_test (NAME ruby-unit-test
-              COMMAND ${env_py} "PATH=${rb_path}" "RUBYLIB=${rb_rubylib}"
-                      "${rb_root}/proton-test")
-
-    # ruby spec tests
-    find_program(RSPEC_EXE rspec)
-    if (RSPEC_EXE)
-      add_test (NAME ruby-spec-test
-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bindings/ruby
-                COMMAND ${env_py} "PATH=${rb_path}" "RUBYLIB=${rb_rubylib}"
-                        ${RSPEC_EXE})
-
-    else(RSPEC_EXE)
-      message (STATUS "Cannot find rspec, skipping rspec tests")
-    endif(RSPEC_EXE)
-  else (DEFAULT_RUBY_TESTING)
-    message(STATUS "Skipping Ruby tests: missing dependencies")
-  endif (DEFAULT_RUBY_TESTING)
-else (RUBY_EXE)
-  message (STATUS "Cannot find ruby, skipping ruby tests")
-endif()
-
-mark_as_advanced (RUBY_EXE RSPEC_EXE)
 
 if (BUILD_JAVASCRIPT)
   add_test (javascript-codec ${env_py} node ${pn_test_root}/javascript/codec.js)

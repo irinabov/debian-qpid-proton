@@ -24,11 +24,9 @@
 #include <proton/connection.hpp>
 #include <proton/connection_options.hpp>
 #include <proton/container.hpp>
-#include <proton/default_container.hpp>
 #include <proton/message.hpp>
 #include <proton/message_id.hpp>
 #include <proton/messaging_handler.hpp>
-#include <proton/thread_safe.hpp>
 #include <proton/tracker.hpp>
 #include <proton/types.hpp>
 
@@ -102,7 +100,7 @@ int main(int argc, char **argv) {
         opts.parse();
 
         simple_send send(address, user, password, message_count);
-        proton::default_container(send).run();
+        proton::container(send).run();
 
         return 0;
     } catch (const example::bad_option& e) {

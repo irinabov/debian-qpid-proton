@@ -38,6 +38,8 @@ try:
 except ImportError:
     import queue as Queue
 
+log = logging.getLogger("proton")
+
 class Task(Wrapper):
 
     @staticmethod
@@ -84,20 +86,33 @@ class Reactor(Wrapper):
     def __init__(self, *handlers, **kwargs):
         Wrapper.__init__(self, kwargs.get("impl", pn_reactor), pn_reactor_attachments)
         for h in handlers:
-            self.handler.add(h)
+            self.handler.add(h, on_error=self.on_error_delegate())
 
     def _init(self):
         self.errors = []
+
+    # on_error relay handler tied to underlying C reactor.  Use when the
+    # error will always be generated from a callback from this reactor.
+    # Needed to prevent reference cycles and be compatible with wrappers.
+    class ErrorDelegate(object):
+      def __init__(self, reactor):
+        self.reactor_impl = reactor._impl
+      def on_error(self, info):
+        ractor = Reactor.wrap(self.reactor_impl)
+        ractor.on_error(info)
+
+    def on_error_delegate(self):
+        return Reactor.ErrorDelegate(self).on_error
 
     def on_error(self, info):
         self.errors.append(info)
         self.yield_()
 
     def _get_global(self):
-        return WrappedHandler.wrap(pn_reactor_get_global_handler(self._impl), self.on_error)
+        return WrappedHandler.wrap(pn_reactor_get_global_handler(self._impl), self.on_error_delegate())
 
     def _set_global(self, handler):
-        impl = _chandler(handler, self.on_error)
+        impl = _chandler(handler, self.on_error_delegate())
         pn_reactor_set_global_handler(self._impl, impl)
         pn_decref(impl)
 
@@ -118,10 +133,10 @@ class Reactor(Wrapper):
         return pn_reactor_mark(self._impl)
 
     def _get_handler(self):
-        return WrappedHandler.wrap(pn_reactor_get_handler(self._impl), self.on_error)
+        return WrappedHandler.wrap(pn_reactor_get_handler(self._impl), self.on_error_delegate())
 
     def _set_handler(self, handler):
-        impl = _chandler(handler, self.on_error)
+        impl = _chandler(handler, self.on_error_delegate())
         pn_reactor_set_handler(self._impl, impl)
         pn_decref(impl)
 
@@ -164,31 +179,31 @@ class Reactor(Wrapper):
         self._check_errors()
 
     def schedule(self, delay, task):
-        impl = _chandler(task, self.on_error)
+        impl = _chandler(task, self.on_error_delegate())
         task = Task.wrap(pn_reactor_schedule(self._impl, secs2millis(delay), impl))
         pn_decref(impl)
         return task
 
     def acceptor(self, host, port, handler=None):
-        impl = _chandler(handler, self.on_error)
+        impl = _chandler(handler, self.on_error_delegate())
         aimpl = pn_reactor_acceptor(self._impl, unicode2utf8(host), str(port), impl)
         pn_decref(impl)
         if aimpl:
             return Acceptor(aimpl)
         else:
-            raise IOError("%s (%s:%s)" % pn_error_text(pn_reactor_error(self._impl)), host, port)
+            raise IOError("%s (%s:%s)" % (pn_error_text(pn_reactor_error(self._impl)), host, port))
 
     def connection(self, handler=None):
         """Deprecated: use connection_to_host() instead
         """
-        impl = _chandler(handler, self.on_error)
+        impl = _chandler(handler, self.on_error_delegate())
         result = Connection.wrap(pn_reactor_connection(self._impl, impl))
         if impl: pn_decref(impl)
         return result
 
     def connection_to_host(self, host, port, handler=None):
         """Create an outgoing Connection that will be managed by the reactor.
-        The reator's pn_iohandler will create a socket connection to the host
+        The reactor's pn_iohandler will create a socket connection to the host
         once the connection is opened.
         """
         conn = self.connection(handler)
@@ -215,7 +230,7 @@ class Reactor(Wrapper):
         return utf82unicode(_url)
 
     def selectable(self, handler=None):
-        impl = _chandler(handler, self.on_error)
+        impl = _chandler(handler, self.on_error_delegate())
         result = Selectable.wrap(pn_reactor_selectable(self._impl))
         if impl:
             record = pn_selectable_attachments(result._impl)
@@ -259,7 +274,7 @@ class EventInjector(object):
     def close(self):
         """
         Request that this EventInjector be closed. Existing events
-        will be dispctahed on the reactors event dispactch thread,
+        will be dispatched on the reactors event dispatch thread,
         then this will be removed from the set of interest.
         """
         self._closed = True
@@ -348,6 +363,13 @@ class Transaction(object):
         return dlv
 
     def accept(self, delivery):
+        """
+        Accept the message corresponding to this delivery.
+
+        Note that this method cannot currently be used in combination
+        with transactions.
+        """
+
         self.update(delivery, PN_ACCEPTED)
         if self.settle_before_discharge:
             delivery.settle()
@@ -376,7 +398,7 @@ class Transaction(object):
             elif event.delivery.remote_state == Delivery.REJECTED:
                 self.handler.on_transaction_declare_failed(event)
             else:
-                logging.warning("Unexpected outcome for declare: %s" % event.delivery.remote_state)
+                log.warning("Unexpected outcome for declare: %s" % event.delivery.remote_state)
                 self.handler.on_transaction_declare_failed(event)
         elif event.delivery == self._discharge:
             if event.delivery.remote_state == Delivery.REJECTED:
@@ -530,6 +552,7 @@ class Connector(Handler):
         self.password = None
         self.virtual_host = None
         self.ssl_sni = None
+        self.max_frame_size = None
 
     def _connect(self, connection, reactor):
         assert(reactor is not None)
@@ -538,7 +561,7 @@ class Connector(Handler):
         # if virtual-host not set, use host from address as default
         if self.virtual_host is None:
             connection.hostname = url.host
-        logging.debug("connecting to %s..." % url)
+        log.debug("connecting to %r..." % url)
 
         transport = Transport()
         if self.sasl_enabled:
@@ -562,12 +585,14 @@ class Connector(Handler):
                 raise SSLUnavailable("amqps: SSL libraries not found")
             self.ssl = SSL(transport, self.ssl_domain)
             self.ssl.peer_hostname = self.ssl_sni or self.virtual_host or url.host
+        if self.max_frame_size:
+            transport.max_frame_size = self.max_frame_size
 
     def on_connection_local_open(self, event):
         self._connect(event.connection, event.reactor)
 
     def on_connection_remote_open(self, event):
-        logging.debug("connected to %s" % event.connection.hostname)
+        log.debug("connected to %s" % event.connection.hostname)
         if self.reconnect:
             self.reconnect.reset()
             self.transport = None
@@ -576,25 +601,26 @@ class Connector(Handler):
         self.on_transport_closed(event)
 
     def on_transport_closed(self, event):
-        if self.connection and self.connection.state & Endpoint.LOCAL_ACTIVE:
+        if self.connection is None: return
+        if self.connection.state & Endpoint.LOCAL_ACTIVE:
             if self.reconnect:
                 event.transport.unbind()
                 delay = self.reconnect.next()
                 if delay == 0:
-                    logging.info("Disconnected, reconnecting...")
+                    log.info("Disconnected, reconnecting...")
                     self._connect(self.connection, event.reactor)
+                    return
                 else:
-                    logging.info("Disconnected will try to reconnect after %s seconds" % delay)
+                    log.info("Disconnected will try to reconnect after %s seconds" % delay)
                     event.reactor.schedule(delay, self)
+                    return
             else:
-                logging.debug("Disconnected")
-                self.connection = None
+                log.debug("Disconnected")
+        # See connector.cpp: conn.free()/pn_connection_release() here?
+        self.connection = None
 
     def on_timer_task(self, event):
         self._connect(self.connection, event.reactor)
-
-    def on_connection_remote_close(self, event):
-        self.connection = None
 
 class Backoff(object):
     """
@@ -646,7 +672,7 @@ class SSLConfig(object):
 
 class Container(Reactor):
     """A representation of the AMQP concept of a 'container', which
-       lossely speaking is something that establishes links to or from
+       loosely speaking is something that establishes links to or from
        another container, over which messages are transfered. This is
        an extension to the Reactor class that adds convenience methods
        for creating connections and sender- or receiver- links.
@@ -679,29 +705,34 @@ class Container(Reactor):
 
         Only one of url or urls should be specified.
 
-        @param reconnect: A value of False will prevent the library
-        form automatically trying to reconnect if the underlying
-        socket is disconnected before the connection has been closed.
+        @param reconnect: Reconnect is enabled by default.  You can
+        pass in an instance of Backoff to control reconnect behavior.
+        A value of False will prevent the library from automatically
+        trying to reconnect if the underlying socket is disconnected
+        before the connection has been closed.
 
         @param heartbeat: A value in milliseconds indicating the
         desired frequency of heartbeats used to test the underlying
         socket is alive.
 
         @param ssl_domain: SSL configuration in the form of an
-        instance of proton.SSLdomain.
+        instance of proton.SSLDomain.
 
         @param handler: a connection scoped handler that will be
         called to process any events in the scope of this connection
         or its child links
 
-        @param kwargs: sasl_enabled, which determines whether a sasl layer is
-        used for the connection; allowed_mechs an optional list of SASL
-        mechanisms to allow if sasl is enabled; allow_insecure_mechs a flag
+        @param kwargs: 'sasl_enabled', which determines whether a sasl
+        layer is used for the connection; 'allowed_mechs', an optional
+        string containing a space-separated list of SASL mechanisms to
+        allow if sasl is enabled; 'allow_insecure_mechs', a flag
         indicating whether insecure mechanisms, such as PLAIN over a
-        non-encrypted socket, are allowed; 'virtual_host' the hostname to set
-        in the Open performative used by peer to determine the correct
-        back-end service for the client. If 'virtual_host' is not supplied the
-        host field from the URL is used instead."
+        non-encrypted socket, are allowed; 'virtual_host', the
+        hostname to set in the Open performative used by peer to
+        determine the correct back-end service for the client. If
+        'virtual_host' is not supplied the host field from the URL is
+        used instead; 'user', the user to authenticate; 'password',
+        the authentication secret.
 
         """
         conn = self.connection(handler)
@@ -721,6 +752,7 @@ class Container(Reactor):
             # only set hostname if virtual-host is a non-empty string
             conn.hostname = connector.virtual_host
         connector.ssl_sni = kwargs.get('sni')
+        connector.max_frame_size = kwargs.get('max_frame_size')
 
         conn._overrides = connector
         if url: connector.address = Urls([url])
@@ -770,7 +802,7 @@ class Container(Reactor):
         specified as the second argument (or as a keyword
         argument). The source address can also be specified if
         desired. (2) Alternatively a URL can be passed as the first
-        argument. In this case a new connection will be establised on
+        argument. In this case a new connection will be established on
         which the link will be attached. If a path is specified and
         the target is not, then the path of the URL is used as the
         target address.
@@ -811,7 +843,7 @@ class Container(Reactor):
         specified as the second argument (or as a keyword
         argument). The target address can also be specified if
         desired. (2) Alternatively a URL can be passed as the first
-        argument. In this case a new connection will be establised on
+        argument. In this case a new connection will be established on
         which the link will be attached. If a path is specified and
         the source is not, then the path of the URL is used as the
         target address.
@@ -850,6 +882,11 @@ class Container(Reactor):
                     if hasattr(event.delivery, "transaction"):
                         event.transaction = event.delivery.transaction
                         event.delivery.transaction.handle_outcome(event)
+
+                def on_unhandled(self, method, event):
+                    if handler:
+                        event.dispatch(handler)
+
             context._txn_ctrl = self.create_sender(context, None, name='txn-ctrl', handler=InternalTransactionHandler())
             context._txn_ctrl.target.type = Terminus.COORDINATOR
             context._txn_ctrl.target.capabilities.put_object(symbol(u'amqp:local-transactions'))

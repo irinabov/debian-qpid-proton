@@ -20,30 +20,54 @@
  * under the License.
  */
 
-#include "./fwd.hpp"
 #include "./internal/export.hpp"
 
-#include <string>
+/// @file
+/// @copybrief proton::listener
+
+struct pn_listener_t;
 
 namespace proton {
 
 /// A listener for incoming connections.
 class PN_CPP_CLASS_EXTERN listener {
+    /// @cond INTERNAL
+    listener(pn_listener_t*);
+    /// @endcond
+
   public:
     /// Create an empty listener.
     PN_CPP_EXTERN listener();
 
-    /// @cond INTERNAL
-    PN_CPP_EXTERN listener(container&, const std::string&);
-    /// @endcond
+    /// Copy a listener.
+    PN_CPP_EXTERN listener(const listener&);
+
+    PN_CPP_EXTERN ~listener();
+
+    /// Copy a listener.
+    PN_CPP_EXTERN listener& operator=(const listener&);
 
     /// Stop listening on the address provided to the call to
     /// container::listen that returned this listener.
     PN_CPP_EXTERN void stop();
 
- private:
-    std::string url_;
-    container* container_;
+    /// **Unsettedled API**
+    ///
+    /// Return the port used by the listener.
+    /// If port 0 was passed to container::listen, this will be a dynamically allocated port.
+    /// @throw proton::error if the listener does not have a port
+    PN_CPP_EXTERN int port();
+
+    /// **Unsettedled API**
+    ///
+    /// Get the container.
+    /// @throw proton::error if this listener is not managed by a container.
+    PN_CPP_EXTERN class container& container() const;
+
+  private:
+    pn_listener_t* listener_;
+
+  friend class container;
 };
 
 } // proton

@@ -24,13 +24,12 @@
 #include <proton/connection_options.hpp>
 #include <proton/connection.hpp>
 #include <proton/container.hpp>
-#include <proton/default_container.hpp>
 #include <proton/error_condition.hpp>
+#include <proton/listen_handler.hpp>
 #include <proton/listener.hpp>
 #include <proton/message.hpp>
 #include <proton/messaging_handler.hpp>
 #include <proton/ssl.hpp>
-#include <proton/thread_safe.hpp>
 #include <proton/tracker.hpp>
 #include <proton/transport.hpp>
 
@@ -50,32 +49,28 @@ ssl_certificate platform_certificate(const std::string &base_name, const std::st
 std::string find_CN(const std::string &);
 
 namespace {
-    std::string verify_full("full");  // Normal verification
-    std::string verify_noname("noname"); // Skip matching host name against the certificate
-    std::string verify_fail("fail");  // Force name mismatch failure
+    const std::string verify_full("full");  // Normal verification
+    const std::string verify_noname("noname"); // Skip matching host name against the certificate
+    const std::string verify_fail("fail");  // Force name mismatch failure
     std::string verify(verify_full);  // Default for example
     std::string cert_directory;
-
-    class example_cert_error : public std::runtime_error
-    {
-    public:
-        explicit example_cert_error(const std::string& s) : std::runtime_error(s) {}
-    };
-
 }
 
 
 struct server_handler : public proton::messaging_handler {
-    std::string url;
+    proton::listener listener;
 
     void on_connection_open(proton::connection &c) OVERRIDE {
         std::cout << "Inbound server connection connected via SSL.  Protocol: " <<
             c.transport().ssl().protocol() << std::endl;
-        c.container().stop_listening(url);  // Just expecting the one connection.
+        listener.stop();  // Just expecting the one connection.
+
+        // Go and do default inbound open stuff too
+        messaging_handler::on_connection_open(c);
     }
 
     void on_transport_error(proton::transport &t) OVERRIDE {
-        t.connection().container().stop_listening(url);
+        listener.stop();
     }
 
     void on_message(proton::delivery &, proton::message &m) OVERRIDE {
@@ -86,12 +81,18 @@ struct server_handler : public proton::messaging_handler {
 
 class hello_world_direct : public proton::messaging_handler {
   private:
-    std::string url;
+    class listener_open_handler : public proton::listen_handler {
+        void on_open(proton::listener& l) OVERRIDE {
+            std::ostringstream url;
+            url << "//:" << l.port() << "/example"; // Connect to the actual port
+            l.container().open_sender(url.str());
+        }
+    };
+
+    listener_open_handler listen_handler;
     server_handler s_handler;
 
   public:
-    hello_world_direct(const std::string& u) : url(u) {}
-
     void on_container_start(proton::container &c) OVERRIDE {
         // Configure listener.  Details vary by platform.
         ssl_certificate server_cert = platform_certificate("tserver", "tserverpw");
@@ -122,9 +123,7 @@ class hello_world_direct : public proton::messaging_handler {
         } else throw std::logic_error("bad verify mode: " + verify);
 
         c.client_connection_options(client_opts);
-        s_handler.url = url;
-        c.listen(url);
-        c.open_sender(url);
+        s_handler.listener = c.listen("//:0", listen_handler); // Listen on port 0 for a dynamic port
     }
 
     void on_connection_open(proton::connection &c) OVERRIDE {
@@ -135,8 +134,12 @@ class hello_world_direct : public proton::messaging_handler {
 
     void on_transport_error(proton::transport &t) OVERRIDE {
         std::string err = t.error().what();
-        if (err.find("certificate"))
-            throw example_cert_error(err);
+        if (verify == verify_fail && err.find("certificate") != std::string::npos) {
+            std::cout << "Expected failure of connection with wrong peer name: " << err
+                      << std::endl;
+        } else {
+            std::cout << "Unexpected transport error: " << err << std::endl;
+        }
     }
 
     void on_sendable(proton::sender &s) OVERRIDE {
@@ -153,12 +156,7 @@ class hello_world_direct : public proton::messaging_handler {
 };
 
 int main(int argc, char **argv) {
-    // Pick an "unusual" port since we are going to be talking to
-    // ourselves, not a broker.
-    // Note the use of "amqps" as the URL scheme to denote a TLS/SSL connection.
-    std::string address("amqps://127.0.0.1:8888/examples");
     example::options opts(argc, argv);
-    opts.add_value(address, 'a', "address", "connect and send to URL", "URL");
     opts.add_value(cert_directory, 'c', "cert_directory",
                    "directory containing SSL certificates and private key information", "CERTDIR");
     opts.add_value(verify, 'v', "verify", "verify type: \"minimum\", \"full\", \"fail\"", "VERIFY");
@@ -174,15 +172,9 @@ int main(int argc, char **argv) {
         if (verify != verify_noname && verify != verify_full && verify != verify_fail)
             throw std::runtime_error("bad verify argument: " + verify);
 
-        hello_world_direct hwd(address);
-        proton::default_container(hwd).run();
+        hello_world_direct hwd;
+        proton::container(hwd).run();
         return 0;
-    } catch (const example_cert_error& ce) {
-        if (verify == verify_fail) {
-            std::cout << "Expected failure of connection with wrong peer name: " << ce.what() << std::endl;
-            return 0;
-        }
-        std::cerr << "unexpected internal certificate failure: " << ce.what() << std::endl;
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
     }

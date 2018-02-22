@@ -20,7 +20,9 @@
  * under the License.
  */
 
+#include <proton/import_export.h>
 #include <proton/types.h>
+#include <proton/event.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,87 +31,93 @@ extern "C" {
 /**
  * @file
  *
- * **Experimental** - A listener for incoming connections for the @ref
- * proactor.
+ * @copybrief listener
  *
- * @addtogroup proactor
+ * @addtogroup listener
  * @{
- */
-
-/**
- * @cond INTERNAL
- */
-typedef struct pn_proactor_t pn_proactor_t;
-typedef struct pn_condition_t pn_condition_t;
-/**
- * @endcond
- */
-
-/**
- * A listener accepts connections.
- */
-typedef struct pn_listener_t pn_listener_t;
-
-/**
- * Create a listener.
  *
- * You can use pn_listener_set_context() or pn_listener_attachments() to set
- * application data that can be accessed when accepting connections.
- *
- * You must pass the returned listener to pn_proactor_listen(), the proactor
- * will free the listener when it is no longer active.
+ * @note Thread safety: Listener has the same thread-safety rules as a
+ * @ref core object.  Calls to a single listener must be serialized
+ * with the exception of pn_listener_close().
  */
-PN_EXTERN pn_listener_t *pn_listener(void);
 
 /**
- * Asynchronously accept a connection using the listener.
+ * Create a listener to pass to pn_proactor_listen()
  *
- * @param[in] connection the listener takes ownership, do not free.
+ * You can use pn_listener_attachments() to set application data that can be
+ * accessed when accepting connections.
  */
-PN_EXTERN int pn_listener_accept(pn_listener_t*, pn_connection_t *connection);
+PNP_EXTERN pn_listener_t *pn_listener(void);
+
+/**
+ * Free a listener. You don't need to call this unless you create a listener
+ * with pn_listen() but never pass it to pn_proactor_listen()
+ */
+PNP_EXTERN void pn_listener_free(pn_listener_t *l);
+
+/**
+ * Accept an incoming connection request using @p transport and @p connection,
+ * which can be configured before the call.
+ *
+ * Call after a @ref PN_LISTENER_ACCEPT event.
+ *
+ * Errors are returned as @ref PN_TRANSPORT_CLOSED events by pn_proactor_wait().
+ *
+ * @param[in] listener the listener
+ * @param[in] connection If NULL a new connection is created.
+ * Memory management is the same as for pn_proactor_connect2()
+ * @param[in] transport If NULL a new transport is created.
+ * Memory management is the same as for pn_proactor_connect2()
+ */
+PNP_EXTERN void pn_listener_accept2(pn_listener_t *listener, pn_connection_t *connection, pn_transport_t *transport);
+
+/**
+ * @deprecated Equivalent to pn_listener_accept2(listener, connection, NULL)
+ */
+PNP_EXTERN void pn_listener_accept(pn_listener_t* listener, pn_connection_t *connection);
 
 /**
  * Get the error condition for a listener.
  */
-PN_EXTERN pn_condition_t *pn_listener_condition(pn_listener_t *l);
+PNP_EXTERN pn_condition_t *pn_listener_condition(pn_listener_t *l);
 
 /**
  * @cond INTERNAL
  */
-    
-/**
- * @deprecated
- *
- * Get the application context that is associated with a listener.
- */
-PN_EXTERN void *pn_listener_get_context(pn_listener_t *listener);
 
-/**
- * @deprecated
- *
- * Set a new application context for a listener.
- */
-PN_EXTERN void pn_listener_set_context(pn_listener_t *listener, void *context);
+PNP_EXTERN void *pn_listener_get_context(pn_listener_t *listener);
+
+PNP_EXTERN void pn_listener_set_context(pn_listener_t *listener, void *context);
 
 /**
  * @endcond
  */
-    
+
 /**
  * Get the attachments that are associated with a listener object.
  */
-PN_EXTERN pn_record_t *pn_listener_attachments(pn_listener_t *listener);
+PNP_EXTERN pn_record_t *pn_listener_attachments(pn_listener_t *listener);
 
 /**
- * Close the listener (thread safe).
+ * Close the listener.
+ * The PN_LISTENER_CLOSE event is generated when the listener has stopped listening.
+ *
+ * @note Thread safe. Must not be called after the PN_LISTENER_CLOSE event has
+ * been handled as the listener may be freed .
  */
-PN_EXTERN void pn_listener_close(pn_listener_t *l);
+PNP_EXTERN void pn_listener_close(pn_listener_t *l);
 
 /**
  * The proactor associated with a listener.
  */
-PN_EXTERN pn_proactor_t *pn_listener_proactor(pn_listener_t *c);
+PNP_EXTERN pn_proactor_t *pn_listener_proactor(pn_listener_t *c);
 
+/**
+ * Return the listener associated with an event.
+ *
+ * @return NULL if the event is not associated with a listener.
+ */
+PNP_EXTERN pn_listener_t *pn_event_listener(pn_event_t *event);
 
 /**
  *@}

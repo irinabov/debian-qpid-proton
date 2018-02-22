@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
@@ -26,10 +25,42 @@ module Qpid::Proton
   class Receiver < Link
 
     # @private
-    include Util::SwigHelper
-
-    # @private
     PROTON_METHOD_PREFIX = "pn_link"
+    # @private
+    include Util::Wrapper
+
+    # Open {Receiver} link
+    #
+    # @overload open_receiver(address)
+    #   @param address [String] address of the source to receive from
+    # @overload open_receiver(opts)
+    #   @param opts [Hash] Receiver options, see {Receiver#open}
+    #   @option opts [Boolean] :credit_window automatically maintain this much credit
+    #     for messages to be pre-fetched while the current message is processed.
+    #   @option opts [Boolean] :auto_accept if true, deliveries that are not settled by
+    #     the application in {MessagingHandler#on_message} are automatically accepted.
+    #   @option opts [Integer] :credit_window (10) automatically replenish credits for flow control.
+    #   @option opts [Boolean] :dynamic (false) dynamic property for source {Terminus#dynamic}
+    #   @option opts [String,Hash] :source source address or source options, see {Terminus#apply}
+    #   @option opts [String,Hash] :target target address or target options, see {Terminus#apply}
+    #   @option opts [String] :name (generated) unique name for the link.
+    def open(opts=nil)
+      opts ||= {}
+      opts = { :source => opts } if opts.is_a? String
+      @credit_window =  opts.fetch(:credit_window, 10)
+      @auto_accept = opts.fetch(:auto_accept, true)
+      source.apply(opts[:source])
+      target.apply(opts[:target])
+      source.dynamic = !!opts[:dynamic]
+      super()
+      self
+    end
+
+    # @return [Integer] credit window, see {#open}
+    attr_reader :credit_window
+
+    # @return [Boolean] auto_accept flag, see {#open}
+    attr_reader :auto_accept
 
     # @!attribute drain
     #
@@ -43,7 +74,7 @@ module Qpid::Proton
     #
     # @return [Boolean] True if drain mode is set.
     #
-    proton_accessor :drain
+    proton_set_get :drain
 
     # @!attribute [r] draining?
     #
@@ -58,7 +89,7 @@ module Qpid::Proton
 
     # Grants credit for incoming deliveries.
     #
-    # @param n [Fixnum] The amount to increment the link credit.
+    # @param n [Integer] The amount to increment the link credit.
     #
     def flow(n)
       Cproton.pn_link_flow(@impl, n)
@@ -74,10 +105,10 @@ module Qpid::Proton
     # #receive until nil is returned, or verify that #partial? is false and
     # Delivery#pending is 0.
     #
-    # @param limit [Fixnum] The maximum bytes to receive.
+    # @param limit [Integer] The maximum bytes to receive.
     #
-    # @return [Fixnum, nil] The number of bytes received, or nil if the end of
-    # the stream was reached.t
+    # @return [Integer, nil] The number of bytes received, or nil if the end of
+    # the stream was reached.
     #
     # @see Deliver#pending To see how much buffer space is needed.
     #

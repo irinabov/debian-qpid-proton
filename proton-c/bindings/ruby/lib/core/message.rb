@@ -1,4 +1,3 @@
-#--
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,77 +14,45 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#++
+
 
 module Qpid::Proton
 
-  # A Message represents an addressable quantity of data.
+  # Messsage data and headers that can sent or received on a {Link}
   #
-  # ==== Message Body
+  # {#body} is the main message content.
+  # {#properties} is a {Hash} of extra properties that can be attached to the message.
   #
-  # The message body can be set using the #body= method. The message will
-  # then attempt to determine how exactly to encode the content.
+  # @example Create a message containing a Unicode string
+  #   msg = Qpid::Proton::Message.new "this is a string"
   #
-  # ==== Examples
-  #
-  # To create a message for sending:
-  #
-  #   # send a simple text message
+  # @example Create a message containing binary data
   #   msg = Qpid::Proton::Message.new
-  #   msg.body = "STATE: update"
-  #
-  #   # send a binary chunk of data
-  #   data = File.binread("/home/qpid/binfile.tar.gz")
-  #   msg = Qpid::Proton::Message.new
-  #   msg.body = Qpid::Proton::BinaryString.new(data)
+  #   msg.body = Qpid::Proton::BinaryString.new(File.binread("/home/qpid/binfile.tar.gz"))
   #
   class Message
+    include Util::Deprecation
 
     # @private
-    def proton_send(sender, tag = nil)
-      dlv = sender.delivery(tag || sender.delivery_tag)
-      encoded = self.encode
-      sender.stream(encoded)
-      sender.advance
-      dlv.settle if sender.snd_settle_mode == Link::SND_SETTLED
-      return dlv
-    end
+    PROTON_METHOD_PREFIX = "pn_message"
+    # @private
+    include Util::Wrapper
 
-    # Decodes a message from supplied AMQP data and returns the number
-    # of bytes consumed.
-    #
-    # ==== Options
-    #
-    # * encoded - the encoded data
-    #
+    # Decodes a message from AMQP binary data.
+    # @param encoded [String] the encoded bytes
+    # @return[Integer] the number of bytes consumed
     def decode(encoded)
       check(Cproton.pn_message_decode(@impl, encoded, encoded.length))
-
       post_decode
     end
 
-    def post_decode # :nodoc:
+    # @private
+    def post_decode
       # decode elements from the message
-      @properties = {}
-      props = Codec::Data.new(Cproton::pn_message_properties(@impl))
-      if props.next
-        @properties = props.type.get(props)
-      end
-      @instructions = nil
-      insts = Codec::Data.new(Cproton::pn_message_instructions(@impl))
-      if insts.next
-        @instructions = insts.type.get(insts)
-      end
-      @annotations = nil
-      annts = Codec::Data.new(Cproton::pn_message_annotations(@impl))
-      if annts.next
-        @annotations = annts.type.get(annts)
-      end
-      @body = nil
-      body = Codec::Data.new(Cproton::pn_message_body(@impl))
-      if body.next
-        @body = body.type.get(body)
-      end
+      @properties = Codec::Data.to_object(Cproton::pn_message_properties(@impl)) || {}
+      @instructions = Codec:: Data.to_object(Cproton::pn_message_instructions(@impl)) || {}
+      @annotations = Codec::Data.to_object(Cproton::pn_message_annotations(@impl)) || {}
+      @body = Codec::Data.to_object(Cproton::pn_message_body(@impl))
     end
 
     # Encodes the message.
@@ -103,47 +70,38 @@ module Qpid::Proton
       end
     end
 
-    def pre_encode # :nodoc:
+    # @private
+    def pre_encode
       # encode elements from the message
-      props = Codec::Data.new(Cproton::pn_message_properties(@impl))
-      props.clear
-      Codec::Mapping.for_class(@properties.class).put(props, @properties) unless @properties.empty?
-      insts = Codec::Data.new(Cproton::pn_message_instructions(@impl))
-      insts.clear
-      if !@instructions.nil?
-        mapping = Codec::Mapping.for_class(@instructions.class)
-        mapping.put(insts, @instructions)
+      Codec::Data.from_object(Cproton::pn_message_properties(@impl),
+                              !@properties.empty? && Types.symbol_keys!(@properties))
+      Codec::Data.from_object(Cproton::pn_message_instructions(@impl),
+                              !@instructions.empty? && Types.symbol_keys!(@instructions))
+      if @annotations           # Make sure keys are symbols
+        @annotations.keys.each do |k|
+          @annotations[k.to_sym] = @annotations.delete(k) unless k.is_a? Symbol
+        end
       end
-      annts = Codec::Data.new(Cproton::pn_message_annotations(@impl))
-      annts.clear
-      if !@annotations.nil?
-        mapping = Codec::Mapping.for_class(@annotations.class)
-        mapping.put(annts, @annotations, :keys => :SYMBOL)
-      end
-      body = Codec::Data.new(Cproton::pn_message_body(@impl))
-      body.clear
-      if !@body.nil?
-        mapping = Codec::Mapping.for_class(@body.class)
-        mapping.put(body, @body)
-      end
+      Codec::Data.from_object(Cproton::pn_message_annotations(@impl), !@annotations.empty? && @annotations)
+      Codec::Data.from_object(Cproton::pn_message_body(@impl), @body)
     end
 
     # Creates a new +Message+ instance.
-    def initialize
+    # @param body the body of the message, equivalent to calling m.body=(body)
+    # @param opts [Hash] additional options, equivalent to +Message#key=value+ for each +key=>value+
+    def initialize(body = nil, opts={})
       @impl = Cproton.pn_message
       ObjectSpace.define_finalizer(self, self.class.finalize!(@impl))
       @properties = {}
       @instructions = {}
       @annotations = {}
-      @body = nil
-    end
-
-    def to_s
-      tmp = Cproton.pn_string("")
-      Cproton.pn_inspect(@impl, tmp)
-      result = Cproton.pn_string_get(tmp)
-      Cproton.pn_free(tmp)
-      return result
+      self.body = body unless body.nil?
+      if !opts.nil? then
+        opts.each do |k, v|
+          setter = (k.to_s+"=").to_sym()
+          self.send setter, v
+        end
+      end
     end
 
     # Invoked by garbage collection to clean up resources used
@@ -224,7 +182,7 @@ module Qpid::Proton
     # * priority - the priority value
     #
     def priority=(priority)
-      raise TypeError.new("invalid priority: #{priority}") if priority.nil? || !([Float, Fixnum].include?(priority.class))
+      raise TypeError.new("invalid priority: #{priority}") if not priority.is_a?(Numeric)
       raise RangeError.new("priority out of range: #{priority}") if ((priority > 255) || (priority < 0))
       Cproton.pn_message_set_priority(@impl, priority.floor)
     end
@@ -242,8 +200,8 @@ module Qpid::Proton
     # * time - the time in milliseconds
     #
     def ttl=(time)
-      raise TypeError.new("invalid ttl: #{time}") if time.nil? || !([Float, Fixnum].include?(time.class))
-      raise RangeError.new("time out of range: #{time}") if ((time < 0))
+      raise TypeError.new("invalid ttl: #{time}") if not time.is_a?(Numeric)
+      raise RangeError.new("ttl out of range: #{time}") if ((time.to_i < 0))
       Cproton.pn_message_set_ttl(@impl, time.floor)
     end
 
@@ -275,9 +233,8 @@ module Qpid::Proton
     # * count - the delivery count
     #
     def delivery_count=(count)
-      raise ::ArgumentError.new("invalid count: #{count}") if count.nil? || !([Float, Fixnum].include?(count.class))
+      raise ::ArgumentError.new("invalid count: #{count}") if not count.is_a?(Numeric)
       raise RangeError.new("count out of range: #{count}") if count < 0
-
       Cproton.pn_message_set_delivery_count(@impl, count.floor)
     end
 
@@ -408,25 +365,15 @@ module Qpid::Proton
       Cproton.pn_message_get_content_type(@impl)
     end
 
-    # Sets the message content.
-    #
-    # *WARNING:* This method has been deprecated. Please use #body= instead to
-    # set the content of a message.
-    #
-    # ==== Options
-    #
-    # * content - the content
-    #
+    # @deprecated use {#body=}
     def content=(content)
+      deprecated __method__, "body="
       Cproton.pn_message_load(@impl, content)
     end
 
-    # Returns the message content.
-    #
-    # *WARNING:* This method has been deprecated. Please use #body instead to
-    # retrieve the content of a message.
-    #
+    # @deprecated use {#body}
     def content
+      deprecated __method__, "body"
       size = 16
       loop do
         result = Cproton.pn_message_save(@impl, size)
@@ -542,88 +489,32 @@ module Qpid::Proton
       Cproton.pn_message_get_reply_to_group_id(@impl)
     end
 
-    # Returns the list of property names for associated with this message.
-    #
-    # ==== Examples
-    #
-    #   msg.properties.each do |name|
-    #   end
-    #
-    def properties
-      @properties
-    end
+    # @return [Hash] Application properties for the message
+    attr_accessor :properties
 
-    # Replaces the entire set of properties with the specified hash.
-    #
-    def properties=(properties)
-      @properties = properties
-    end
+    # Equivalent to +{#properties}[name] = value+
+    def []=(name, value) @properties[name] = value; end
 
-    # Assigns the value given to the named property.
-    #
-    # ==== Arguments
-    #
-    # * name - the property name
-    # * value - the property value
-    #
-    def []=(name, value)
-      @properties[name] = value
-    end
+    # Equivalent to +{#properties}[name]+
+    def [](name) @properties[name]; end
 
-    # Retrieves the value for the specified property name. If not found, then
-    # it returns nil.
-    #
-    def [](name)
-      @properties[name]
-    end
+    # Equivalent to +{#properties}.delete(name)+
+    def delete_property(name) @properties.delete(name); end
 
-    # Deletes the named property.
-    #
-    def delete_property(name)
-      @properties.delete(name)
-    end
+    # @return [Hash] Delivery instructions for this message.
+    attr_accessor :instructions
 
-    # Returns the instructions for this message.
-    #
-    def instructions
-      @instructions
-    end
+    # @return [Hash] Delivery annotations for this message.
+    attr_accessor :annotations
 
-    # Assigns instructions to this message.
-    #
-    def instructions=(instr)
-      @instructions = instr
-    end
-
-    # Returns the annotations for this message.
-    #
-    def annotations
-      @annotations
-    end
-
-    # Assigns annotations to this message.
-    #
-    def annotations=(annotations)
-      @annotations = annotations
-    end
-
-    # Returns the body property of the message.
-    #
-    def body
-      @body
-    end
-
-    # Assigns a new value to the body of the message.
-    #
-    def body=(body)
-      @body = body
-    end
+    # @return [Object] body of the message.
+    attr_accessor :body
 
     private
 
     def check(err) # :nodoc:
       if err < 0
-        raise DataError, "[#{err}]: #{Cproton.pn_message_error(@data)}"
+        raise TypeError, "[#{err}]: #{Cproton.pn_message_error(@data)}"
       else
         return err
       end

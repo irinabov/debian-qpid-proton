@@ -31,7 +31,7 @@
 
 namespace proton {
 
-template <class T> class thread_safe;
+template <class T> class returned;
 
 namespace internal {
 
@@ -87,7 +87,7 @@ template <class T> class object : private comparable<object<T> > {
   public:
     bool operator!() const { return !object_; }
 #if PN_CPP_HAS_EXPLICIT_CONVERSIONS
-    explicit operator bool() const { return object_; }
+    explicit operator bool() const { return object_.get(); }
 #endif
 
   protected:
@@ -101,7 +101,8 @@ template <class T> class object : private comparable<object<T> > {
     friend bool operator==(const object& a, const object& b) { return a.object_ == b.object_; }
     friend bool operator<(const object& a, const object& b) { return a.object_ < b.object_; }
     friend std::ostream& operator<<(std::ostream& o, const object& a) { o << a.object_.inspect(); return o; }
-    template <class U> friend class proton::thread_safe;
+
+  template <class U> friend class proton::returned;
 };
 
 /// Factory class used internally to make wrappers and extract proton objects

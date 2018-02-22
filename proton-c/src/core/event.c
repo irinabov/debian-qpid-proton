@@ -28,8 +28,8 @@ struct pn_collector_t {
   pn_list_t *pool;
   pn_event_t *head;
   pn_event_t *tail;
+  pn_event_t *prev;         /* event returned by previous call to pn_collector_next() */
   bool freed;
-  bool head_returned;         /* Head has been returned by pn_collector_next() */
 };
 
 struct pn_event_t {
@@ -46,10 +46,11 @@ static void pn_collector_initialize(pn_collector_t *collector)
   collector->pool = pn_list(PN_OBJECT, 0);
   collector->head = NULL;
   collector->tail = NULL;
+  collector->prev = NULL;
   collector->freed = false;
 }
 
-static void pn_collector_drain(pn_collector_t *collector)
+void pn_collector_drain(pn_collector_t *collector)
 {
   assert(collector);
   while (pn_collector_next(collector))
@@ -171,35 +172,36 @@ pn_event_t *pn_collector_peek(pn_collector_t *collector)
   return collector->head;
 }
 
-bool pn_collector_pop(pn_collector_t *collector)
-{
-  collector->head_returned = false;
+// Advance head pointer for pop or next, return the old head.
+static pn_event_t *pop_internal(pn_collector_t *collector) {
   pn_event_t *event = collector->head;
   if (event) {
     collector->head = event->next;
-  } else {
-    return false;
+    if (!collector->head) {
+      collector->tail = NULL;
+    }
   }
-
-  if (!collector->head) {
-    collector->tail = NULL;
-  }
-
-  pn_decref(event);
-  return true;
+  return event;
 }
 
-pn_event_t *pn_collector_next(pn_collector_t *collector)
-{
-  if (collector->head_returned) {
-    pn_collector_pop(collector);
+bool pn_collector_pop(pn_collector_t *collector) {
+  pn_event_t *event = pop_internal(collector);
+  if (event) {
+    pn_decref(event);
   }
-  collector->head_returned = collector->head;
-  return collector->head;
+  return event;
+}
+
+pn_event_t *pn_collector_next(pn_collector_t *collector) {
+  if (collector->prev) {
+    pn_decref(collector->prev);
+  }
+  collector->prev = pop_internal(collector);
+  return collector->prev;
 }
 
 pn_event_t *pn_collector_prev(pn_collector_t *collector) {
-  return collector->head_returned ? collector->head : NULL;
+  return collector->prev;
 }
 
 bool pn_collector_more(pn_collector_t *collector)
@@ -275,7 +277,7 @@ pn_event_t *pn_event(void)
 
 pn_event_type_t pn_event_type(pn_event_t *event)
 {
-  return event->type;
+  return event ? event->type : PN_EVENT_NONE;
 }
 
 const pn_class_t *pn_event_class(pn_event_t *event)
@@ -385,6 +387,8 @@ const char *pn_event_type_name(pn_event_type_t type)
     return "PN_SELECTABLE_FINAL";
    case PN_CONNECTION_WAKE:
     return "PN_CONNECTION_WAKE";
+   case PN_LISTENER_ACCEPT:
+    return "PN_LISTENER_ACCEPT";
    case PN_LISTENER_CLOSE:
     return "PN_LISTENER_CLOSE";
    case PN_PROACTOR_INTERRUPT:
@@ -393,6 +397,8 @@ const char *pn_event_type_name(pn_event_type_t type)
     return "PN_PROACTOR_TIMEOUT";
    case PN_PROACTOR_INACTIVE:
     return "PN_PROACTOR_INACTIVE";
+   case PN_LISTENER_OPEN:
+    return "PN_LISTENER_OPEN";
    default:
     return "PN_UNKNOWN";
   }

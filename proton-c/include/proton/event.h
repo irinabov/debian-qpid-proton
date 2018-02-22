@@ -260,7 +260,7 @@ typedef enum {
   PN_TRANSPORT,
 
   /**
-   * The transport has authenticated, if this is received by a server
+   * The transport has authenticated. If this is received by a server
    * the associated transport has authenticated an incoming connection
    * and pn_transport_get_user() can be used to obtain the authenticated
    * user.
@@ -282,23 +282,11 @@ typedef enum {
   PN_TRANSPORT_HEAD_CLOSED,
 
   /**
-   * The write side of the transport is closed, it will no longer produce bytes
-   * to write to external IO. Synonynm for PN_TRANSPORT_HEAD_CLOSED
-   */
-  PN_TRANSPORT_WRITE_CLOSED = PN_TRANSPORT_HEAD_CLOSED,
-
-  /**
    * Indicates that the tail of the transport has been closed. This
    * means the transport will never be able to process more bytes from
    * the network. Events of this type point to the relevant transport.
    */
   PN_TRANSPORT_TAIL_CLOSED,
-
-  /**
-   * The read side of the transport is closed, it will no longer read bytes
-   * from external IO. Synonynm for PN_TRANSPORT_TAIL_CLOSED
-   */
-  PN_TRANSPORT_READ_CLOSED = PN_TRANSPORT_TAIL_CLOSED,
 
   /**
    * Indicates that the both the head and tail of the transport are
@@ -321,7 +309,8 @@ typedef enum {
   PN_CONNECTION_WAKE,
 
   /**
-   * Indicates the listener is ready to call pn_listener_accept() 
+   * Indicates the listener has an incoming connection, call pn_listener_accept2()
+   * to accept it.
    * Events of this type point to the @ref pn_listener_t.
    */
   PN_LISTENER_ACCEPT,
@@ -333,7 +322,7 @@ typedef enum {
   PN_LISTENER_CLOSE,
 
   /**
-   * Indicates pn_proactor_interrupt() was called to interrupt a proactor thread
+   * Indicates pn_proactor_interrupt() was called to interrupt a proactor thread.
    * Events of this type point to the @ref pn_proactor_t.
    */
   PN_PROACTOR_INTERRUPT,
@@ -345,14 +334,22 @@ typedef enum {
   PN_PROACTOR_TIMEOUT,
 
   /**
-   * The proactor becaome inactive: all listeners and connections are closed and
-   * their events processed, the timeout is expired.
+   * The proactor has become inactive: all listeners and connections were closed
+   * and the timeout (if set) expired or was cancelled. There will be no
+   * further events unless new listeners or connections are opened, or a new
+   * timeout is set (possibly in other threads in a multi-threaded program.)
    *
    * Events of this type point to the @ref pn_proactor_t.
    */
-  PN_PROACTOR_INACTIVE
+  PN_PROACTOR_INACTIVE,
 
+  /**
+   * The listener is listening.
+   * Events of this type point to the @ref pn_listener_t.
+   */
+  PN_LISTENER_OPEN
 } pn_event_type_t;
+
 
 /**
  * Get a human readable name for an event type.
@@ -390,6 +387,13 @@ PN_EXTERN void pn_collector_free(pn_collector_t *collector);
 PN_EXTERN void pn_collector_release(pn_collector_t *collector);
 
 /**
+ * Drain a collector: remove and discard all events.
+ *
+ * @param[in] collector a collector object
+ */
+PN_EXTERN void pn_collector_drain(pn_collector_t *collector);
+
+/**
  * Place a new event on a collector.
  *
  * This operation will create a new event of the given type and
@@ -424,7 +428,7 @@ PN_EXTERN pn_event_t *pn_collector_put(pn_collector_t *collector,
 PN_EXTERN pn_event_t *pn_collector_peek(pn_collector_t *collector);
 
 /**
- * Clear the head event on a collector.
+ * Remove the head event on a collector.
  *
  * @param[in] collector a collector object
  * @return true if the event was popped, false if the collector is empty
@@ -432,14 +436,8 @@ PN_EXTERN pn_event_t *pn_collector_peek(pn_collector_t *collector);
 PN_EXTERN bool pn_collector_pop(pn_collector_t *collector);
 
 /**
- * Return the next event to be handled.
- *
- * Returns the head event if it has not previously been returned by
- * pn_collector_next(), otherwise does pn_collector_pop() and returns
- * the new head event.
- *
- * The returned pointer is valid till the next call of pn_collector_pop(),
- * pn_collector_next(), pn_collector_release() or pn_collector_free()
+ * Pop and return the head event, returns NULL if the collector is empty.
+ * The returned pointer is valid till the next call of pn_collector_next().
  *
  * @param[in] collector a collector object
  * @return the next event.
@@ -447,10 +445,7 @@ PN_EXTERN bool pn_collector_pop(pn_collector_t *collector);
 PN_EXTERN pn_event_t *pn_collector_next(pn_collector_t *collector);
 
 /**
- * Return the same event as the previous call to pn_collector_next()
- *
- * The returned pointer is valid till the next call of pn_collector_pop(),
- * pn_collector_next(), pn_collector_release() or pn_collector_free()
+ * Return the same pointer as the most recent call to pn_collector_next().
  *
  * @param[in] collector a collector object
  * @return a pointer to the event returned by previous call to pn_collector_next()
@@ -458,7 +453,7 @@ PN_EXTERN pn_event_t *pn_collector_next(pn_collector_t *collector);
 PN_EXTERN pn_event_t *pn_collector_prev(pn_collector_t *collector);
 
 /**
- * Check if there are more events after the current event. If this
+ * Check if there are more events after the current head event. If this
  * returns true, then pn_collector_peek() will return an event even
  * after pn_collector_pop() is called.
  *
@@ -537,9 +532,17 @@ PN_EXTERN pn_transport_t *pn_event_transport(pn_event_t *event);
 PN_EXTERN pn_record_t *pn_event_attachments(pn_event_t *event);
 
 /**
- * **Experimental** - A batch of events to handle. Call
- * pn_event_batch_next() in a loop until it returns NULL to handle
- * them.
+ * If the event context object has a condition and the condition is set
+ * return it, otherwise return NULL.
+ * If the event context object has remote and local conditions,
+ * try the remote condition first, then the local.
+ */
+PN_EXTERN struct pn_condition_t *pn_event_condition(pn_event_t *event);
+
+/**
+ * **Unsettled API** - A batch of events that must be handled in sequence.
+ * Call pn_event_batch_next() in a loop until it returns NULL to extract
+ * the events.
  */
 typedef struct pn_event_batch_t pn_event_batch_t;
 
@@ -549,7 +552,7 @@ typedef struct pn_event_batch_t pn_event_batch_t;
  */
 
 /**
- * **Experimental** - Remove the next event from the batch and return
+ * **Unsettled API** - Remove the next event from the batch and return
  *  it. NULL means the batch is empty. The returned event pointer is
  *  valid until pn_event_batch_next() is called again on the same
  *  batch.
@@ -559,7 +562,7 @@ PN_EXTERN pn_event_t *pn_event_batch_next(pn_event_batch_t *batch);
 /**
  * @cond INTERNAL
  *
- * pn_event_batch_next() can be re-implemented for different behaviors in different contextxs.
+ * pn_event_batch_next() can be re-implemented for different behaviors in different contexts.
  */
 struct pn_event_batch_t {
   pn_event_t *(*next_event)(pn_event_batch_t *batch);

@@ -22,11 +22,15 @@
  *
  */
 
+#include "./internal/export.hpp"
+
+/// @file
+/// **Deprecated** - Use the API in `container.hpp`.
+
 namespace proton {
 
-/// @cond INTERNAL
-typedef class container default_container;
-/// @endcond
+/// **Deprecated** - Use `proton::container`.
+typedef class container PN_CPP_DEPRECATED("Use 'proton::container'") default_container;
 
 } // proton
 

@@ -29,6 +29,9 @@
 
 #include <string>
 
+/// @file
+/// @copybrief proton::link
+
 struct pn_link_t;
 
 namespace proton {
@@ -64,7 +67,7 @@ PN_CPP_CLASS_EXTERN link : public internal::object<pn_link_t> , public endpoint 
     /// Credit available on the link.
     PN_CPP_EXTERN int credit() const;
 
-    /// **Experimental** - True for a receiver if a drain cycle has
+    /// **Unsettled API** - True for a receiver if a drain cycle has
     /// been started and the corresponding `on_receiver_drain_finish`
     /// event is still pending.  True for a sender if the receiver has
     /// requested a drain of credit and the sender has unused credit.
@@ -77,6 +80,9 @@ PN_CPP_CLASS_EXTERN link : public internal::object<pn_link_t> , public endpoint 
 
     /// The container for this link.
     PN_CPP_EXTERN class container &container() const;
+
+    /// Get the work_queue for the link.
+    PN_CPP_EXTERN class work_queue& work_queue() const;
 
     /// The connection that owns this link.
     PN_CPP_EXTERN class connection connection() const;

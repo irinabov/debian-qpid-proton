@@ -29,6 +29,9 @@
 #include <string>
 #include <iosfwd>
 
+/// @file
+/// @copybrief proton::error_condition
+
 struct pn_condition_t;
 
 namespace proton {
@@ -50,15 +53,15 @@ class error_condition {
     /// Create an error condition with a name and description.
     PN_CPP_EXTERN error_condition(std::string name, std::string description);
 
-    /// **Experimental** - Create an error condition with name,
+    /// **Unsettled API** - Create an error condition with name,
     /// description, and informational properties.
     PN_CPP_EXTERN error_condition(std::string name, std::string description, proton::value properties);
 
-#if PN_CPP_HAS_DEFAULTED_FUNCTIONS
+#if PN_CPP_HAS_DEFAULTED_FUNCTIONS && PN_CPP_HAS_DEFAULTED_MOVE_INITIALIZERS
     /// @cond INTERNAL
     error_condition(const error_condition&) = default;
-    error_condition(error_condition&&) = default;
     error_condition& operator=(const error_condition&) = default;
+    error_condition(error_condition&&) = default;
     error_condition& operator=(error_condition&&) = default;
     /// @endcond
 #endif

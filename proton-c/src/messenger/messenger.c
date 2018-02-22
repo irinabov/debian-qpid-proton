@@ -27,6 +27,7 @@
 #include <proton/object.h>
 #include <proton/sasl.h>
 #include <proton/session.h>
+#include <proton/url.h>
 
 #include <assert.h>
 #include <ctype.h>
@@ -254,7 +255,6 @@ static void pni_connection_readable(pn_selectable_t *sel)
                         pn_transport_tail(transport), capacity);
     if (n <= 0) {
       if (n == 0 || !pn_wouldblock(messenger->io)) {
-        if (n < 0) perror("recv");
         pn_transport_close_tail(transport);
         if (!(pn_connection_state(connection) & PN_REMOTE_CLOSED)) {
           pn_error_report("CONNECTION", "connection aborted (remote)");
@@ -284,7 +284,6 @@ static void pni_connection_writable(pn_selectable_t *sel)
                         pn_transport_head(transport), pending);
     if (n < 0) {
       if (!pn_wouldblock(messenger->io)) {
-        perror("send");
         pn_transport_close_head(transport);
       }
     } else {
@@ -1588,6 +1587,8 @@ int pn_messenger_stop(pn_messenger_t *messenger)
 
   return pn_messenger_sync(messenger, pn_messenger_stopped);
 }
+
+void pni_parse_url(char *url, char **scheme, char **user, char **pass, char **host, char **port, char **path);
 
 static void pni_parse(pn_address_t *address)
 {

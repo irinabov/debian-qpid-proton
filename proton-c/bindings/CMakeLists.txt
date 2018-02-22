@@ -31,10 +31,9 @@ if (EMSCRIPTEN_FOUND)
   set (DEFAULT_JAVASCRIPT ON)
 endif (EMSCRIPTEN_FOUND)
 
-# Prerequisites for C++
 if (CMAKE_CXX_COMPILER)
   set (DEFAULT_CPP ON)
-endif (CMAKE_CXX_COMPILER)
+endif()
 
 # Prerequisites for Go
 find_program(GO_EXE go)
@@ -76,37 +75,9 @@ if(SWIG_FOUND)
   endif (PYTHONLIBS_FOUND)
 
   # Prerequisites for Ruby:
-  find_program(GEM_EXE "gem")
-  mark_as_advanced(GEM_EXE)
-  macro(CheckRubyGem varname gemname)
-    execute_process(COMMAND ${GEM_EXE} list --local ${gemname}
-      OUTPUT_VARIABLE CHECK_OUTPUT)
-
-    set (${varname} OFF)
-
-    if (CHECK_OUTPUT MATCHES "${gemname}[ ]+\(.*\)")
-      message(STATUS "Found Ruby gem: ${gemname}")
-      set (${varname} ON)
-    else()
-      message(STATUS "Missing Ruby gem dependency: ${gemname}")
-      set (${varname} OFF)
-    endif()
-  endmacro()
-
   find_package(Ruby)
   if (RUBY_FOUND)
     set (DEFAULT_RUBY ON)
-
-    CheckRubyGem("HAS_RUBY_GEM_RSPEC"     "rspec")
-    CheckRubyGem("HAS_RUBY_GEM_SIMPLECOV" "simplecov")
-
-    if (HAS_RUBY_GEM_RSPEC AND HAS_RUBY_GEM_SIMPLECOV)
-      set (DEFAULT_RUBY_TESTING ON CACHE INTERNAL "")
-    else()
-      message(STATUS "Skipping Ruby bindings due to missing dependencies...")
-      set (DEFAULT_RUBY_TESTING OFF CACHE INTERNAL "")
-      set (DEFAULT_RUBY OFF)
-    endif (HAS_RUBY_GEM_RSPEC AND HAS_RUBY_GEM_SIMPLECOV)
   endif (RUBY_FOUND)
 
   # Prerequites for PHP:
@@ -130,15 +101,28 @@ if(SWIG_FOUND)
 
 endif()
 
-# Shouldn't need to modify below here when adding new language binding
+
+# To kick-start a build with just a few bindings enabled by default, e.g. ruby and go:
+#
+#     cmake -DBUILD_BINDINGS=ruby;go
+#
+# This is only used when CMakeCache.txt is first created, after that set the normal
+# BUILD_XXX variables to enable/disable bindings.
+#
+if (NOT DEFINED BUILD_BINDINGS)
+  set(BUILD_BINDINGS "${BINDINGS}")
+endif()
+
 foreach(BINDING ${BINDINGS})
   string(TOUPPER ${BINDING} UBINDING)
-  # Check whether default was overridden
-  if (NOBUILD_${UBINDING})
-    set ("DEFAULT_${UBINDING}" OFF)
-  endif ()
-  option("BUILD_${UBINDING}" "Build ${BINDING} language binding" ${DEFAULT_${UBINDING}})
+  list(FIND BUILD_BINDINGS ${BINDING} N)
+  if(NOBUILD_${UBINDING} OR ( N EQUAL -1 ) ) # Over-ridden or not on the BUILD_BINDINGS list
+    set(DEFAULT_${UBINDING} OFF)
+  endif()
+  option(BUILD_${UBINDING} "Build ${BINDING} language binding" ${DEFAULT_${UBINDING}})
   if (BUILD_${UBINDING})
     add_subdirectory(${BINDING})
   endif ()
 endforeach(BINDING)
+
+unset(BUILD_BINDINGS CACHE) # Remove from cache, only relevant when creating the initial cache.

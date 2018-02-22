@@ -17,13 +17,46 @@
  * under the License.
  */
 
+#include "proton/connection_options.hpp"
 #include "proton/listener.hpp"
-#include "proton/container.hpp"
+#include "proton/listen_handler.hpp"
+
+#include <proton/listener.h>
+#include <proton/netaddr.h>
+
+#include "contexts.hpp"
+
+#include <stdlib.h>
 
 namespace proton {
 
-listener::listener() : container_(0) {}
-listener::listener(container& c, const std::string& u) : url_(u), container_(&c) {}
-void listener::stop() { if (container_) container_->stop_listening(url_); }
+listener::listener(): listener_(0) {}
+listener::listener(pn_listener_t* l): listener_(l) {}
+// Out-of-line big-3 with trivial implementations, in case we need them in future. 
+listener::listener(const listener& l) : listener_(l.listener_) {}
+listener::~listener() {}
+listener& listener::operator=(const listener& l) { listener_ = l.listener_; return *this; }
 
+void listener::stop() { if (listener_) pn_listener_close(listener_); }
+
+int listener::port() {
+    char port[16] = "";
+    pn_netaddr_host_port(pn_netaddr_listening(listener_), NULL, 0, port, sizeof(port));
+    int i = atoi(port);
+    if (!i) throw error("listener has no port");
+    return i;
+}
+
+class container& listener::container() const {
+    void *c = pn_listener_get_context(listener_);
+    if (!c) throw proton::error("No container");
+    return *reinterpret_cast<class container*>(c);
+}
+
+// Listen handler
+listen_handler::~listen_handler() {}
+void listen_handler::on_open(listener&) {}
+connection_options listen_handler::on_accept(listener&) { return connection_options(); }
+void listen_handler::on_error(listener&, const std::string&) {}
+void listen_handler::on_close(listener&) {}
 }

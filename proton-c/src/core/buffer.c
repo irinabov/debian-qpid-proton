@@ -163,6 +163,7 @@ int pn_buffer_ensure(pn_buffer_t *buf, size_t size)
 
 int pn_buffer_append(pn_buffer_t *buf, const char *bytes, size_t size)
 {
+  if (!size) return 0;
   int err = pn_buffer_ensure(buf, size);
   if (err) return err;
 
@@ -237,6 +238,11 @@ int pn_buffer_trim(pn_buffer_t *buf, size_t left, size_t right)
 {
   if (left + right > buf->size) return PN_ARG_ERR;
 
+  // In special case where we trim everything just clear buffer
+  if (left + right == buf->size) {
+    pn_buffer_clear(buf);
+    return 0;
+  }
   buf->start += left;
   if (buf->start >= buf->capacity)
     buf->start -= buf->capacity;
@@ -300,11 +306,15 @@ pn_rwbytes_t pn_buffer_memory(pn_buffer_t *buf)
   }
 }
 
-int pn_buffer_print(pn_buffer_t *buf)
+int pn_buffer_quote(pn_buffer_t *buf, pn_string_t *str, size_t n)
 {
-  printf("pn_buffer(\"");
-  pn_print_data(buf->bytes + pni_buffer_head(buf), pni_buffer_head_size(buf));
-  pn_print_data(buf->bytes, pni_buffer_tail_size(buf));
-  printf("\")");
+  size_t hsize = pni_buffer_head_size(buf);
+  size_t tsize = pni_buffer_tail_size(buf);
+  if (hsize >= n) {
+    pn_quote(str, buf->bytes + pni_buffer_head(buf), n);
+    return 0;
+  }
+  pn_quote(str, buf->bytes + pni_buffer_head(buf), hsize);
+  pn_quote(str, buf->bytes, pn_min(tsize, n-hsize));
   return 0;
 }

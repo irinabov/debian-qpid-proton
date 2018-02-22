@@ -33,7 +33,19 @@ std::string         | proton::STRING       | UTF-8 encoded Unicode string
 proton::symbol      | proton::SYMBOL       | 7-bit ASCII encoded string
 proton::binary      | proton::BINARY       | Variable-length binary data
 
-proton::scalar is a holder that can accept a scalar value of any type.
+## Holder types
+
+`proton::message::body()` and other message-related data can contain
+different types of data at runtime. There are two "holder" types
+provided to hold runtime typed data:
+
+ - `proton::scalar` can hold a scalar value of any type.
+ - `proton::value` can hold any AMQP value, scalar or compound.
+
+You can set the value in a holder by assignment, and use the
+`proton::get()` and `proton::coerce()` templates to extract data in a
+type-safe way. Holders also provide functions to query the type of
+value they contain.
 
 ## Compound types
 
@@ -43,35 +55,32 @@ See below           | proton::ARRAY        | Sequence of values of the same type
 See below           | proton::LIST         | Sequence of values of mixed types
 See below           | proton::MAP          | Map of key-value pairs
 
-proton::value is a holder that can accept any AMQP value, scalar or
-compound.
+A `proton::value` containing a `proton::ARRAY` can convert to and from
+C++ sequences of the corresponding C++ type: `std::vector`,
+`std::deque`, `std::list`, and `std::forward_list`.
 
-proton::ARRAY converts to and from C++ sequences: std::vector,
-std::deque, std::list, and std::forward_list.
+`proton::LIST` converts to and from sequences of `proton::value` or
+`proton::scalar`, which can hold mixed types of data.
 
-proton::LIST converts to and from sequences of proton::value or
-proton::scalar, which can hold mixed types of data.
+`proton::MAP` converts to and from `std::map`, `std::unordered_map`,
+and sequences of `std::pair`.
 
-proton::MAP converts to and from std::map, std::unordered_map, and
-sequences of std::pair.
+For example, you can decode a message body with any AMQP map as
+follows.
 
-When decoding, the encoded map types must be convertible to the element type of the
-C++ sequence or the key-value types of the C++ map.  Use proton::value as the
-element or key-value type to decode any ARRAY, LIST, or MAP.
+    proton::message m = ...;
+    std::map<proton::value, proton::value> map;
+    proton::get(m.body(), map);
 
-For example you can decode any AMQP MAP into:
+You can encode a message body with a map of string keys and `uint64_t`
+values like this:
 
-    std::map<proton::value, proton::value>
-
-You can decode any AMQP LIST or ARRAY into:
-
-    std::vector<proton::value>
+    std::unordered_map<std::string, uint64_t> map;
+    map["foo"] = 123;
+    m.body() = map;
 
 ## Include files
 
-You can simply include proton/types.hpp to get all the type
-definitions and conversions. Alternatively, you can selectively
-include only what you need:
-
- - Include proton/types_fwd.hpp: forward declarations for all types.
- - Include individual `.hpp` files as per the table above.
+`proton/types.hpp` includes all available type definitions and
+conversions. Alternatively, you can selectively include the `.hpp`
+files you want.

@@ -529,6 +529,14 @@ int pn_data_vfill(pn_data_t *data, const char *fmt, va_list ap)
     case 'd':
       err = pn_data_put_double(data, va_arg(ap, double));
       break;
+    case 'Z':
+      {
+	// For maximum portability, caller must pass these as two separate args, not a single struct
+        size_t size = va_arg(ap, size_t);
+        char *start = va_arg(ap, char *);
+        err = pn_data_put_binary(data, pn_bytes(size, start));
+      }
+      break;
     case 'z':
       {
 	// For maximum portability, caller must pass these as two separate args, not a single struct
@@ -559,6 +567,7 @@ int pn_data_vfill(pn_data_t *data, const char *fmt, va_list ap)
       }
       break;
     case 'D':
+      /* The next 2 args are the descriptor, value for a described value. */
       err = pn_data_put_described(data);
       pn_data_enter(data);
       break;
@@ -603,6 +612,7 @@ int pn_data_vfill(pn_data_t *data, const char *fmt, va_list ap)
         return pn_error_format(data->error, PN_ERR, "exit failed");
       break;
     case '?':
+     /* Consumes 2 args: bool, value. Insert null if bool is false else value */
       if (!va_arg(ap, int)) {
         err = pn_data_put_null(data);
         if (err) return err;
@@ -1328,7 +1338,7 @@ bool pn_data_lookup(pn_data_t *data, const char *name)
     case PN_SYMBOL:
       {
         pn_bytes_t bytes = pn_data_get_bytes(data);
-        if (strlen(name) == bytes.size && !strncmp(name, bytes.start, bytes.size)) {
+        if (pn_bytes_equal(bytes, pn_bytes(strlen(name), name))) {
           return pn_data_next(data);
         }
       }

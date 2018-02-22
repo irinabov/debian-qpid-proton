@@ -35,7 +35,7 @@ if not hasattr(gc, "garbage"):
 # future test areas
 #  + different permutations of setup
 #   - creating deliveries and calling input/output before opening the session/link
-#  + shrinking output_size down to something small? should the enginge buffer?
+#  + shrinking output_size down to something small? should the engine buffer?
 #  + resuming
 #    - locally and remotely created deliveries with the same tag
 
@@ -1170,7 +1170,7 @@ class MaxFrameTransferTest(Test):
 
   def testBigMessage(self):
     """
-    Test transfering a big message.
+    Test transferring a big message.
     """
     self.snd, self.rcv = self.link("test-link")
     self.c1 = self.snd.session.connection
@@ -2603,9 +2603,9 @@ class IdleTimeoutEventTest(PeerTest):
     self.transport.idle_timeout = self.delay
     self.connection.open()
     self.half_pump()
-    self.transport.tick(time())
-    sleep(self.delay*2)
-    self.transport.tick(time())
+    t = time()
+    self.transport.tick(t)
+    self.transport.tick(t + self.delay*4)
     self.expect(Event.CONNECTION_INIT, Event.CONNECTION_BOUND,
                 Event.CONNECTION_LOCAL_OPEN, Event.TRANSPORT,
                 Event.TRANSPORT_ERROR, Event.TRANSPORT_TAIL_CLOSED)

@@ -16,25 +16,92 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+cmake_minimum_required(VERSION 2.8.12)
 
-include(cpp.cmake) # Compiler checks
+enable_language(CXX)
+
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+find_package(Threads)
+
+set (BUILD_CPP_03 OFF CACHE BOOL "Compile the C++ binding as C++03 even when C++11 is available")
+
+# This effectively checks for cmake version 3.1 or later
+if (DEFINED CMAKE_CXX_COMPILE_FEATURES)
+  if (BUILD_CPP_03)
+    set(STD 98)
+  else ()
+    set(STD 11)
+    list(APPEND PLATFORM_LIBS "${CMAKE_THREAD_LIBS_INIT}")
+  endif ()
+  set(CMAKE_CXX_STANDARD ${STD})
+  set(CMAKE_CXX_EXTENSIONS OFF)
+  if (MSVC)  # Compiler feature checks only needed for Visual Studio in this case
+    include(cpp.cmake)
+  elseif (STD EQUAL 11)
+    set(CPP_DEFINITIONS "HAS_CPP11")
+  endif()
+else ()
+  if (BUILD_CPP_03)
+    set(CXX_STANDARD "-std=c++98")
+  else ()
+    include(CheckCXXCompilerFlag)
+    # These flags work with GCC/Clang/SunPro compilers
+    check_cxx_compiler_flag("-std=c++11" ACCEPTS_CXX11)
+    check_cxx_compiler_flag("-std=c++0x" ACCEPTS_CXX0X)
+    if (ACCEPTS_CXX11)
+      set(CXX_STANDARD "-std=c++11")
+      set(CPP_DEFINITIONS "HAS_CPP11")
+      list(APPEND PLATFORM_LIBS "${CMAKE_THREAD_LIBS_INIT}")
+    elseif(ACCEPTS_CXX0X)
+      set(CXX_STANDARD "-std=c++0x")
+      list(APPEND PLATFORM_LIBS "${CMAKE_THREAD_LIBS_INIT}")
+      include(cpp.cmake) # Compiler checks needed for C++0x as not all C++11 may be supported
+    else()
+      include(cpp.cmake) # Compiler checks needed as we have no idea whats going on here!
+    endif()
+  endif()
+endif ()
+
+# Construct #define lines to insert in config_presets.hpp
+foreach(d ${CPP_DEFINITIONS})
+  set(presets "${presets}#define PN_CPP_LIB_${d} 1\n")
+endforeach()
+# For Visual Studio define the app compile time macros now, for everything else don't
+if(MSVC)
+  set(presets "${presets}\n// Compiled for MSVC version ${CMAKE_CXX_COMPILER_VERSION} (${MSVC_VERSION})\n")
+  foreach(d ${CPP_DEFINITIONS})
+    set(presets "${presets}# define PN_CPP_${d} 1\n")
+  endforeach()
+else()
+  set(presets "${presets}\n#if qpid_proton_cpp_EXPORTS\n")
+  foreach(d ${CPP_DEFINITIONS})
+    set(presets "${presets}# define PN_CPP_${d} 1\n")
+  endforeach()
+  set(presets "${presets}#endif // qpid_proton_cpp_EXPORTS\n")
+endif()
+
+configure_file(config_presets.hpp.in config_presets.hpp @ONLY)
+
+# Make these CACHE INTERNAL so they will be set for the C++ examples
+set(CXX_EXAMPLE_FLAGS "${CXX_WARNING_FLAGS} ${CMAKE_CXX_FLAGS} ${CXX_STANDARD}" CACHE INTERNAL "")
+set(CXX_EXAMPLE_LINK_FLAGS "${SANITIZE_FLAGS}" CACHE INTERNAL "")
 
 include_directories(
   "${CMAKE_SOURCE_DIR}/proton-c/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/include")
+  "${CMAKE_CURRENT_BINARY_DIR}")
 
-add_definitions(${CXX_WARNING_FLAGS})
+add_definitions(${CXX_STANDARD} ${CXX_WARNING_FLAGS} "-DPN_CPP_USE_DEPRECATED_API=1")
 
 set(qpid-proton-cpp-source
   src/binary.cpp
   src/byte_array.cpp
-  src/cached_map.cpp
+  src/map.cpp
   src/connection.cpp
+  src/connection_driver.cpp
   src/connection_options.cpp
-  src/connector.cpp
   src/container.cpp
-  src/container_impl.cpp
+  src/proactor_container_impl.cpp
   src/contexts.cpp
   src/data.cpp
   src/decimal.cpp
@@ -45,23 +112,19 @@ set(qpid-proton-cpp-source
   src/endpoint.cpp
   src/error.cpp
   src/error_condition.cpp
-  src/event_loop.cpp
   src/handler.cpp
-  src/io/connection_driver.cpp
-  src/io/link_namer.cpp
   src/link.cpp
+  src/link_namer.cpp
   src/listener.cpp
   src/message.cpp
   src/messaging_adapter.cpp
   src/node_options.cpp
   src/object.cpp
   src/proton_bits.cpp
-  src/proton_event.cpp
-  src/proton_handler.cpp
-  src/reactor.cpp
   src/receiver.cpp
   src/receiver_options.cpp
-  src/reconnect_timer.cpp
+  src/reconnect_options.cpp
+  src/returned.cpp
   src/sasl.cpp
   src/scalar_base.cpp
   src/sender.cpp
@@ -81,6 +144,7 @@ set(qpid-proton-cpp-source
   src/url.cpp
   src/uuid.cpp
   src/value.cpp
+  src/work_queue.cpp
   )
 
 set_source_files_properties (
@@ -91,14 +155,14 @@ set_source_files_properties (
 
 add_library(qpid-proton-cpp SHARED ${qpid-proton-cpp-source})
 
-target_link_libraries (qpid-proton-cpp ${PLATFORM_LIBS} qpid-proton)
+target_link_libraries (qpid-proton-cpp LINK_PRIVATE ${PLATFORM_LIBS} qpid-proton-core qpid-proton-proactor)
 
 set_target_properties (
   qpid-proton-cpp
   PROPERTIES
   LINKER_LANGUAGE CXX
-  VERSION   "${PN_LIB_SOMAJOR}.${PN_LIB_SOMINOR}"
-  SOVERSION "${PN_LIB_SOMAJOR}"
+  VERSION   "${PN_LIB_CPP_VERSION}"
+  SOVERSION "${PN_LIB_CPP_MAJOR_VERSION}"
   LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
   )
 
@@ -119,6 +183,7 @@ if (MSVC)
 endif (MSVC)
 
 install (DIRECTORY "include/proton" DESTINATION ${INCLUDE_INSTALL_DIR} FILES_MATCHING PATTERN "*.hpp")
+install (FILES "${CMAKE_CURRENT_BINARY_DIR}/config_presets.hpp" DESTINATION "${INCLUDE_INSTALL_DIR}/proton/internal")
 
 add_subdirectory(docs)
 add_subdirectory(${CMAKE_SOURCE_DIR}/tests/tools/apps/cpp ${CMAKE_BINARY_DIR}/tests/tools/apps/cpp)
@@ -153,14 +218,9 @@ install (FILES
   ${CMAKE_CURRENT_BINARY_DIR}/ProtonCppConfigVersion.cmake
   DESTINATION ${LIB_INSTALL_DIR}/cmake/ProtonCpp)
 
-## Test
-if (ENABLE_VALGRIND AND VALGRIND_EXE)
-  set(memcheck-cmd ${VALGRIND_EXE} --error-exitcode=42 --quiet --leak-check=full --trace-children=yes)
-endif ()
-
 macro(add_cpp_test test)
   add_executable (${test} src/${test}.cpp)
-  target_link_libraries (${test} qpid-proton qpid-proton-cpp)
+  target_link_libraries (${test} qpid-proton-cpp)
   if (CMAKE_SYSTEM_NAME STREQUAL Windows)
     add_test (NAME cpp-${test}
       COMMAND ${env_py}
@@ -172,11 +232,12 @@ macro(add_cpp_test test)
 endmacro(add_cpp_test)
 
 add_cpp_test(codec_test)
-#add_cpp_test(engine_test)
-add_cpp_test(thread_safe_test)
+add_cpp_test(connection_driver_test)
 add_cpp_test(interop_test ${CMAKE_SOURCE_DIR}/tests)
 add_cpp_test(message_test)
+add_cpp_test(map_test)
 add_cpp_test(scalar_test)
 add_cpp_test(value_test)
 add_cpp_test(container_test)
 add_cpp_test(url_test)
+add_cpp_test(reconnect_test)

@@ -19,10 +19,10 @@
  *
  */
 
-#include "proton/terminus.hpp"
-
 #include "proton/duration.hpp"
+#include "proton/terminus.hpp"
 #include "proton/value.hpp"
+#include "proton/codec/vector.hpp"
 
 #include "proton_bits.hpp"
 
@@ -49,7 +49,12 @@ bool terminus::dynamic() const {
 }
 
 value terminus::node_properties() const {
-    return internal::value_ref(pn_terminus_properties(object_));
+    return value(pn_terminus_properties(object_));
+}
+
+std::vector<symbol> terminus::capabilities() const {
+    value caps(pn_terminus_capabilities(object_));
+    return caps.empty() ? std::vector<symbol>() : caps.get<std::vector<symbol> >();
 }
 
 }

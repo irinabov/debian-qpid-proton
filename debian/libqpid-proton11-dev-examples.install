@@ -1,0 +1,7 @@
+usr/share/proton/examples/c/ssl_certs
+usr/share/proton/examples/c/*.c
+usr/share/proton/examples/c/*.h
+usr/share/proton/examples/c/README.dox
+usr/share/proton/examples/c/CMakeLists.txt
+usr/share/proton/examples/c/example_test.py
+

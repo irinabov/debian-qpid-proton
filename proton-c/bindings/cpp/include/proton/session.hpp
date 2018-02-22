@@ -30,6 +30,9 @@
 
 #include <string>
 
+/// @file
+/// @copybrief proton::session
+
 struct pn_session_t;
 
 namespace proton {
@@ -66,6 +69,9 @@ PN_CPP_CLASS_EXTERN session : public internal::object<pn_session_t>, public endp
     /// Get the container for this session.
     PN_CPP_EXTERN class container &container() const;
 
+    /// Get the work_queue for the session.
+    PN_CPP_EXTERN class work_queue& work_queue() const;
+
     /// Get the connection this session belongs to.
     PN_CPP_EXTERN class connection connection() const;
 
@@ -96,7 +102,6 @@ PN_CPP_CLASS_EXTERN session : public internal::object<pn_session_t>, public endp
     /// @cond INTERNAL
   friend class internal::factory<session>;
   friend class session_iterator;
-  friend class thread_safe<session>;
     /// @endcond
 };
 

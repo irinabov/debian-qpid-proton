@@ -16,12 +16,9 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-cmake_minimum_required (VERSION 2.8.7)
+cmake_minimum_required (VERSION 2.8.12)
 
 project (Proton C)
-
-# Enable C++ now for examples and bindings subdirectories, but make it optional.
-enable_language(CXX OPTIONAL)
 
 # Enable testing
 enable_testing()
@@ -30,11 +27,21 @@ include (CTest)
 # Pull in local cmake modules
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/tools/cmake/Modules/")
 
+include (CheckLanguage)
+check_language(CXX)
+if (CMAKE_CXX_COMPILER)
+  enable_language(CXX)
+endif()
+
+# TODO - Should change this test to take account of recent MSVC that does support C99
 if (MSVC)
   # No C99 capability, use C++
   set(DEFAULT_BUILD_WITH_CXX ON)
 endif (MSVC)
-option(BUILD_WITH_CXX "Compile Proton using C++" ${DEFAULT_BUILD_WITH_CXX})
+
+if (CMAKE_CXX_COMPILER)
+  option(BUILD_WITH_CXX "Compile Proton using C++" ${DEFAULT_BUILD_WITH_CXX})
+endif()
 
 if (CMAKE_CONFIGURATION_TYPES)
   # There is no single "build type"...
@@ -75,9 +82,10 @@ if (CMAKE_BUILD_TYPE MATCHES "Coverage")
 endif()
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-  # Default to universal binary on Mac OS X unless user has overriden
-  if (NOT DEFINED CMAKE_OSX_ARCHITECTURES OR "${CMAKE_OSX_ARCHITECTURES}" STREQUAL "")
-    set(CMAKE_OSX_ARCHITECTURES "i386;x86_64")
+  if (NOT CMAKE_OSX_ARCHITECTURES)
+    set(CMAKE_OSX_ARCHITECTURES "x86_64")
+    set(LIB_SUFFIX "")
+    set(CMAKE_MACOSX_RPATH ON)
   endif ()
 endif ()
 
@@ -155,31 +163,56 @@ endforeach()
 set (PROTON_SHARE ${SHARE_INSTALL_DIR}/proton-${PN_VERSION})
 # End of variables used during install
 
-# Check for valgrind here so tests under proton-c/ and examples/ can use it.
-find_program(VALGRIND_EXE valgrind DOC "Location of the valgrind program")
-mark_as_advanced (VALGRIND_EXE)
+# Can't do valgrind and coverage at athe same time - coverage takes precedence
+if (CMAKE_BUILD_TYPE MATCHES "Coverage")
+  message(STATUS "Building for coverage analysis; no run-time error detection")
+else ()
+  # Check for valgrind here so tests under proton-c/ and examples/ can use it.
+  find_program(VALGRIND_EXECUTABLE valgrind DOC "Location of the valgrind program")
+  mark_as_advanced (VALGRIND_EXECUTABLE)
 
-option(ENABLE_VALGRIND "Use valgrind to detect run-time problems" ON)
-if (ENABLE_VALGRIND)
-  if (NOT VALGRIND_EXE)
-    message(STATUS "Can't locate the valgrind command; no run-time error detection")
-  elseif (CMAKE_BUILD_TYPE MATCHES "Coverage")
-    message(STATUS "Building for coverage analysis; no run-time error detection")
-  else ()
-    set (VALGRIND_ENV "VALGRIND=${VALGRIND_EXE}")
+  option(ENABLE_VALGRIND "Use valgrind to detect run-time problems" ON)
+  if (ENABLE_VALGRIND)
+    if (VALGRIND_EXECUTABLE)
+      set (VALGRIND_SUPPRESSIONS ${CMAKE_SOURCE_DIR}/proton-c/src/tests/valgrind.supp CACHE STRING "Default valgrind suppressions")
+      set (VALGRIND_OPTIONS "--error-exitcode=42 --quiet --leak-check=full --trace-children=yes" CACHE STRING "Default valgrind options")
+      mark_as_advanced(VALGRIND_SUPPRESSIONS VALGRIND_OPTIONS)
+      set (VALGRIND_ENV "VALGRIND=${VALGRIND_EXECUTABLE}" "VALGRIND_ARGS=${VALGRIND_OPTIONS} --suppressions=${VALGRIND_SUPPRESSIONS}")
+      separate_arguments(VALGRIND_OPTIONS_LIST UNIX_COMMAND ${VALGRIND_OPTIONS})
+      set (memcheck-cmd ${VALGRIND_EXECUTABLE} ${VALGRIND_OPTIONS_LIST} "--suppressions=${VALGRIND_SUPPRESSIONS}")
+    else ()
+      message(STATUS "Can't locate the valgrind command; no run-time error detection")
+    endif ()
   endif ()
-endif (ENABLE_VALGRIND)
+endif ()
+
+# Options to enable sanitizing compile flags. Compile flags are set in proton-c/CMakeLists.txt
+option(ENABLE_SANITIZERS "Compile with sanitizers (ASan, UBSan, TSan); incompatible with Valgrind" OFF)
+option(ENABLE_TSAN "Compile with Thread Sanitizer (TSan); incompatible with Valgrind" OFF)
+if (ENABLE_SANITIZERS OR ENABLE_TSAN)
+  set(DISABLE ENABLE_VALGRIND ENABLE_UNDEFINED_ERROR BUILD_GO)
+  message(STATUS "Building with sanitizers; disables ${DISABLE}")
+  foreach(d ${DISABLE})
+    set(${d} OFF CACHE BOOL "Disabled to run sanitizers" FORCE)
+  endforeach()
+  unset(VALGRIND_ENV)
+endif()
+
+# Set result to a native search path - used by examples and binding tests.
+# args after result are directories or search paths.
+macro(set_search_path result)
+  set(${result} ${ARGN})
+  if (UNIX)
+    string(REPLACE ";" ":" ${result} "${${result}}") # native search path separators.
+  endif()
+  file(TO_NATIVE_PATH "${${result}}" ${result}) # native slash separators
+endmacro()
 
 add_subdirectory(proton-c)
 add_subdirectory(examples)
 
 install (FILES LICENSE README.md
          DESTINATION ${PROTON_SHARE})
-
-install (DIRECTORY examples
-         DESTINATION ${PROTON_SHARE}
-         REGEX "/examples/CMakeLists.txt$" EXCLUDE
-         PATTERN "*Config.cmake" EXCLUDE)
 
 # Generate test environment settings
 configure_file(${CMAKE_SOURCE_DIR}/config.sh.in
