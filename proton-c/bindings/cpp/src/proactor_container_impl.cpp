@@ -143,7 +143,7 @@ class work_queue::impl* container::impl::make_work_queue(container& c) {
 
 container::impl::impl(container& c, const std::string& id, messaging_handler* mh)
     : threads_(0), container_(c), proactor_(pn_proactor()), handler_(mh), id_(id),
-      auto_stop_(true), stopping_(false)
+      reconnecting_(0), auto_stop_(true), stopping_(false)
 {}
 
 container::impl::~impl() {
@@ -217,6 +217,15 @@ void container::impl::start_connection(const url& url, pn_connection_t *pnc) {
 }
 
 void container::impl::reconnect(pn_connection_t* pnc) {
+    --reconnecting_;
+
+    if (stopping_ && reconnecting_==0) {
+        pn_connection_free(pnc);
+        //TODO: We've lost the error - we should really propagate it here
+        pn_proactor_disconnect(proactor_, NULL);
+        return;
+    }
+
     connection_context& cc = connection_context::get(pnc);
     reconnect_context& rc = *cc.reconnect_context_.get();
     const reconnect_options::impl& roi = *rc.reconnect_options_->impl_;
@@ -318,6 +327,7 @@ bool container::impl::setup_reconnect(pn_connection_t* pnc) {
     // Schedule reconnect - can do this on container work queue as no one can have the connection
     // now anyway
     schedule(delay, make_work(&container::impl::reconnect, this, pnc));
+    ++reconnecting_;
 
     return true;
 }
@@ -513,28 +523,41 @@ bool container::impl::handle(pn_event_t* event) {
     }
     case PN_LISTENER_OPEN: {
         pn_listener_t* l = pn_event_listener(event);
-        listener_context &lc(listener_context::get(l));
-        if (lc.listen_handler_) {
+        proton::listen_handler* handler;
+        {
+            GUARD(lock_);
+            listener_context &lc(listener_context::get(l));
+            handler = lc.listen_handler_;
+        }
+        if (handler) {
             listener lstnr(l);
-            lc.listen_handler_->on_open(lstnr);
+            handler->on_open(lstnr);
         }
         return false;
     }
     case PN_LISTENER_ACCEPT: {
         pn_listener_t* l = pn_event_listener(event);
         pn_connection_t* c = pn_connection();
-        listener_context &lc(listener_context::get(l));
         pn_connection_set_container(c, id_.c_str());
         connection_options opts = server_connection_options_;
-        if (lc.listen_handler_) {
-            listener lstr(l);
-            opts.update(lc.listen_handler_->on_accept(lstr));
+        listen_handler* handler;
+        listener_context* lc;
+        const connection_options* options;
+        {
+            GUARD(lock_);
+            lc = &listener_context::get(l);
+            handler = lc->listen_handler_;
+            options = lc->connection_options_.get();
         }
-        else if (!!lc.connection_options_) opts.update(*lc.connection_options_);
+        if (handler) {
+            listener lstr(l);
+            opts.update(handler->on_accept(lstr));
+        }
+        else if (options) opts.update(*options);
         // Handler applied separately
         connection_context& cc = connection_context::get(c);
         cc.container = &container_;
-        cc.listener_context_ = &lc;
+        cc.listener_context_ = lc;
         cc.handler = opts.handler();
         cc.work_queue_ = new container::impl::connection_work_queue(*container_.impl_, c);
         pn_transport_t* pnt = pn_transport();
@@ -545,14 +568,19 @@ bool container::impl::handle(pn_event_t* event) {
     }
     case PN_LISTENER_CLOSE: {
         pn_listener_t* l = pn_event_listener(event);
-        listener_context &lc(listener_context::get(l));
+        proton::listen_handler* handler;
+        {
+            GUARD(lock_);
+            listener_context &lc(listener_context::get(l));
+            handler = lc.listen_handler_;
+        }
         listener lstnr(l);
-        if (lc.listen_handler_) {
+        if (handler) {
             pn_condition_t* c = pn_listener_condition(l);
             if (pn_condition_is_set(c)) {
-                lc.listen_handler_->on_error(lstnr, make_wrapper(c).what());
+                handler->on_error(lstnr, make_wrapper(c).what());
             }
-            lc.listen_handler_->on_close(lstnr);
+            handler->on_close(lstnr);
         }
         return false;
     }
@@ -594,7 +622,12 @@ bool container::impl::handle(pn_event_t* event) {
         // If reconnect is turned on then handle closed on error here with reconnect attempt
         pn_connection_t* c = pn_event_connection(event);
         pn_transport_t* t = pn_event_transport(event);
+        // If we successfully schedule a re-connect then hide the event from
+        // user handlers by returning here.
         if (pn_condition_is_set(pn_transport_condition(t)) && setup_reconnect(c)) return false;
+        // Otherwise, this connection will be freed by the proactor.
+        // Mark its work_queue finished so it won't try to use the freed connection.
+        connection_context::get(c).work_queue_.impl_.get()->finished();
     }
     default:
         break;
@@ -722,6 +755,8 @@ void container::impl::stop(const proton::error_condition& err) {
         if (stopping_) return;  // Already stopping
         auto_stop_ = true;
         stopping_ = true;
+        // Have to wait until actual reconnect to stop or we leak the connection
+        if (reconnecting_>0) return;
     }
     pn_condition_t* error_condition = pn_condition();
     set_error_condition(err, error_condition);

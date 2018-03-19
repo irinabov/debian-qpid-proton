@@ -19,6 +19,7 @@
 
 set(src "${CMAKE_CURRENT_SOURCE_DIR}")
 set(bin "${CMAKE_CURRENT_BINARY_DIR}")
+set(c_lib_dir "$<TARGET_FILE_DIR:qpid-proton>") # Location of qpid-proton library
 
 ## Build the swig library
 
@@ -30,12 +31,16 @@ include_directories (${RUBY_INCLUDE_PATH})
 swig_add_library(cproton-ruby LANGUAGE ruby SOURCES cproton.i)
 swig_link_libraries(cproton-ruby ${BINDING_DEPS} ${RUBY_LIBRARY})
 
-# set a compiler macro to relay the Ruby version to the extension.
-# Don't use the global CMAKE_C_FLAGS, -fvisibility=hidden causes an obscure
-# failure with release builds.
-string(REPLACE "." "" CFLAG_RUBY_VERSION "${RUBY_VERSION}")
-string(SUBSTRING "${CFLAG_RUBY_VERSION}" 0 2 CFLAG_RUBY_VERSION)
-set(CMAKE_C_FLAGS "-DRUBY${CFLAG_RUBY_VERSION}")
+# Set version-dependent compile flags
+if (RUBY_VERSION VERSION_LESS 1.9.0)
+   # Don't have blocking control API
+elseif(RUBY_VERSION VERSION_LESS 2.0.0)
+  set(RUBY_C_FLAGS "-DRUBY_USE_rb_thread_blocking_region")
+else()
+  set(RUBY_C_FLAGS "-DRUBY_USE_rb_thread_call_without_gvl")
+endif()
+# Replace global CMAKE_C_FLAGS, -fvisibility=hidden causes an obscure failure with release builds.
+set(CMAKE_C_FLAGS "${RUBY_C_FLAGS}")
 
 set_target_properties(cproton-ruby
     PROPERTIES
@@ -50,19 +55,25 @@ file(GLOB_RECURSE RUBY_SRC RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.rb *.rdoc)
 find_program(GEM_EXE gem DOC "Program to build and install ruby gem packages")
 mark_as_advanced(GEM_EXE)
 if (GEM_EXE)
+  set(GEM_FILE "${bin}/gem/qpid_proton-${PN_VERSION}.gem")
   # Copy source and generated files to the build tree so we can build the gem in one place
+  #
+  # NOTE: the gem does not need the cproton-ruby library, but it does need
+  # cprotonRUBY_wrap.c which is generated as a side effect. We have to depend on
+  # cproton-ruby as there's no parallel-safe way to generate only the C file.
   configure_file(${src}/qpid_proton.gemspec.in ${bin}/gem/qpid_proton.gemspec)
   add_custom_command(
-    OUTPUT ${bin}/qpid_proton-${PN_VERSION}.gem
+    OUTPUT ${GEM_FILE}
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${src} ${bin}/gem
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/examples/ruby/ ${bin}/gem/examples
     COMMAND ${CMAKE_COMMAND} -E copy ${bin}/cprotonRUBY_wrap.c ${bin}/gem/ext/cproton/cproton.c
     COMMAND ${GEM_EXE} build qpid_proton.gemspec
-    COMMAND ${CMAKE_COMMAND} -E copy ${bin}/gem/qpid_proton-${PN_VERSION}.gem ${bin}
     WORKING_DIRECTORY ${bin}/gem
-    DEPENDS ${RUBY_SRC} ${src}/LICENSE ${src}/TODO ${src}/ChangeLog cproton-ruby ${bin}/cprotonRUBY_wrap.c
+    DEPENDS ${bin}/gem/qpid_proton.gemspec ${RUBY_SRC} ${src}/LICENSE ${src}/TODO ${src}/ChangeLog
+    cproton-ruby
     )
 
-  add_custom_target(ruby-gem ALL DEPENDS ${bin}/qpid_proton-${PN_VERSION}.gem )
+  add_custom_target(ruby-gem ALL DEPENDS ${GEM_FILE})
 endif ()
 
 ## CMake-based install
@@ -94,10 +105,8 @@ install(DIRECTORY lib DESTINATION ${RUBY_ARCHLIB_DIR} COMPONENT Ruby)
 
 ## Tests
 
-set(bld "$<TARGET_FILE_DIR:qpid-proton>")
-
-to_native_path("$ENV{RUBYLIB};${src}/lib;${src}/tests;${src}/spec;${bin};${bld}" RUBYLIB)
-to_native_path("$ENV{PATH};${bin};${bld}" PATH)
+to_native_path("$ENV{RUBYLIB};${src}/lib;${src}/tests;${src}/spec;${bin};${c_lib_dir}" RUBYLIB)
+to_native_path("$ENV{PATH};${bin};${c_lib_dir}" PATH)
 
 execute_process(COMMAND ${RUBY_EXECUTABLE} -r minitest -e ""
   RESULT_VARIABLE result OUTPUT_QUIET ERROR_QUIET)
