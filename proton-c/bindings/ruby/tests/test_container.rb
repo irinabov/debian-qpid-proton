@@ -32,7 +32,7 @@ class TestContainer < Qpid::Proton::Container
   def url() "amqp://:#{port}"; end#
 end
 
-class ContainerTest < Minitest::Test
+class ContainerTest < MiniTest::Test
   include Qpid::Proton
 
   def test_simple()
@@ -51,7 +51,7 @@ class ContainerTest < Minitest::Test
 
     receive_handler = Class.new(MessagingHandler) do
       attr_reader :message, :link
-      def on_link_open(link)
+      def on_receiver_open(link)
         @link = link
         @link.open
         @link.flow(1)
@@ -215,7 +215,7 @@ class ContainerTest < Minitest::Test
 end
 
 
-class ContainerSASLTest < Minitest::Test
+class ContainerSASLTest < MiniTest::Test
   include Qpid::Proton
 
   # Handler for test client/server that sets up server and client SASL options

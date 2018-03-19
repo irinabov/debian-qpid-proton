@@ -187,3 +187,5 @@ pn_connection_driver_t* pn_event_batch_connection_driver(pn_event_batch_t *batch
     (pn_connection_driver_t*)((char*)batch - offsetof(pn_connection_driver_t, batch)) :
     NULL;
 }
+
+pn_connection_driver_t** pn_connection_driver_ptr(pn_connection_t *c) { return &c->driver; }

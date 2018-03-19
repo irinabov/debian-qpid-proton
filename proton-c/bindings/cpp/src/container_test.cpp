@@ -34,6 +34,12 @@
 #include <cstdio>
 #include <sstream>
 
+#if PN_CPP_SUPPORTS_THREADS
+# include <thread>
+# include <mutex>
+# include <condition_variable>
+#endif
+
 namespace {
 
 std::string make_url(std::string host, int port) {
@@ -230,7 +236,7 @@ struct hang_tester : public proton::messaging_handler {
 
     void on_container_start(proton::container& c) PN_CPP_OVERRIDE {
         listener = c.listen("//:0");
-        c.schedule(proton::duration(250), make_work(&hang_tester::connect, this, &c));
+        c.schedule(proton::duration(250), proton::make_work(&hang_tester::connect, this, &c));
     }
 
     void on_connection_open(proton::connection& c) PN_CPP_OVERRIDE {
@@ -260,9 +266,106 @@ public:
 
 int test_container_immediate_stop() {
     immediate_stop_tester t;
-    proton::container(t).run();  // will hang
+    proton::container(t).run();  // Should return after on_container_start
     return 0;
 }
+
+int test_container_pre_stop() {
+    proton::container c;
+    c.stop();
+    c.run();                    // Should return immediately
+    return 0;
+}
+
+
+struct schedule_tester : public proton::messaging_handler {
+    void stop(proton::container* c) { c->stop(); }
+
+    void on_container_start(proton::container& c) PN_CPP_OVERRIDE {
+        c.schedule(proton::duration(250), proton::make_work(&schedule_tester::stop, this, &c));
+    }
+};
+
+int test_container_schedule_stop() {
+    schedule_tester tester;
+    proton::container c(tester);
+    c.auto_stop(false);
+    c.run();
+    return 0;
+}
+
+
+#if PN_CPP_SUPPORTS_THREADS // Tests that require thread support
+
+class test_mt_handler : public proton::messaging_handler {
+  public:
+    std::mutex lock_;
+    std::condition_variable cond_;
+    std::string str_;
+    proton::error_condition err_;
+
+    void set(const std::string& s) {
+        std::lock_guard<std::mutex> l(lock_);
+        str_ = s;
+        cond_.notify_one();
+    }
+
+    std::string wait() {
+        std::unique_lock<std::mutex> l(lock_);
+        while (str_.empty()) cond_.wait(l);
+        std::string s = str_;
+        str_.clear();
+        return s;
+    }
+
+    proton::error_condition error() const { return err_; }
+    void on_container_start(proton::container &) PN_CPP_OVERRIDE { set("start"); }
+    void on_connection_open(proton::connection &) PN_CPP_OVERRIDE { set("open"); }
+
+    // Catch errors and save.
+    void on_error(const proton::error_condition& e) PN_CPP_OVERRIDE { err_ = e; }
+};
+
+class container_runner {
+    proton::container& c_;
+
+  public:
+    container_runner(proton::container& c) : c_(c) {}
+
+    void operator()() {c_.run();}
+};
+
+int test_container_mt_stop_empty() {
+    test_mt_handler th;
+    proton::container c(th);
+    c.auto_stop( false );
+    container_runner runner(c);
+    auto t = std::thread(runner);
+    ASSERT_EQUAL("start", th.wait());
+    c.stop();
+    t.join();
+    ASSERT_EQUAL("", th.error().name());
+    return 0;
+}
+
+int test_container_mt_stop() {
+    test_mt_handler th;
+    proton::container c(th);
+    c.auto_stop(false);
+    container_runner runner(c);
+    auto t = std::thread(runner);
+    test_listen_handler lh;
+    c.listen("//:0", lh);       //  Also opens a connection
+    ASSERT_EQUAL("start", th.wait());
+    ASSERT_EQUAL("open", th.wait());
+    c.stop();
+    t.join();
+    // It is possible to get sporadic connection errors from this test depending on timing of stop()
+    return 0;
+}
+
+// FIXME aconway 2018-01-04: test busy stop from other thread
+#endif
 
 } // namespace
 
@@ -276,6 +379,12 @@ int main(int argc, char** argv) {
     RUN_ARGV_TEST(failed, test_container_stop());
     RUN_ARGV_TEST(failed, test_container_schedule_nohang());
     RUN_ARGV_TEST(failed, test_container_immediate_stop());
+    RUN_ARGV_TEST(failed, test_container_pre_stop());
+    RUN_ARGV_TEST(failed, test_container_schedule_stop());
+#if PN_CPP_SUPPORTS_THREADS
+    RUN_ARGV_TEST(failed, test_container_mt_stop_empty());
+    RUN_ARGV_TEST(failed, test_container_mt_stop());
+#endif
     return failed;
 }
 
