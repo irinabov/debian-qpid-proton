@@ -44,7 +44,7 @@ override_dh_auto_build:
 	dh_auto_build -- all docs
 	pwd
 	set -ex; for python in $(PYTHON3_VERSIONS); do \
-		cd obj-$(DEB_BUILD_GNU_TYPE)/proton-c/bindings/python/dist; \
+		cd obj-$(DEB_BUILD_GNU_TYPE)/python/dist; \
 		$$python setup.py build '--executable=/usr/bin/python3 -s'; \
 	done
 
@@ -61,6 +61,6 @@ override_dh_auto_install:
 	rm -rf debian/tmp/usr/share/proton/examples/ruby
 	pwd
 	set -ex; for python in $(PYTHON3_VERSIONS); do \
-		cd obj-$(DEB_BUILD_GNU_TYPE)/proton-c/bindings/python/dist; \
+		cd obj-$(DEB_BUILD_GNU_TYPE)/python/dist; \
 		$$python setup.py install -O1 --skip-build --root=$(CURDIR)/debian/tmp --install-layout=deb; \
 	done
