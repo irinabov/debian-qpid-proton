@@ -3,6 +3,6 @@ usr/share/proton/examples/cpp/*.hpp
 usr/share/proton/examples/cpp/README.dox
 usr/share/proton/examples/cpp/CMakeLists.txt
 usr/share/proton/examples/cpp/example_test.py
-usr/share/proton/examples/cpp/ssl_certs
+usr/share/proton/examples/cpp/ssl-certs
 usr/share/proton/examples/cpp/tutorial.dox
 
