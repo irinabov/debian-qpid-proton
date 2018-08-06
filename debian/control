@@ -157,7 +157,7 @@ Description: C proactor development library for writing messaging apps with Qpid
  .
  This package provides the C proactor development library for Qpid Proton.
 
-Package: libqpid-proton-cpp11
+Package: libqpid-proton-cpp12
 Architecture: any
 Depends: libqpid-proton-core10 (>= ${binary:Version}), libqpid-proton-proactor1 (>= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
 Pre-Depends: ${misc:Pre-Depends}
@@ -171,13 +171,13 @@ Description: C++ libraries for Qpid Proton
  .
  This package provides the shared libraries for Qpid Proton.
 
-Package: libqpid-proton-cpp11-dev
+Package: libqpid-proton-cpp12-dev
 Provides: libqpid-proton-cpp-dev
 Replaces: libqpid-proton-cpp-dev
 Conflicts: libqpid-proton-cpp-dev
 Architecture: any
 Section: libdevel
-Depends: libqpid-proton-cpp11 (= ${binary:Version}), libqpid-proton-core10-dev (>= ${binary:Version}), libqpid-proton-proactor1-dev (>= ${binary:Version}), ${misc:Depends}
+Depends: libqpid-proton-cpp12 (= ${binary:Version}), libqpid-proton-core10-dev (>= ${binary:Version}), libqpid-proton-proactor1-dev (>= ${binary:Version}), ${misc:Depends}
 Multi-Arch: same
 Description: Development libraries for writing messaging apps in C++ with Qpid Proton
  Qpid Proton is a high-performance, lightweight messaging library. It can be
@@ -188,11 +188,11 @@ Description: Development libraries for writing messaging apps in C++ with Qpid P
  .
  This package provides the C development libraries for Qpid Proton.
 
-Package: libqpid-proton-cpp11-dev-examples
+Package: libqpid-proton-cpp12-dev-examples
 Provides: libqpid-proton-cpp-dev-examples
 Architecture: all
 Section: libdevel
-Depends: libqpid-proton-cpp11-dev (>= ${binary:Version}), ${misc:Depends}
+Depends: libqpid-proton-cpp12-dev (>= ${binary:Version}), ${misc:Depends}
 Description: Example applications for writign messaging apps in C++ with Qpid Proton
  Qpid Proton is a high-performance, lightweight messaging library. It can be
  used in the widest range of messaging applications, including brokers, client
@@ -202,7 +202,7 @@ Description: Example applications for writign messaging apps in C++ with Qpid Pr
  .
  This package provides C language examples for Qpid Proton.
 
-Package: libqpid-proton-cpp11-dev-doc
+Package: libqpid-proton-cpp12-dev-doc
 Provides: libqpid-proton-cpp-doc
 Replaces: libqpid-proton-cpp-doc
 Conflicts: libqpid-proton-cpp-doc

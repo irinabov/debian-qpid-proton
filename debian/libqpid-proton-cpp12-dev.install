@@ -1,0 +1,5 @@
+usr/lib/*/libqpid-proton-cpp.so
+usr/include/proton/*.hpp
+usr/include/proton/**/*.hpp
+usr/lib/*/cmake/ProtonCpp
+usr/lib/*/pkgconfig/libqpid-proton-cpp.pc
