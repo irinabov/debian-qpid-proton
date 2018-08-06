@@ -31,33 +31,11 @@ from random import randint
 from threading import Thread
 from socket import socket, AF_INET, SOCK_STREAM
 from subprocess import Popen,PIPE,STDOUT
-import sys, os, string, subprocess
-from proton import Connection, Transport, SASL, Endpoint, Delivery, SSL
+import sys, os, subprocess
+from proton import SASL, SSL
 from proton.reactor import Container
-from proton.handlers import CHandshaker, CFlowController
+from proton.handlers import Handshaker, FlowController
 from string import Template
-
-if sys.version_info[0] == 2 and sys.version_info[1] < 6:
-    # this is for compatibility, apparently the version of jython we
-    # use doesn't have the next() builtin.
-    # we should remove this when we upgrade to a python 2.6+ compatible version
-    # of jython
-    #_DEF = object()  This causes the test loader to fail (why?)
-    class _dummy(): pass
-    _DEF = _dummy
-
-    def next(iter, default=_DEF):
-        try:
-            return iter.next()
-        except StopIteration:
-            if default is _DEF:
-                raise
-            else:
-                return default
-    # I may goto hell for this:
-    import __builtin__
-    __builtin__.__dict__['next'] = next
-
 
 def free_tcp_ports(count=1):
   """ return a list of 'count' TCP ports that are free to used (ie. unbound)
@@ -160,7 +138,7 @@ mech_list: EXTERNAL DIGEST-MD5 SCRAM-SHA-1 CRAM-MD5 PLAIN ANONYMOUS
 
 # Globally initialize Cyrus SASL configuration
 if SASL.extended():
-  _cyrusSetup('sasl_conf')
+  _cyrusSetup('sasl-conf')
 
 def ensureCanTestExtendedSASL():
   if not SASL.extended():
@@ -217,7 +195,7 @@ class TestServer(object):
       self.host = kwargs["host"]
     if "port" in kwargs:
       self.port = kwargs["port"]
-    self.handlers = [CFlowController(10), CHandshaker()]
+    self.handlers = [FlowController(10), Handshaker()]
     self.thread = Thread(name="server-thread", target=self.run)
     self.thread.daemon = True
     self.running = True
@@ -266,7 +244,7 @@ class TestServer(object):
 
 #
 # Classes that wrap the messenger applications msgr-send and msgr-recv.
-# These applications reside in the tests/tools/apps directory
+# These applications reside in the c/tools directory
 #
 
 class MessengerApp(object):
@@ -508,19 +486,6 @@ class MessengerReceiverValgrind(MessengerReceiverC):
     """
     def __init__(self, suppressions=None):
         setup_valgrind(self)
-
-class MessengerSenderPython(MessengerSender):
-    def __init__(self):
-        MessengerSender.__init__(self)
-        self._command = ["msgr-send.py"]
-
-
-class MessengerReceiverPython(MessengerReceiver):
-    def __init__(self):
-        MessengerReceiver.__init__(self)
-        self._command = ["msgr-recv.py"]
-
-
 
 class ReactorSenderC(MessengerSender):
     def __init__(self):
