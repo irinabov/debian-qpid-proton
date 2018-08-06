@@ -42,7 +42,7 @@ class UrlTest(common.Test):
     def testDefaults(self):
         # Check that we allow None for scheme, port
         url = Url(username='me', password='secret', host='myhost', path='foobar', defaults=False)
-        self.assertEqual(str(url), "me:secret@myhost/foobar")
+        self.assertEqual(str(url), "//me:secret@myhost/foobar")
         self.assertUrl(url, None, 'me', 'secret', 'myhost', None, 'foobar')
 
         self.assertEqual(str(Url("amqp://me:secret@myhost/foobar")),
@@ -54,10 +54,13 @@ class UrlTest(common.Test):
 
         # Expanding abbreviated url strings.
         for s, u in [
-                ("", "amqp://0.0.0.0:amqp"),
-                ("foo", "amqp://foo:amqp"),
-                (":1234", "amqp://0.0.0.0:1234"),
-                ("/path", "amqp://0.0.0.0:amqp/path")
+            ("", "amqp://0.0.0.0:amqp"),
+            ("foo", "amqp://foo:amqp"),
+            (":1234", "amqp://0.0.0.0:1234"),
+            ("/path", "amqp://0.0.0.0:amqp/path"),
+            ("user@host/topic://test", "amqp://user@host:amqp/topic://test"),
+            ("user@host:3456", "amqp://user@host:3456"),
+            ("user:pass@host/topic://test", "amqp://user:pass@host:amqp/topic://test")
         ]: self.assertEqual(str(Url(s)), u)
 
     def assertPort(self, port, portint, portstr):
@@ -79,7 +82,7 @@ class UrlTest(common.Test):
             assert False, "Expected ValueError"
         except ValueError: pass
 
-        self.assertEqual(str(Url("host:amqp", defaults=False)), "host:amqp")
+        self.assertEqual(str(Url("host:amqp", defaults=False)), "//host:amqp")
         self.assertEqual(Url("host:amqp", defaults=False).port, 5672)
 
     def testArgs(self):
@@ -103,8 +106,14 @@ class UrlTest(common.Test):
         self.assertUrl(Url(':1234', defaults=False), None, None, None, None, 1234, None)
         self.assertUrl(Url('/path', defaults=False), None, None, None, None, None, 'path')
 
-        for s in ['amqp://', 'username@', ':pass@', ':1234', '/path']:
-            self.assertEqual(s, str(Url(s, defaults=False)))
+        for s, full in [
+            ('amqp://', 'amqp://'),
+            ('username@','//username@'),
+            (':pass@', '//:pass@'),
+            (':1234', '//:1234'),
+            ('/path','/path')
+        ]:
+            self.assertEqual(str(Url(s, defaults=False)), full)
 
         for s, full in [
                 ('amqp://', 'amqp://0.0.0.0:amqp'),
@@ -126,7 +135,7 @@ class UrlTest(common.Test):
                          "amqps://me:secret@myhost:amqps/foobar")
 
         self.assertPort(Url.Port('amqps'), 5671, 'amqps')
-        self.assertEqual(str(Url("host:amqps", defaults=False)), "host:amqps")
+        self.assertEqual(str(Url("host:amqps", defaults=False)), "//host:amqps")
         self.assertEqual(Url("host:amqps", defaults=False).port, 5671)
 
     def testEqual(self):
