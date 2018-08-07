@@ -1,4 +1,4 @@
-usr/share/proton/examples/c/ssl_certs
+usr/share/proton/examples/c/ssl-certs
 usr/share/proton/examples/c/*.c
 usr/share/proton/examples/c/*.h
 usr/share/proton/examples/c/README.dox
