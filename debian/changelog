@@ -1,35 +1,6 @@
-qpid-proton (0.24.0-1xenial+qpid1) xenial; urgency=medium
+qpid-proton (0.24.0-1bionic+qpid1) bionic; urgency=medium
 
   * Rebased on Proton 0.24.0
 
- -- Irina Boverman <iboverma@redhat.com>  Mon, 6 Aug 2018 15:20:00 -0400
+ -- Irina Boverman <iboverma@redhat.com>  Wed, 8 Aug 2018 16:09:14 -0400
 
-qpid-proton (0.21.0-1xenial+qpid1) xenial; urgency=medium
-
-  * Rebased on Proton 0.21.0
-
- -- Irina Boverman <iboverma@redhat.com>  Mon, 19 Mar 2018 13:58:00 -0400
-
-qpid-proton (0.20.0-1xenial+qpid1) xenial; urgency=medium
-
-  * Rebased on Proton 0.20.0
-
- -- Irina Boverman <iboverma@redhat.com>  Mon,  5 Feb 2018 15:34:57 -0400
-
-qpid-proton (0.17.0-1xenial+qpid1) xenial; urgency=medium
-
-  * Rebased on Proton 0.17.0
-
- -- Irina Boverman <iboverma@redhat.com>  Tue, 16 May 2017 10:25:57 -0400
-
-qpid-proton (0.13.1-3xenial+qpid1) xenial; urgency=medium
-
-  * Rebased on Proton 0.13.1
-
- -- Irina Boverman <iboverma@redhat.com>  Thu, 18 Aug 2016 09:33:55 -0400
-
-qpid-proton (0.12.1-2xenial+qpid1) xenial; urgency=medium
-
-  * Rebased on Proton 0.12.1
-
- -- Irina Boverman <iboverma@redhat.com>  Mon, 16 May 2016 13:59:52 -0400
