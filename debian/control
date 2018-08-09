@@ -238,8 +238,7 @@ Description: Python language bindings for Qpid Proton messaging framework
 Package: python-qpid-proton-doc
 Architecture: all
 Section: doc
-Depends: python-qpid-proton,
-         ${python:Depends},
+Depends: ${python:Depends},
          python (>= 2.6),
          ${misc:Depends}
 Description: Documentation for the Python language bindings for Qpid Proton
