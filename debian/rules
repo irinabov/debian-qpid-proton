@@ -35,10 +35,15 @@ override_dh_auto_clean:
 	rm -rf build
 
 override_dh_auto_configure:
+	python_includes=$(ls -d /usr/include/python3* | tail -1)
+	python_lib=$(ls -d /usr/lib/*/libpython3*.so)
 	dh_auto_configure -- \
                              -DBUILD_RUBY=OFF \
                              -DSYSINSTALL_BINDINGS=on \
-                             -DLIB_INSTALL_DIR=/usr/lib/${DEB_HOST_MULTIARCH}
+                             -DLIB_INSTALL_DIR=/usr/lib/${DEB_HOST_MULTIARCH}\
+			     -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+			     "-DPYTHON_INCLUDE_DIR=$python_includes" \
+			     "-DPYTHON_LIBRARY=$python_lib" \
 
 override_dh_auto_build:
 	dh_auto_build -- all docs

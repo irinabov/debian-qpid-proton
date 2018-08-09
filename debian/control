@@ -217,24 +217,6 @@ Description: Developer documentation for Qpid Proton C++
  .
  This package provides C developer documentation for Qpid Proton.
 
-Package: python-qpid-proton
-Architecture: any
-Section: python
-X-Python-Version: >= 2.6.6
-Depends: libqpid-proton11,
-         ${python:Depends},
-         python (>= 2.6),
-         ${shlibs:Depends}, ${misc:Depends}
-Provides: ${python:Provides}
-Description: Python language bindings for Qpid Proton messaging framework
- Qpid Proton is a high-performance, lightweight messaging library. It can be
- used in the widest range of messaging applications, including brokers, client
- libraries, routers, bridges, proxies, and more. Proton makes it trivial to
- integrate with the AMQP 1.0 ecosystem from any platform, environment, or
- language.
- .
- This package provides Python language bindings for Qpid Proton.
-
 Package: python-qpid-proton-doc
 Architecture: all
 Section: doc
@@ -251,7 +233,7 @@ Description: Documentation for the Python language bindings for Qpid Proton
  This package provides documentation for the Python language bindings for
  Qpid Proton.
 
-Package: qpid-proton
+Package: qpid-proton-license
 Architecture: all
 Section: doc
 Depends: ${misc:Depends}
