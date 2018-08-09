@@ -28,8 +28,7 @@ Build-Depends: debhelper (>= 9.0.0~),
                python3-dev (>= 3.2~)
 Standards-Version: 3.9.7
 Homepage: http://qpid.apache.org/proton
-Vcs-Browser: http://git.debian.org/?p=pkg-middleware/qpid-proton.git
-Vcs-Git: git://git.debian.org/git/pkg-middleware/qpid-proton.git
+Vcs-Browser: https://salsa.debian.org/middleware-team/qpid-proton
 
 Package: libqpid-proton11
 Architecture: any
@@ -239,7 +238,10 @@ Description: Python language bindings for Qpid Proton messaging framework
 Package: python-qpid-proton-doc
 Architecture: all
 Section: doc
-Depends: ${misc:Depends}
+Depends: python-qpid-proton,
+         ${python:Depends},
+         python (>= 2.6),
+         ${misc:Depends}
 Description: Documentation for the Python language bindings for Qpid Proton
  Qpid Proton is a high-performance, lightweight messaging library. It can be
  used in the widest range of messaging applications, including brokers, client
