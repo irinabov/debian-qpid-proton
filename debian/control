@@ -252,6 +252,14 @@ Description: Documentation for the Python language bindings for Qpid Proton
  This package provides documentation for the Python language bindings for
  Qpid Proton.
 
+Package: qpid-proton
+Architecture: all
+Section: doc
+Depends: ${misc:Depends}
+Description: Documentation license and notice
+ .
+ This package provides licensing documentation.
+
 Package: python3-qpid-proton
 Architecture: any
 Section: python
