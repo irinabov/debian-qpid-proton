@@ -216,7 +216,6 @@ typedef struct broker_t {
   size_t threads;
   const char *container_id;     /* AMQP container-id */
   queues_t queues;
-  bool finished;
   pn_ssl_domain_t *ssl_domain;
 } broker_t;
 
@@ -276,14 +275,14 @@ static void session_unsub(broker_t *b, pn_session_t *ssn) {
 
 static void check_condition(pn_event_t *e, pn_condition_t *cond) {
   if (pn_condition_is_set(cond)) {
-    fprintf(stderr, "%s: %s: %s\n", pn_event_type_name(pn_event_type(e)),
-            pn_condition_get_name(cond), pn_condition_get_description(cond));
+    printf("%s: %s: %s\n", pn_event_type_name(pn_event_type(e)),
+           pn_condition_get_name(cond), pn_condition_get_description(cond));
   }
 }
 
 const int WINDOW=5; /* Very small incoming credit window, to show flow control in action */
 
-static void handle(broker_t* b, pn_event_t* e) {
+static bool handle(broker_t* b, pn_event_t* e) {
   pn_connection_t *c = pn_event_connection(e);
 
   switch (pn_event_type(e)) {
@@ -298,7 +297,7 @@ static void handle(broker_t* b, pn_event_t* e) {
    case PN_LISTENER_ACCEPT: {
     /* Configure a transport to allow SSL and SASL connections. See ssl_domain setup in main() */
      pn_transport_t *t = pn_transport();
-     pn_transport_require_auth(t, false);
+     pn_transport_set_server(t); /* Must call before pn_sasl() */
      pn_sasl_allowed_mechs(pn_sasl(t), "ANONYMOUS");
      if (b->ssl_domain) {
        pn_ssl_init(pn_ssl(t), b->ssl_domain, NULL);
@@ -364,8 +363,8 @@ static void handle(broker_t* b, pn_event_t* e) {
        m->start = (char*)realloc(m->start, m->size);
        recv = pn_link_recv(l, m->start, m->size);
        if (recv == PN_ABORTED) { /*  */
-         fprintf(stderr, "Message aborted\n");
-         fflush(stderr);
+         printf("Message aborted\n");
+         fflush(stdout);
          m->size = 0;           /* Forget the data we accumulated */
          pn_delivery_settle(d); /* Free the delivery so we can receive the next message */
          pn_link_flow(l, WINDOW - pn_link_credit(l)); /* Replace credit for the aborted message */
@@ -418,25 +417,26 @@ static void handle(broker_t* b, pn_event_t* e) {
     break;
 
    case PN_PROACTOR_INTERRUPT:
-    b->finished = true;
     pn_proactor_interrupt(b->proactor); /* Pass along the interrupt to the other threads */
-    break;
+    return false;
 
    default:
     break;
   }
+  return true;
 }
 
 static void* broker_thread(void *void_broker) {
   broker_t *b = (broker_t*)void_broker;
+  bool finished = false;
   do {
     pn_event_batch_t *events = pn_proactor_wait(b->proactor);
     pn_event_t *e;
     while ((e = pn_event_batch_next(events))) {
-      handle(b, e);
+        if (!handle(b, e)) finished = true;
     }
     pn_proactor_done(b->proactor, events);
-  } while(!b->finished);
+  } while(!finished);
   return NULL;
 }
 

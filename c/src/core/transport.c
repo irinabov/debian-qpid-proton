@@ -135,6 +135,7 @@ static void pni_delivery_map_clear(pn_delivery_map_t *dm)
 static void pni_default_tracer(pn_transport_t *transport, const char *message)
 {
   fprintf(stderr, "[%p]:%s\n", (void *) transport, message);
+  fflush(stderr);
 }
 
 static ssize_t pn_io_layer_input_passthru(pn_transport_t *, unsigned int, const char *, size_t );
@@ -271,7 +272,7 @@ void pn_set_error_layer(pn_transport_t *transport)
 ssize_t pn_io_layer_input_autodetect(pn_transport_t *transport, unsigned int layer, const char *bytes, size_t available)
 {
   const char* error;
-  bool eos = pn_transport_capacity(transport)==PN_EOS;
+  bool eos = transport->tail_closed;
   if (eos && available==0) {
     pn_do_error(transport, "amqp:connection:framing-error", "No valid protocol header found");
     pn_set_error_layer(transport);
@@ -975,7 +976,7 @@ static int pni_post_amqp_transfer_frame(pn_transport_t *transport, uint16_t ch,
                                         bool batchable)
 {
   bool more_flag = more;
-  int framecount = 0;
+  unsigned framecount = 0;
   pn_buffer_t *frame = transport->frame;
 
   // create preformatives, assuming 'more' flag need not change
@@ -1229,7 +1230,7 @@ int pn_do_begin(pn_transport_t *transport, uint8_t frame_type, uint16_t channel,
                 channel,
                 transport->channel_max
                );
-    return PN_TRANSPORT_ERROR;
+    return PN_ARG_ERR;
   }
 
   pn_session_t *ssn;
@@ -1241,7 +1242,7 @@ int pn_do_begin(pn_transport_t *transport, uint8_t frame_type, uint16_t channel,
                 "begin reply to unknown channel %d.",
                 remote_channel
                );
-      return PN_TRANSPORT_ERROR;
+      return PN_ARG_ERR;
     }
   } else {
     ssn = pn_session(transport->connection);
@@ -1626,13 +1627,8 @@ static int pn_scan_error(pn_data_t *data, pn_condition_t *condition, const char 
   return 0;
 }
 
-/*
-  This operator, inspired by code for the qpid cpp broker, gives the correct
-  result when comparing sequence numbers implemented in a signed integer type.
-*/
-
-static inline int sequence_cmp(pn_sequence_t a, pn_sequence_t b) {
-  return a-b;
+static inline bool sequence_lte(pn_sequence_t a, pn_sequence_t b) {
+  return b-a <= INT32_MAX;
 }
 
 int pn_do_disposition(pn_transport_t *transport, uint8_t frame_type, uint16_t channel, pn_data_t *args, const pn_bytes_t *payload)
@@ -1664,10 +1660,15 @@ int pn_do_disposition(pn_transport_t *transport, uint8_t frame_type, uint16_t ch
   bool remote_data = (pn_data_next(transport->disp_data) &&
                       pn_data_get_list(transport->disp_data) > 0);
 
-  for (pn_sequence_t id = first; sequence_cmp(id, last) <= 0; ++id) {
+  // Do some validation of received first and last values
+  // TODO: We should really also clamp the first value here, but we're not keeping track of the earliest
+  // unsettled delivery sequence no
+  last = sequence_lte(last, deliveries->next) ? last : deliveries->next;
+  first = sequence_lte(first, last) ? first : last;
+  for (pn_sequence_t id = first; sequence_lte(id, last); ++id) {
     pn_delivery_t *delivery = pni_delivery_map_get(deliveries, id);
-    pn_disposition_t *remote = &delivery->remote;
     if (delivery) {
+      pn_disposition_t *remote = &delivery->remote;
       if (type_init) remote->type = type;
       if (remote_data) {
         switch (type) {
@@ -1857,13 +1858,13 @@ static int pni_process_conn_setup(pn_transport_t *transport, pn_endpoint_t *endp
       pn_connection_t *connection = (pn_connection_t *) endpoint;
       const char *cid = pn_string_get(connection->container);
       pni_calculate_channel_max(transport);
-      int err = pn_post_frame(transport, AMQP_FRAME_TYPE, 0, "DL[SS?I?H?InnCCC]", OPEN,
+      int err = pn_post_frame(transport, AMQP_FRAME_TYPE, 0, "DL[SS?I?H?InnMMC]", OPEN,
                               cid ? cid : "",
                               pn_string_get(connection->hostname),
                               // TODO: This is messy, because we also have to allow local_max_frame_ to be 0 to mean unlimited
                               // otherwise flow control goes wrong
                               transport->local_max_frame!=0 && transport->local_max_frame!=OPEN_MAX_FRAME_SIZE_DEFAULT,
-                                transport->local_max_frame,
+                              transport->local_max_frame,
                               transport->channel_max!=OPEN_CHANNEL_MAX_DEFAULT, transport->channel_max,
                               (bool)idle_timeout, idle_timeout,
                               connection->offered_capabilities,
@@ -2023,12 +2024,13 @@ static int pni_process_link_setup(pn_transport_t *transport, pn_endpoint_t *endp
         if (err) return err;
       } else {
         int err = pn_post_frame(transport, AMQP_FRAME_TYPE, ssn_state->local_channel,
-                                "DL[SIoBB?DL[SIsIoC?sCnCC]?DL[SIsIoCC]nnIL]", ATTACH,
+                                "DL[SIoBB?DL[SIsIoC?sCnMM]?DL[SIsIoCM]nnIL]", ATTACH,
                                 pn_string_get(link->name),
                                 state->local_handle,
                                 endpoint->type == RECEIVER,
                                 link->snd_settle_mode,
                                 link->rcv_settle_mode,
+
                                 (bool) link->source.type, SOURCE,
                                 pn_string_get(link->source.address),
                                 link->source.durability,
@@ -2040,6 +2042,7 @@ static int pni_process_link_setup(pn_transport_t *transport, pn_endpoint_t *endp
                                 link->source.filter,
                                 link->source.outcomes,
                                 link->source.capabilities,
+
                                 (bool) link->target.type, TARGET,
                                 pn_string_get(link->target.address),
                                 link->target.durability,
@@ -2048,6 +2051,7 @@ static int pni_process_link_setup(pn_transport_t *transport, pn_endpoint_t *endp
                                 link->target.dynamic,
                                 link->target.properties,
                                 link->target.capabilities,
+
                                 0, link->max_message_size);
         if (err) return err;
       }
@@ -2533,7 +2537,7 @@ static void pn_error_amqp(pn_transport_t* transport, unsigned int layer)
 
 static ssize_t pn_input_read_amqp_header(pn_transport_t* transport, unsigned int layer, const char* bytes, size_t available)
 {
-  bool eos = pn_transport_capacity(transport)==PN_EOS;
+  bool eos = transport->tail_closed;
   pni_protocol_type_t protocol = pni_sniff_header(bytes, available);
   switch (protocol) {
   case PNI_PROTOCOL_AMQP1:
@@ -2575,10 +2579,7 @@ static ssize_t pn_input_read_amqp(pn_transport_t* transport, unsigned int layer,
 
 
   ssize_t n = pn_dispatcher_input(transport, bytes, available, true, &transport->halt);
-  if (n < 0) {
-    //return pn_error_set(transport->error, n, "dispatch error");
-    return PN_EOS;
-  } else if (transport->close_rcvd) {
+  if (n < 0 || transport->close_rcvd) {
     return PN_EOS;
   } else {
     return n;

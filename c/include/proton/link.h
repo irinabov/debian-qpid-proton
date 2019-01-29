@@ -83,8 +83,6 @@ PN_EXTERN pn_link_t *pn_receiver(pn_session_t *session, const char *name);
 PN_EXTERN void pn_link_free(pn_link_t *link);
 
 /**
- * **Deprecated** - Use ::pn_link_attachments().
- *
  * Get the application context that is associated with a link object.
  *
  * The application context for a link may be set using
@@ -96,8 +94,6 @@ PN_EXTERN void pn_link_free(pn_link_t *link);
 PN_EXTERN void *pn_link_get_context(pn_link_t *link);
 
 /**
- * **Deprecated** - Use ::pn_link_attachments().
- *
  * Set a new application context for a link object.
  *
  * The application context for a link object may be retrieved using
@@ -149,7 +145,7 @@ PN_EXTERN bool pn_link_is_receiver(pn_link_t *link);
 PN_EXTERN pn_state_t pn_link_state(pn_link_t *link);
 
 /**
- * **Deprecated**
+ * **Deprecated** - Use ::pn_link_condition().
  *
  * Get additional error information associated with the link.
  *
@@ -164,6 +160,7 @@ PN_EXTERN pn_state_t pn_link_state(pn_link_t *link);
  * @param[in] link the link object
  * @return the link's error object
  */
+/* PN_DEPRECATED("Use pn_link_condition") */
 PN_EXTERN pn_error_t *pn_link_error(pn_link_t *link);
 
 /**

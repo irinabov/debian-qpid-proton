@@ -19,9 +19,8 @@
  *
  */
 
-#include "util.h"
-
 #include "buffer.h"
+#include "util.h"
 
 #include <proton/error.h>
 #include <proton/types.h>
@@ -80,27 +79,6 @@ int pn_quote(pn_string_t *dst, const char *src, size_t size)
       return ssize;
     }
   }
-}
-
-void pn_fprint_data(FILE *stream, const char *bytes, size_t size)
-{
-  char buf[256];
-  ssize_t n = pn_quote_data(buf, 256, bytes, size);
-  if (n >= 0) {
-    fputs(buf, stream);
-  } else {
-    if (n == PN_OVERFLOW) {
-      fputs(buf, stream);
-      fputs("... (truncated)", stream);
-    }
-    else
-      fprintf(stderr, "pn_quote_data: %s\n", pn_code(n));
-  }
-}
-
-void pn_print_data(const char *bytes, size_t size)
-{
-  pn_fprint_data(stdout, bytes, size);
 }
 
 int pn_strcasecmp(const char *a, const char *b)

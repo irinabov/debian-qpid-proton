@@ -18,6 +18,8 @@
  *
  */
 
+#define PN_USE_DEPRECATED_API 1
+
 #include "msgr-common.h"
 #include "proton/message.h"
 #include "proton/messenger.h"
@@ -27,7 +29,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-
 
 typedef struct {
     Addresses_t targets;
@@ -211,6 +212,7 @@ int main(int argc, char** argv)
 
     if (opts.password) {
         rc = pn_messenger_set_password(messenger, opts.password);
+        free(opts.password);
         check( rc == 0, "Failed to set password" );
     }
 
@@ -318,3 +320,5 @@ int main(int argc, char** argv)
 
     return 0;
 }
+
+#undef PN_USE_DEPRECATED_API

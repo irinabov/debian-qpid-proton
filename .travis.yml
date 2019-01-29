@@ -40,7 +40,7 @@ matrix:
     - QPID_PROTON_CMAKE_ARGS='-DCMAKE_OSX_DEPLOYMENT_TARGET=10.11 -DBUILD_RUBY=NO'
     before_install:
     - brew update
-    - brew upgrade cmake python openssl
+    - brew upgrade cmake openssl
     - brew install libuv swig
 
   - os: osx
@@ -51,6 +51,7 @@ matrix:
     - QPID_PROTON_CMAKE_ARGS='-DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 -DBUILD_RUBY=NO'
     before_install:
     - brew update
+    - brew uninstall postgis
     - brew upgrade cmake python openssl
     - brew install libuv swig
 
@@ -71,6 +72,7 @@ addons:
     - python3-dev
     - golang
     - lcov
+    - libjsoncpp-dev
 
 install:
 - python -m pip install --user --upgrade pip

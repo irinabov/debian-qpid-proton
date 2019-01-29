@@ -29,6 +29,8 @@ list(APPEND SWIG_MODULE_cproton-ruby_EXTRA_DEPS
     )
 
 set(CMAKE_SWIG_FLAGS "-DUINTPTR_SIZE=${CMAKE_SIZEOF_VOID_P}")
+# Put the generated source in a known place, we need to copy it for the gem.
+set(SWIG_OUTFILE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 
 include_directories(${PN_C_INCLUDE_DIR} ${RUBY_INCLUDE_PATH})
 
@@ -39,12 +41,13 @@ swig_link_libraries(cproton-ruby ${BINDING_DEPS} ${RUBY_LIBRARY})
 if (RUBY_VERSION VERSION_LESS 1.9.0)
    # Don't have blocking control API
 elseif(RUBY_VERSION VERSION_LESS 2.0.0)
-  set(RUBY_C_FLAGS "-DRUBY_USE_rb_thread_blocking_region")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DRUBY_USE_rb_thread_blocking_region")
 else()
-  set(RUBY_C_FLAGS "-DRUBY_USE_rb_thread_call_without_gvl")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DRUBY_USE_rb_thread_call_without_gvl")
 endif()
-# Replace global CMAKE_C_FLAGS, -fvisibility=hidden causes an obscure failure with release builds.
-set(CMAKE_C_FLAGS "${RUBY_C_FLAGS}")
+
+# Remove -fvisibility=hidden, it causes an obscure failure in release builds.
+string(REGEX REPLACE "-fvisibility=[a-z]*" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
 
 set_target_properties(cproton-ruby
     PROPERTIES
@@ -109,11 +112,7 @@ install(DIRECTORY lib/ DESTINATION ${RUBY_ARCHLIB_DIR} COMPONENT Ruby)
 install(DIRECTORY examples/
         DESTINATION "${PROTON_SHARE}/examples/ruby"
         COMPONENT Ruby
-        PATTERN "*.rb"
-        PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
-                    GROUP_EXECUTE GROUP_READ
-                    WORLD_EXECUTE WORLD_READ)
-
+        USE_SOURCE_PERMISSIONS)
 ## Tests
 
 to_native_path("${src}/lib;${src}/tests;${src}/spec;${bin};${c_lib_dir};$ENV{RUBYLIB}" RUBYLIB)
@@ -122,19 +121,31 @@ to_native_path("${bin};${c_lib_dir};$ENV{PATH}" PATH)
 execute_process(COMMAND ${RUBY_EXECUTABLE} -r minitest -e ""
   RESULT_VARIABLE result OUTPUT_QUIET ERROR_QUIET)
 if (result EQUAL 0)  # Have minitest
-  set(test_env ${PN_ENV_SCRIPT} -- "PATH=${PATH}" "RUBYLIB=${RUBYLIB}" "SASLPASSWD=${SASLPASSWD_EXE}")
+  set(test_env ${PN_ENV_SCRIPT} --
+    "PATH=${PATH}"
+    "RUBYLIB=${RUBYLIB}"
+    "SASLPASSWD=${CyrusSASL_Saslpasswd_EXECUTABLE}"
+    ${TEST_ENV})
 
   macro(add_ruby_test script)
     get_filename_component(name ${script} NAME_WE)
     string(REPLACE "_" "-" name "ruby-${name}")
     add_test(
       NAME ${name}
-      COMMAND ${test_env} ${RUBY_EXECUTABLE} ${script} -v
+      COMMAND ${test_env} ${TEST_WRAP_PREFIX_CMD} ${RUBY_EXECUTABLE} ${script} -v
       ${ARGN})
-
   endmacro()
-  add_ruby_test(example_test.rb WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/examples)
-  add_ruby_test(old_example_test.rb WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/old-examples)
+
+  add_test(
+    NAME ruby-example-test
+    COMMAND ${test_env} ${RUBY_EXECUTABLE} testme -v
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/examples)
+
+  add_test(
+    NAME ruby-old-example-test
+    COMMAND ${test_env} ${RUBY_EXECUTABLE} old_example_test.rb -v
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/old-examples)
+
   file(GLOB TESTS tests/test_*.rb)
   file(GLOB SPECS spec/*_spec.rb)
   foreach(t ${TESTS} ${SPECS})
@@ -153,11 +164,12 @@ endif()
 
 find_program(YARD_EXE "yard")
 if (YARD_EXE)
+  file(GLOB_RECURSE TEMPLATES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "doc/templates/**")
   add_custom_command(
     OUTPUT ${bin}/doc
     WORKING_DIRECTORY ${src}
-    COMMAND ${YARD_EXE} -o ${bin}/doc -b ${bin}/.yardoc --yardopts ${src}/.yardopts -p ${src}/yard/templates
-    DEPENDS ${RUBY_SRC}
+    COMMAND ${YARD_EXE} -o ${bin}/doc -b ${bin}/.yardoc -p ${src}/doc/templates
+    DEPENDS ${RUBY_SRC} ${TEMPLATES} .yardopts
     )
   add_custom_target(docs-ruby DEPENDS ${bin}/doc)
   add_dependencies (docs docs-ruby)

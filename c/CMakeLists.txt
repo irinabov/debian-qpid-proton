@@ -37,7 +37,7 @@ endif(PN_WINAPI)
 set(SSL_IMPL ${ssl_impl} CACHE STRING "Library to use for SSL/TLS support. Valid values: ${ssl_providers}")
 
 set(sasl_providers cyrus none)
-if (CYRUSSASL_FOUND AND Threads_FOUND)
+if (CyrusSASL_FOUND AND Threads_FOUND)
   set (sasl_impl cyrus)
 else ()
   set (sasl_impl none)
@@ -99,8 +99,7 @@ endif(PN_WINAPI)
 # Link in SASL if present
 if (SASL_IMPL STREQUAL cyrus)
   set(pn_sasl_impl src/sasl/sasl.c src/sasl/default_sasl.c src/sasl/cyrus_sasl.c)
-  include_directories (${CYRUS_SASL_INCLUDE_DIR})
-  set(SASL_LIB ${CYRUS_SASL_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
+  set(SASL_LIB CyrusSASL::CyrusSASL Threads::Threads)
 elseif (SASL_IMPL STREQUAL none)
   set(pn_sasl_impl src/sasl/sasl.c src/sasl/default_sasl.c src/sasl/cyrus_stub.c)
 endif ()
@@ -117,8 +116,7 @@ endif()
 # Link in openssl if present
 if (SSL_IMPL STREQUAL openssl)
   set (pn_ssl_impl src/ssl/openssl.c)
-  include_directories (${OPENSSL_INCLUDE_DIR})
-  set (SSL_LIB ${OPENSSL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+  set (SSL_LIB OpenSSL::SSL Threads::Threads)
 elseif (SSL_IMPL STREQUAL schannel)
   set (pn_ssl_impl src/ssl/schannel.c)
   set (SSL_LIB Crypt32.lib Secur32.lib)
@@ -179,110 +177,9 @@ if (PN_WINAPI)
   list(APPEND PLATFORM_DEFINITIONS "PN_WINAPI")
 endif (PN_WINAPI)
 
-# Try to keep any platform specific overrides together here:
-
-# MacOS has a bunch of differences in build tools and process and so we have to turn some things
-# off if building there:
-if (APPLE)
-  set (NOENABLE_WARNING_ERROR ON)
-  set (NOENABLE_UNDEFINED_ERROR ON)
-  # TODO: Currently segfaults on MacOS - fix bug and re-enable
-  set (NOENABLE_FUZZ_TESTING ON)
-endif (APPLE)
-
-# TODO: Can't build fuzz tests/or run regression tests on MSVC currently
-# (due to limit on command line length)
-if (MSVC)
-  set (NOENABLE_FUZZ_TESTING ON)
-endif (MSVC)
-
-# Make LTO default to off until we can figure out the valgrind issues
-set (NOENABLE_LINKTIME_OPTIMIZATION ON)
-
-# Add options here called <whatever> they will turn into "ENABLE_<whatever" and can be
-# overridden on a platform specific basis above by NOENABLE_<whatever>
-set (OPTIONS WARNING_ERROR UNDEFINED_ERROR LINKTIME_OPTIMIZATION HIDE_UNEXPORTED_SYMBOLS FUZZ_TESTING)
-
-foreach (OPTION ${OPTIONS})
-  if (NOT NOENABLE_${OPTION})
-    set ("DEFAULT_${OPTION}" ON)
-  endif ()
-endforeach (OPTION)
-
-# And add the option here too with help text
-option(ENABLE_WARNING_ERROR "Consider compiler warnings to be errors" ${DEFAULT_WARNING_ERROR})
-option(ENABLE_UNDEFINED_ERROR "Check for unresolved library symbols" ${DEFAULT_UNDEFINED_ERROR})
-option(ENABLE_LINKTIME_OPTIMIZATION "Perform link time optimization" ${DEFAULT_LINKTIME_OPTIMIZATION})
-option(ENABLE_HIDE_UNEXPORTED_SYMBOLS "Only export library symbols that are explicitly requested" ${DEFAULT_HIDE_UNEXPORTED_SYMBOLS})
-option(ENABLE_FUZZ_TESTING "Enable building fuzzers and regression testing with libFuzzer" ${DEFAULT_FUZZ_TESTING})
-
-# Set any additional compiler specific flags
-if (CMAKE_COMPILER_IS_GNUCC)
-  if (ENABLE_WARNING_ERROR)
-    set (WERROR "-Werror")
-  endif (ENABLE_WARNING_ERROR)
-  set (COMPILE_WARNING_FLAGS "${WERROR} -Wall -pedantic-errors")
-  # C++ allow "%z" format specifier and variadic macros
-  set (CXX_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wno-format -Wno-variadic-macros")
-  if (NOT BUILD_WITH_CXX)
-    set (COMPILE_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wstrict-prototypes -Wc++-compat -Wvla -Wsign-compare -Wwrite-strings")
-    set (COMPILE_LANGUAGE_FLAGS "-std=c99")
-    set (COMPILE_PLATFORM_FLAGS "-std=gnu99")
-  else (NOT BUILD_WITH_CXX)
-    set (COMPILE_WARNING_FLAGS "${CXX_WARNING_FLAGS}")
-  endif (NOT BUILD_WITH_CXX)
-
-  if (ENABLE_UNDEFINED_ERROR)
-    set (CATCH_UNDEFINED "-Wl,--no-undefined")
-    set (ALLOW_UNDEFINED "-Wl,--allow-shlib-undefined")
-  endif (ENABLE_UNDEFINED_ERROR)
-
-  if (ENABLE_LINKTIME_OPTIMIZATION)
-    set (LTO "-flto")
-  endif (ENABLE_LINKTIME_OPTIMIZATION)
-
-  if (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
-  endif (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "SunPro")
-  if (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -xldscope=hidden")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -xldscope=hidden")
-  endif (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
-endif (CMAKE_COMPILER_IS_GNUCC)
-
-if (CMAKE_C_COMPILER_ID MATCHES "Clang")
-  set (COMPILE_WARNING_FLAGS  "-Wall -pedantic")
-  set (COMPILE_LANGUAGE_FLAGS "-std=c99")
-  if (ENABLE_WARNING_ERROR)
-    set (COMPILE_WARNING_FLAGS "-Werror ${COMPILE_WARNING_FLAGS}")
-  endif (ENABLE_WARNING_ERROR)
-  # TODO aconway 2016-01-06: we should be able to clean up the code and turn on
-  # some of these warnings.
-  set (CXX_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-float-equal -Wno-padded -Wno-sign-conversion -Wno-switch-enum -Wno-weak-vtables -Wno-exit-time-destructors -Wno-global-constructors -Wno-shorten-64-to-32 -Wno-documentation -Wno-documentation-unknown-command -Wno-old-style-cast -Wno-missing-noreturn")
-endif()
-
-# Sanitizer flags apply to to both GNU and clang, C and C++
-if(ENABLE_SANITIZERS)
-  set(SANITIZE_FLAGS "-g -fno-omit-frame-pointer -fsanitize=address -fsanitize=leak -fsanitize=undefined")
-endif()
-if(ENABLE_TSAN)
-  set(SANITIZE_FLAGS "-g -fno-omit-frame-pointer -fsanitize=thread")
-endif()
-if (SANITIZE_FLAGS)
-  mark_as_advanced(SANITIZE_FLAGS)
-  if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SANITIZE_FLAGS}")
-  endif()
-  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZE_FLAGS}")
-  endif()
-endif()
-
 # Flags for example self-test build, CACHE INTERNAL for visibility
-set(C_EXAMPLE_FLAGS "${COMPILE_WARNING_FLAGS} ${CMAKE_C_FLAGS}" CACHE INTERNAL "")
-set(C_EXAMPLE_LINK_FLAGS "${SANITIZE_FLAGS}" CACHE INTERNAL "")
+set(C_EXAMPLE_FLAGS "${COMPILE_WARNING_FLAGS}")
+set(C_EXAMPLE_LINK_FLAGS "${SANITIZE_FLAGS}")
 
 if (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_COMPILER_IS_GNUCC)
   # Ensure that examples build with c90, to deal with older c++03-as-c compilers.
@@ -472,7 +369,7 @@ if (PROACTOR STREQUAL "epoll" OR (NOT PROACTOR AND NOT BUILD_PROACTOR))
   if (HAVE_EPOLL)
     set (PROACTOR_OK epoll)
     set (qpid-proton-proactor src/proactor/epoll.c src/proactor/proactor-internal.c)
-    set (PROACTOR_LIBS -lpthread)
+    set (PROACTOR_LIBS Threads::Threads)
     set_source_files_properties (${qpid-proton-proactor} PROPERTIES
       COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS} ${LTO}"
       )
@@ -492,14 +389,13 @@ endif()
 
 if (PROACTOR STREQUAL "libuv" OR (NOT PROACTOR AND NOT PROACTOR_OK))
   find_package(Libuv)
-  if (LIBUV_FOUND)
+  if (Libuv_FOUND)
     set (PROACTOR_OK libuv)
     set (qpid-proton-proactor src/proactor/libuv.c src/proactor/proactor-internal.c)
-    set (PROACTOR_LIBS ${Libuv_LIBRARIES})
+    set (PROACTOR_LIBS Libuv::Libuv)
     set_source_files_properties (${qpid-proton-proactor} PROPERTIES
       COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS} ${LTO}"
       )
-    include_directories(${Libuv_INCLUDE_DIRS})
   endif()
 endif()
 
@@ -545,21 +441,21 @@ set(qpid-proton-core-src
   ${qpid-proton-platform}
   ${qpid-proton-include}
   ${qpid-proton-include-generated}
-  )
-add_library (qpid-proton-core SHARED ${qpid-proton-core-src})
-add_dependencies(qpid-proton-core generated_c_files)
-target_link_libraries (qpid-proton-core ${UUID_LIB} ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS})
-if (BUILD_STATIC_LIBS)
-  add_library (qpid-proton-core-static STATIC ${qpid-proton-core-src})
-endif(BUILD_STATIC_LIBS)
+)
 
-set_target_properties (
-  qpid-proton-core
+add_library (qpid-proton-core SHARED ${qpid-proton-core-src})
+add_dependencies (qpid-proton-core generated_c_files)
+target_link_libraries (qpid-proton-core ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS})
+set_target_properties (qpid-proton-core
   PROPERTIES
   VERSION   "${PN_LIB_CORE_VERSION}"
   SOVERSION "${PN_LIB_CORE_MAJOR_VERSION}"
   LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
-  )
+)
+
+if (BUILD_STATIC_LIBS)
+  add_library (qpid-proton-core-static STATIC ${qpid-proton-core-src})
+endif(BUILD_STATIC_LIBS)
 
 set(qpid-proton-src
   # Proton Core
@@ -574,8 +470,17 @@ set(qpid-proton-src
   ${qpid-proton-extra}
   ${qpid-proton-platform-io}
   ${qpid-proton-include-extra}
-  )
-add_library(qpid-proton SHARED ${qpid-proton-src})
+)
+
+add_library (qpid-proton SHARED ${qpid-proton-src})
+target_link_libraries (qpid-proton LINK_PRIVATE ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS} ${PROACTOR_LIBS})
+set_target_properties (qpid-proton
+  PROPERTIES
+  VERSION   "${PN_LIB_LEGACY_VERSION}"
+  SOVERSION "${PN_LIB_LEGACY_MAJOR_VERSION}"
+  LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
+)
+
 if (BUILD_STATIC_LIBS)
   add_library(qpid-proton-static STATIC ${qpid-proton-src})
 endif(BUILD_STATIC_LIBS)
@@ -588,16 +493,6 @@ if (MSVC)
   add_dependencies(qpid-proton qpid-proton-core)
 endif (MSVC)
 
-target_link_libraries (qpid-proton LINK_PRIVATE ${UUID_LIB} ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS} ${PROACTOR_LIBS})
-
-set_target_properties (
-  qpid-proton
-  PROPERTIES
-  VERSION   "${PN_LIB_LEGACY_VERSION}"
-  SOVERSION "${PN_LIB_LEGACY_MAJOR_VERSION}"
-  LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
-  )
-
 if (MSVC)
   # guard against use of C99 violating functions on Windows
   include(WindowsC99CheckDef)
@@ -608,33 +503,55 @@ if (qpid-proton-proactor)
   add_library (qpid-proton-proactor SHARED ${qpid-proton-proactor})
   target_link_libraries (qpid-proton-proactor  LINK_PUBLIC qpid-proton-core)
   target_link_libraries (qpid-proton-proactor  LINK_PRIVATE ${PLATFORM_LIBS} ${PROACTOR_LIBS})
-  list(APPEND LIB_TARGETS qpid-proton-proactor)
-  set_target_properties (
-    qpid-proton-proactor
+  set_target_properties (qpid-proton-proactor
     PROPERTIES
     VERSION   "${PN_LIB_PROACTOR_VERSION}"
     SOVERSION "${PN_LIB_PROACTOR_MAJOR_VERSION}"
     LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
-    )
+  )
   if (BUILD_STATIC_LIBS)
     add_library (qpid-proton-proactor-static STATIC ${qpid-proton-proactor})
   endif(BUILD_STATIC_LIBS)
 endif()
 
 # Install executables and libraries
-install(TARGETS qpid-proton qpid-proton-core ${LIB_TARGETS}
+if (BUILD_STATIC_LIBS)
+  set(STATIC_LIBS qpid-proton-static qpid-proton-core-static)
+endif()
+install(TARGETS qpid-proton qpid-proton-core ${STATIC_LIBS}
   EXPORT  proton
   RUNTIME DESTINATION bin
   ARCHIVE DESTINATION ${LIB_INSTALL_DIR}
   LIBRARY DESTINATION ${LIB_INSTALL_DIR})
 
-# Install windows qpid-proton pdb files
+# Install windows pdb files
 if (MSVC)
-  install(FILES $<TARGET_PDB_FILE:qpid-proton>
+  install(FILES
+      $<TARGET_PDB_FILE:qpid-proton>
+      $<TARGET_PDB_FILE:qpid-proton-core>
     DESTINATION bin
     CONFIGURATIONS RelWithDebInfo Debug
     OPTIONAL)
 endif (MSVC)
+
+if (HAS_PROACTOR)
+  if (BUILD_STATIC_LIBS)
+    set(STATIC_LIBS qpid-proton-proactor-static)
+  endif()
+  install(TARGETS qpid-proton-proactor ${STATIC_LIBS}
+    EXPORT  proton
+    RUNTIME DESTINATION bin
+    ARCHIVE DESTINATION ${LIB_INSTALL_DIR}
+    LIBRARY DESTINATION ${LIB_INSTALL_DIR})
+
+  # Install windows pdb files
+  if (MSVC)
+    install(FILES $<TARGET_PDB_FILE:qpid-proton-proactor>
+      DESTINATION bin
+      CONFIGURATIONS RelWithDebInfo Debug
+      OPTIONAL)
+  endif (MSVC)
+endif ()
 
 # Install header files
 file(GLOB headers "${CMAKE_CURRENT_BINARY_DIR}/include/proton/*.[hi]")
@@ -684,4 +601,5 @@ add_subdirectory(tools)
 
 install (DIRECTORY examples/
          DESTINATION "${PROTON_SHARE}/examples/c"
+         USE_SOURCE_PERMISSIONS
          PATTERN ProtonConfig.cmake EXCLUDE)

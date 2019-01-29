@@ -27,13 +27,24 @@ include(versions.cmake)
 
 set (BUILD_CPP_03 OFF CACHE BOOL "Compile the C++ binding as C++03 even when C++11 is available")
 
+# Check for JSON-CPP support for connection configuration
+find_package(JsonCpp)
+option(ENABLE_JSONCPP "Use jsoncpp parser for connection configuration" ${JsonCpp_FOUND})
+if (ENABLE_JSONCPP)
+  include_directories(${JsonCpp_INCLUDE_DIRS})
+  set(CONNECT_CONFIG_SRC src/connect_config.cpp)
+  set(CONNECT_CONFIG_LIBS ${JsonCpp_LIBRARY})
+else()
+  set(CONNECT_CONFIG_SRC src/connect_config_dummy.cpp)
+endif()
+
 # This effectively checks for cmake version 3.1 or later
 if (DEFINED CMAKE_CXX_COMPILE_FEATURES)
   if (BUILD_CPP_03)
     set(STD 98)
   else ()
     set(STD 11)
-    list(APPEND PLATFORM_LIBS "${CMAKE_THREAD_LIBS_INIT}")
+    list(APPEND PLATFORM_LIBS Threads::Threads)
   endif ()
   set(CMAKE_CXX_STANDARD ${STD})
   set(CMAKE_CXX_EXTENSIONS OFF)
@@ -53,10 +64,10 @@ else ()
     if (ACCEPTS_CXX11)
       set(CXX_STANDARD "-std=c++11")
       set(CPP_DEFINITIONS "HAS_CPP11")
-      list(APPEND PLATFORM_LIBS "${CMAKE_THREAD_LIBS_INIT}")
+      list(APPEND PLATFORM_LIBS Threads::Threads)
     elseif(ACCEPTS_CXX0X)
       set(CXX_STANDARD "-std=c++0x")
-      list(APPEND PLATFORM_LIBS "${CMAKE_THREAD_LIBS_INIT}")
+      list(APPEND PLATFORM_LIBS Threads::Threads)
       include(cpp.cmake) # Compiler checks needed for C++0x as not all C++11 may be supported
     else()
       include(cpp.cmake) # Compiler checks needed as we have no idea whats going on here!
@@ -84,9 +95,8 @@ endif()
 
 configure_file(config_presets.hpp.in config_presets.hpp @ONLY)
 
-# Make these CACHE INTERNAL so they will be set for the C++ examples
-set(CXX_EXAMPLE_FLAGS "${CXX_WARNING_FLAGS} ${CMAKE_CXX_FLAGS} ${CXX_STANDARD}" CACHE INTERNAL "")
-set(CXX_EXAMPLE_LINK_FLAGS "${SANITIZE_FLAGS}" CACHE INTERNAL "")
+set(CXX_EXAMPLE_FLAGS "${CXX_WARNING_FLAGS} ${CXX_STANDARD}")
+set(CXX_EXAMPLE_LINK_FLAGS "${SANITIZE_FLAGS}")
 
 include_directories (
   "${CMAKE_SOURCE_DIR}/c/include"
@@ -151,6 +161,7 @@ set(qpid-proton-cpp-source
   src/uuid.cpp
   src/value.cpp
   src/work_queue.cpp
+  ${CONNECT_CONFIG_SRC}
   )
 
 set_source_files_properties (
@@ -159,12 +170,16 @@ set_source_files_properties (
   COMPILE_FLAGS "${LTO}"
   )
 
+if (MSVC)
+  set (CMAKE_DEBUG_POSTFIX "d")
+endif ()
+
 add_library(qpid-proton-cpp SHARED ${qpid-proton-cpp-source})
 if(BUILD_STATIC_LIBS)
   add_library(qpid-proton-cpp-static STATIC ${qpid-proton-cpp-source})
 endif(BUILD_STATIC_LIBS)
 
-target_link_libraries (qpid-proton-cpp LINK_PRIVATE ${PLATFORM_LIBS} qpid-proton-core qpid-proton-proactor)
+target_link_libraries (qpid-proton-cpp LINK_PRIVATE ${PLATFORM_LIBS} qpid-proton-core qpid-proton-proactor ${CONNECT_CONFIG_LIBS})
 
 set_target_properties (
   qpid-proton-cpp
@@ -195,6 +210,7 @@ install (DIRECTORY "include/proton" DESTINATION ${INCLUDE_INSTALL_DIR} FILES_MAT
 install (FILES "${CMAKE_CURRENT_BINARY_DIR}/config_presets.hpp" DESTINATION "${INCLUDE_INSTALL_DIR}/proton/internal")
 install (DIRECTORY "examples/"
   DESTINATION "${PROTON_SHARE}/examples/cpp"
+  USE_SOURCE_PERMISSIONS
   PATTERN "ProtonCppConfig.cmake" EXCLUDE)
 
 add_subdirectory(examples)
@@ -207,10 +223,6 @@ configure_file(
 install (FILES
   ${CMAKE_CURRENT_BINARY_DIR}/libqpid-proton-cpp.pc
   DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
-
-if (MSVC)
-  set (CMAKE_DEBUG_POSTFIX "d")
-endif ()
 
 if (DEFINED CMAKE_IMPORT_LIBRARY_PREFIX)
 set(PROTONCPPLIB ${CMAKE_IMPORT_LIBRARY_PREFIX}qpid-proton-cpp${CMAKE_IMPORT_LIBRARY_SUFFIX})
@@ -234,17 +246,32 @@ install (FILES
   ${CMAKE_CURRENT_BINARY_DIR}/ProtonCppConfigVersion.cmake
   DESTINATION ${LIB_INSTALL_DIR}/cmake/ProtonCpp)
 
+set(testdata "${CMAKE_CURRENT_BINARY_DIR}/testdata")
+
+# SASL configuration for tests
+if(CyrusSASL_Saslpasswd_EXECUTABLE)
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/testdata/sasl-conf/proton-server.conf.in"
+    "${testdata}/sasl-conf/proton-server.conf")
+  execute_process(
+    COMMAND echo password
+    COMMAND ${CyrusSASL_Saslpasswd_EXECUTABLE} -c -p -f "${testdata}/sasl-conf/proton.sasldb" -u proton user
+    RESULT_VARIABLE ret)
+  if(ret)
+    message(WARNING "${CyrusSASL_Saslpasswd_EXECUTABLE}: error ${ret} - some SASL tests will be skipped")
+  else()
+    set(test_env ${test_env} "PN_SASL_CONFIG_PATH=${testdata}/sasl-conf")
+  endif()
+endif()
+
+if (CMAKE_SYSTEM_NAME STREQUAL Windows)
+  set(test_env ${test_env} "PATH=$<TARGET_FILE_DIR:qpid-proton>")
+endif()
+
 macro(add_cpp_test test)
   add_executable (${test} src/${test}.cpp)
   target_link_libraries (${test} qpid-proton-cpp ${PLATFORM_LIBS})
-  if (CMAKE_SYSTEM_NAME STREQUAL Windows)
-    add_test (NAME cpp-${test}
-      COMMAND ${PN_ENV_SCRIPT}
-      "PATH=$<TARGET_FILE_DIR:qpid-proton>"
-      $<TARGET_FILE:${test}> ${ARGN})
-  else ()
-    add_test (NAME cpp-${test} COMMAND ${memcheck-cmd} ${CMAKE_CURRENT_BINARY_DIR}/${test} ${ARGN})
-  endif ()
+  add_test (NAME cpp-${test}
+    COMMAND ${PN_ENV_SCRIPT} -- ${test_env}  ${TEST_EXE_PREFIX_CMD} $<TARGET_FILE:${test}> ${ARGN})
 endmacro(add_cpp_test)
 
 add_cpp_test(codec_test)
@@ -258,3 +285,10 @@ add_cpp_test(container_test)
 add_cpp_test(url_test)
 add_cpp_test(reconnect_test)
 add_cpp_test(link_test)
+if (ENABLE_JSONCPP)
+  add_cpp_test(connect_config_test)
+  target_link_libraries(connect_config_test qpid-proton-core) # For pn_sasl_enabled
+  set_tests_properties(cpp-connect_config_test PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+  # Test data and output directories for connect_config_test
+  file(COPY  "${CMAKE_CURRENT_SOURCE_DIR}/testdata" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
