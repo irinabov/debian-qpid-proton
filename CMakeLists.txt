@@ -33,24 +33,13 @@ include (CheckPythonModule)
 find_package (OpenSSL)
 find_package (Threads)
 find_package (PythonInterp REQUIRED)
+find_package (SWIG)
+find_package (CyrusSASL)
 
 enable_testing ()
 
-## Swig
-
-find_package (SWIG)
-# FindSwig.cmake "forgets" to make its outputs advanced like a good citizen
-mark_as_advanced (SWIG_DIR SWIG_EXECUTABLE SWIG_VERSION)
-
-## Cyrus SASL
-
-find_library (CYRUS_SASL_LIBRARY sasl2)
-find_path (CYRUS_SASL_INCLUDE_DIR sasl/sasl.h PATH_SUFFIXES include)
-find_package_handle_standard_args (CyrusSASL DEFAULT_MSG CYRUS_SASL_LIBRARY CYRUS_SASL_INCLUDE_DIR)
-mark_as_advanced(CYRUS_SASL_LIBRARY CYRUS_SASL_INCLUDE_DIR)
-# Find saslpasswd2 executable to generate test config
-find_program (SASLPASSWD_EXE saslpasswd2 DOC "Program used to make the SASL user db for testing")
-mark_as_advanced (SASLPASSWD_EXE)
+# Set up runtime checks (valgrind, sanitizers etc.)
+include(tests/RuntimeCheck.cmake)  
 
 ## Variables used across components
 
@@ -77,7 +66,7 @@ if (CMAKE_CXX_COMPILER)
   option(BUILD_WITH_CXX "Compile Proton using C++" ${DEFAULT_BUILD_WITH_CXX})
 endif()
 
-# Bulid static C and C++ libraries in addition to shared libraries.
+# Build static C and C++ libraries in addition to shared libraries.
 option(BUILD_STATIC_LIBS "Build static libraries as well as shared libraries" OFF)
 
 if (CMAKE_CONFIGURATION_TYPES)
@@ -118,6 +107,90 @@ if (CMAKE_BUILD_TYPE MATCHES "Coverage")
     COMMAND ${CMAKE_SOURCE_DIR}/scripts/record-coverage.sh ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR})
 endif()
 
+# Try to keep any platform specific overrides together here:
+
+# MacOS has a bunch of differences in build tools and process and so we have to turn some things
+# off if building there:
+if (APPLE)
+  set (NOENABLE_WARNING_ERROR ON)
+  set (NOENABLE_UNDEFINED_ERROR ON)
+  # TODO: Currently segfaults on MacOS - fix bug and re-enable
+  set (NOENABLE_FUZZ_TESTING ON)
+endif (APPLE)
+
+# TODO: Can't build fuzz tests/or run regression tests on MSVC currently
+# (due to limit on command line length)
+if (MSVC)
+  set (NOENABLE_FUZZ_TESTING ON)
+endif (MSVC)
+
+# Make LTO default to off until we can figure out the valgrind issues
+set (NOENABLE_LINKTIME_OPTIMIZATION ON)
+
+# Add options here called <whatever> they will turn into "ENABLE_<whatever" and can be
+# overridden on a platform specific basis above by NOENABLE_<whatever>
+set (OPTIONS WARNING_ERROR UNDEFINED_ERROR LINKTIME_OPTIMIZATION HIDE_UNEXPORTED_SYMBOLS FUZZ_TESTING)
+
+foreach (OPTION ${OPTIONS})
+  if (NOT NOENABLE_${OPTION})
+    set ("DEFAULT_${OPTION}" ON)
+  endif ()
+endforeach (OPTION)
+
+# And add the option here too with help text
+option(ENABLE_WARNING_ERROR "Consider compiler warnings to be errors" ${DEFAULT_WARNING_ERROR})
+option(ENABLE_UNDEFINED_ERROR "Check for unresolved library symbols" ${DEFAULT_UNDEFINED_ERROR})
+option(ENABLE_LINKTIME_OPTIMIZATION "Perform link time optimization" ${DEFAULT_LINKTIME_OPTIMIZATION})
+option(ENABLE_HIDE_UNEXPORTED_SYMBOLS "Only export library symbols that are explicitly requested" ${DEFAULT_HIDE_UNEXPORTED_SYMBOLS})
+option(ENABLE_FUZZ_TESTING "Enable building fuzzers and regression testing with libFuzzer" ${DEFAULT_FUZZ_TESTING})
+
+# Set any additional compiler specific flags
+if (CMAKE_COMPILER_IS_GNUCC)
+  if (ENABLE_WARNING_ERROR)
+    set (WERROR "-Werror")
+  endif (ENABLE_WARNING_ERROR)
+  set (COMPILE_WARNING_FLAGS "${WERROR} -Wall -pedantic-errors")
+  # C++ allow "%z" format specifier and variadic macros
+  set (CXX_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wno-format -Wno-variadic-macros")
+  if (NOT BUILD_WITH_CXX)
+    set (COMPILE_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wstrict-prototypes -Wc++-compat -Wvla -Wsign-compare -Wwrite-strings")
+    set (COMPILE_LANGUAGE_FLAGS "-std=c99")
+    set (COMPILE_PLATFORM_FLAGS "-std=gnu99")
+  else (NOT BUILD_WITH_CXX)
+    set (COMPILE_WARNING_FLAGS "${CXX_WARNING_FLAGS}")
+  endif (NOT BUILD_WITH_CXX)
+
+  if (ENABLE_UNDEFINED_ERROR)
+    set (CATCH_UNDEFINED "-Wl,--no-undefined")
+    set (ALLOW_UNDEFINED "-Wl,--allow-shlib-undefined")
+  endif (ENABLE_UNDEFINED_ERROR)
+
+  if (ENABLE_LINKTIME_OPTIMIZATION)
+    set (LTO "-flto")
+  endif (ENABLE_LINKTIME_OPTIMIZATION)
+
+  if (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
+  endif (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "SunPro")
+  if (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -xldscope=hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -xldscope=hidden")
+  endif (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
+endif (CMAKE_COMPILER_IS_GNUCC)
+
+if (CMAKE_C_COMPILER_ID MATCHES "Clang")
+  set (COMPILE_WARNING_FLAGS  "-Wall -pedantic")
+  set (COMPILE_LANGUAGE_FLAGS "-std=c99")
+  if (ENABLE_WARNING_ERROR)
+    set (COMPILE_WARNING_FLAGS "-Werror ${COMPILE_WARNING_FLAGS}")
+  endif (ENABLE_WARNING_ERROR)
+  # TODO aconway 2016-01-06: we should be able to clean up the code and turn on
+  # some of these warnings.
+  set (CXX_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-float-equal -Wno-padded -Wno-sign-conversion -Wno-switch-enum -Wno-weak-vtables -Wno-exit-time-destructors -Wno-global-constructors -Wno-shorten-64-to-32 -Wno-documentation -Wno-documentation-unknown-command -Wno-old-style-cast -Wno-missing-noreturn")
+endif()
+
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   if (NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "x86_64")
@@ -147,9 +220,6 @@ else()
 endif()
 
 message(STATUS "PN_VERSION: ${PN_VERSION} (${PN_VERSION_QUALIFIER})")
-
-set (pn_test_root "${CMAKE_CURRENT_SOURCE_DIR}/tests")
-set (pn_test_bin "${CMAKE_CURRENT_BINARY_DIR}/tests")
 
 # In rpm builds the build sets some variables:
 #  CMAKE_INSTALL_PREFIX - this is a standard cmake variable
@@ -216,41 +286,6 @@ endforeach()
 set (PROTON_SHARE ${SHARE_INSTALL_DIR}/proton-${PN_VERSION})
 # End of variables used during install
 
-# Can't do valgrind and coverage at athe same time - coverage takes precedence
-if (CMAKE_BUILD_TYPE MATCHES "Coverage")
-  message(STATUS "Building for coverage analysis; no run-time error detection")
-else ()
-  find_program(VALGRIND_EXECUTABLE valgrind DOC "Location of the valgrind program")
-  mark_as_advanced (VALGRIND_EXECUTABLE)
-
-  option(ENABLE_VALGRIND "Use valgrind to detect run-time problems" ON)
-  if (ENABLE_VALGRIND)
-    if (VALGRIND_EXECUTABLE)
-      set (VALGRIND_SUPPRESSIONS ${CMAKE_SOURCE_DIR}/c/tests/valgrind.supp CACHE STRING "Default valgrind suppressions")
-      set (VALGRIND_OPTIONS "--error-exitcode=42 --quiet --leak-check=full --trace-children=yes" CACHE STRING "Default valgrind options")
-      mark_as_advanced(VALGRIND_SUPPRESSIONS VALGRIND_OPTIONS)
-      set (VALGRIND_ENV "VALGRIND=${VALGRIND_EXECUTABLE}" "VALGRIND_ARGS=${VALGRIND_OPTIONS} --suppressions=${VALGRIND_SUPPRESSIONS}")
-      separate_arguments(VALGRIND_OPTIONS_LIST UNIX_COMMAND ${VALGRIND_OPTIONS})
-      set (memcheck-cmd ${VALGRIND_EXECUTABLE} ${VALGRIND_OPTIONS_LIST} "--suppressions=${VALGRIND_SUPPRESSIONS}")
-      set (racecheck-cmd ${VALGRIND_EXECUTABLE} --tool=helgrind --error-exitcode=42 --quiet)
-    else ()
-      message(STATUS "Can't locate the valgrind command; no run-time error detection")
-    endif ()
-  endif ()
-endif ()
-
-# Options to enable sanitizing compile flags. Compile flags are set in c/CMakeLists.txt
-option(ENABLE_SANITIZERS "Compile with sanitizers (ASan, UBSan, TSan); incompatible with Valgrind" OFF)
-option(ENABLE_TSAN "Compile with Thread Sanitizer (TSan); incompatible with Valgrind" OFF)
-if (ENABLE_SANITIZERS OR ENABLE_TSAN)
-  set(DISABLE ENABLE_VALGRIND ENABLE_UNDEFINED_ERROR BUILD_GO)
-  message(STATUS "Building with sanitizers; disables ${DISABLE}")
-  foreach(d ${DISABLE})
-    set(${d} OFF CACHE BOOL "Disabled to run sanitizers" FORCE)
-  endforeach()
-  unset(VALGRIND_ENV)
-endif()
-
 # Set result to a native search path - used by examples and binding tests.
 # args after result are directories or search paths.
 macro(set_search_path result)
@@ -295,11 +330,11 @@ endif()
 find_program(GO_EXE go)
 mark_as_advanced(GO_EXE)
 if (GO_EXE)
-  if(WIN32)
+  set (DEFAULT_GO ON)
+  if(WIN32 OR RUNTIME_CHECK)
     # Go on windows requires gcc tool chain
+    # Go does not work with C-based runtime checkers.
     set (DEFAULT_GO OFF)
-  else()
-    set (DEFAULT_GO ON)
   endif()
 endif (GO_EXE)
 
@@ -321,15 +356,17 @@ if(SWIG_FOUND)
 
   # Prerequisites for Python wrapper:
   find_package (PythonLibs ${PYTHON_VERSION_STRING} EXACT)
-  if (PYTHONLIBS_FOUND)
+  # TODO aconway 2018-09-07: get python binding tests working with sanitizers
+  if (PYTHONLIBS_FOUND AND NOT SANITIZE_FLAGS)
     set (DEFAULT_PYTHON ON)
-  endif (PYTHONLIBS_FOUND)
+  endif ()
 
   # Prerequisites for Ruby:
   find_package(Ruby)
-  if (RUBY_FOUND)
+  # TODO aconway 2018-09-07: get ruby binding tests working with sanitizers
+  if (RUBY_FOUND AND NOT SANITIZE_FLAGS)
     set (DEFAULT_RUBY ON)
-  endif (RUBY_FOUND)
+  endif ()
 endif()
 
 # To kick-start a build with just a few bindings enabled by default, e.g. ruby and go:
@@ -357,69 +394,9 @@ endforeach(BINDING)
 
 unset(BUILD_BINDINGS CACHE) # Remove from cache, only relevant when creating the initial cache.
 
-# python test: tests/python/proton-test
-if (BUILD_PYTHON)
-  set (py_root "${pn_test_root}/python")
-  set (py_src "${CMAKE_CURRENT_SOURCE_DIR}/python")
-  set (py_bin "${CMAKE_CURRENT_BINARY_DIR}/python")
-  set (py_dll "$<TARGET_FILE_DIR:_cproton>")
-  set (py_bld "$<TARGET_FILE_DIR:qpid-proton>") # For windows
-  set (app_path $<TARGET_FILE_DIR:msgr-send> "${pn_test_root}/tools/apps/python")
-  set (py_path ${py_bld} ${app_path} $ENV{PATH})
-  set (py_pythonpath ${py_root} ${py_src} ${py_bin} ${py_dll} $ENV{PYTHONPATH})
-  to_native_path ("${py_pythonpath}" py_pythonpath)
-  to_native_path ("${py_path}" py_path)
-
-  if (CMAKE_BUILD_TYPE MATCHES "Coverage")
-    set (python_coverage_options -m coverage run)
-  endif(CMAKE_BUILD_TYPE MATCHES "Coverage")
-
-  add_test (NAME python-test
-            COMMAND ${PN_ENV_SCRIPT}
-              "PATH=${py_path}" "PYTHONPATH=${py_pythonpath}"
-              "SASLPASSWD=${SASLPASSWD_EXE}"
-              ${VALGRIND_ENV}
-              ${PYTHON_EXECUTABLE} -- ${python_coverage_options} "${py_root}/proton-test")
-  set_tests_properties(python-test PROPERTIES PASS_REGULAR_EXPRESSION "Totals: .* 0 failed")
-
-  check_python_module("tox" TOX_MODULE_FOUND)
-  if (NOT TOX_MODULE_FOUND)
-    message(STATUS "The tox tool is not available; skipping the python-tox-tests")
-  else ()
-    option(ENABLE_TOX_TEST "Enable multi-version python testing with TOX" ON)
-
-    set(tox_default "py26,py27,py33,py34,py35,py36")
-    set(TOX_ENVLIST ${tox_default} CACHE STRING "List of python environments for TOX tests" )
-    mark_as_advanced(TOX_ENVLIST)
-
-    if (NOT (TOX_ENVLIST STREQUAL tox_default))
-      message(WARNING "non-default TOX test set '${TOX_ENVLIST}' (default '${tox_default}')")
-    endif()
-    if (ENABLE_TOX_TEST)
-      if (CMAKE_BUILD_TYPE MATCHES "Coverage")
-        message(STATUS "Building for coverage analysis; skipping the python-tox-tests")
-      else ()
-        configure_file(
-          "${CMAKE_CURRENT_SOURCE_DIR}/misc/tox.ini.in"
-          "${CMAKE_CURRENT_BINARY_DIR}/tox.ini")
-        add_test (NAME python-tox-test
-                  COMMAND ${PN_ENV_SCRIPT}
-                  "PATH=${py_path}"
-                  "SASLPASSWD=${SASLPASSWD_EXE}"
-                  "SWIG=${SWIG_EXECUTABLE}"
-                  ${VALGRIND_ENV} --
-                  ${PYTHON_EXECUTABLE} -m tox)
-        set_tests_properties(python-tox-test
-                             PROPERTIES
-                               PASS_REGULAR_EXPRESSION "Totals: .* ignored, 0 failed"
-                               FAIL_REGULAR_EXPRESSION "ERROR:[ ]+py[0-9]*: commands failed")
-      endif ()
-    endif (ENABLE_TOX_TEST)
-  endif (NOT TOX_MODULE_FOUND)
-endif (BUILD_PYTHON)
-
-install (FILES LICENSE.txt README.md
-         DESTINATION ${PROTON_SHARE})
+install (FILES LICENSE.txt README.md tests/share/CMakeLists.txt DESTINATION ${PROTON_SHARE})
+install (FILES tests/share/examples-README.md RENAME README.md DESTINATION ${PROTON_SHARE}/examples)
+install (DIRECTORY tests DESTINATION ${PROTON_SHARE} PATTERN share EXCLUDE)
 
 # Generate test environment settings
 configure_file(${CMAKE_SOURCE_DIR}/misc/config.sh.in

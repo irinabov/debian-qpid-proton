@@ -28,17 +28,22 @@
 #include <assert.h>
 #include <stdlib.h>
 
-pn_selectables_t *pn_selectables(void)
+/*
+ * These are totally unused (and unusable) but these definitions have been
+ * retained to maintain the external linkage symbols
+ */
+
+PNX_EXTERN pn_iterator_t *pn_selectables(void)
 {
   return pn_iterator();
 }
 
-pn_selectable_t *pn_selectables_next(pn_selectables_t *selectables)
+PNX_EXTERN void *pn_selectables_next(pn_iterator_t *selectables)
 {
-  return (pn_selectable_t *) pn_iterator_next(selectables);
+  return pn_iterator_next(selectables);
 }
 
-void pn_selectables_free(pn_selectables_t *selectables)
+PNX_EXTERN void pn_selectables_free(pn_iterator_t *selectables)
 {
   pn_free(selectables);
 }

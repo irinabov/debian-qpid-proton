@@ -18,6 +18,8 @@
  *
  */
 
+#define PN_USE_DEPRECATED_API 1
+
 /*
  * Implements a subset of msgr-send.c using reactor events.
  */
@@ -412,5 +414,8 @@ int main(int argc, char** argv)
 
   pn_handler_free(sh);
   addresses_free(&opts.targets);
+  free(opts.password);
   return 0;
 }
+
+#undef PN_USE_DEPRECATED_API

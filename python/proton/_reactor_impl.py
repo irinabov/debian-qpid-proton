@@ -35,7 +35,7 @@ from ._wrapper import Wrapper
 
 from . import _compat
 
-_DEFAULT = object()
+_DEFAULT = False
 
 
 class Selectable(Wrapper):
@@ -145,10 +145,10 @@ class WrappedHandlersChildSurrogate:
         self.delegate = weakref.ref(delegate)
 
     def on_unhandled(self, method, event):
-        from ._events import dispatch
+        from ._events import _dispatch
         delegate = self.delegate()
         if delegate:
-            dispatch(delegate, method, event)
+            _dispatch(delegate, method, event)
 
 
 class WrappedHandlersProperty(object):

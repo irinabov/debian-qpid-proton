@@ -37,9 +37,9 @@ macro (pn_add_fuzz_test test)
   if (FUZZ_REGRESSION_TESTS)
     # StandaloneFuzzTargetMain cannot walk directory trees
     file(GLOB_RECURSE files ${CMAKE_CURRENT_SOURCE_DIR}/${test}/*)
-    add_test (${test} ${memcheck-cmd} ${CMAKE_CURRENT_BINARY_DIR}/${test} ${files})
+    add_test (NAME ${test} COMMAND ${TEST_EXE_PREFIX_CMD} $<TARGET_FILE:${test}> ${files})
   else ()
-    add_test (${test} ${CMAKE_CURRENT_BINARY_DIR}/${test} -runs=1 ${CMAKE_CURRENT_SOURCE_DIR}/${test})
+    add_test (NAME ${test} COMMAND $<TARGET_FILE:${test}> -runs=1 ${CMAKE_CURRENT_SOURCE_DIR}/${test}>)
   endif ()
 endmacro(pn_add_fuzz_test)
 
@@ -48,7 +48,7 @@ pn_add_fuzz_test (fuzz-connection-driver fuzz-connection-driver.c)
 pn_add_fuzz_test (fuzz-message-decode fuzz-message-decode.c)
 
 # pn_url_parse is not in proton core and is only used by messenger so compile specially
-pn_add_fuzz_test (fuzz-url fuzz-url.c ${PN_C_SOURCE_DIR}/extra/url.c ${PN_C_SOURCE_DIR}/core/util.c)
+pn_add_fuzz_test (fuzz-url fuzz-url.c ${PN_C_SOURCE_DIR}/extra/url.c  ${PN_C_SOURCE_DIR}/core/util.c)
 
 # This regression test can take a very long time so don't run by default
 if(HAS_PROACTOR AND FUZZ_LONG_TESTS)

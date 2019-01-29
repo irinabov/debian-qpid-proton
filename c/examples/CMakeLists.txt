@@ -34,31 +34,23 @@ foreach (name broker send receive direct send-abort send-ssl)
 endforeach()
 
 
-# Add a test to run all examples
-
-# Make correct environment to find test executables and valgrind.
-if(WIN32)
-  set(test_path "$<TARGET_FILE_DIR:c-broker>;$<TARGET_FILE_DIR:qpid-proton-core>;$<TARGET_FILE_DIR:qpid-proton-proactor>")
-else()
-  set(test_path "$<TARGET_FILE_DIR:c-broker>:$ENV{PATH}")
-endif()
-
-# Set result to a native search path - used by examples and binding tests.
-# args after result are directories or search paths.
-macro(set_search_path result)
-  set(${result} ${ARGN})
-  if (UNIX)
-    string(REPLACE ";" ":" ${result} "${${result}}") # native search path separators.
+find_package (PythonInterp)     # For test-driver script
+if (PYTHON_EXECUTABLE)
+  if(WIN32)
+    # NOTE: need to escape semicolons as cmake uses them as list separators.
+    set(test_path "$<TARGET_FILE_DIR:c-broker>\;$<TARGET_FILE_DIR:qpid-proton-core>\;$<TARGET_FILE_DIR:qpid-proton-proactor>")
+  else()
+    set(test_path "$<TARGET_FILE_DIR:c-broker>:$ENV{PATH}")
   endif()
-  file(TO_NATIVE_PATH "${${result}}" ${result}) # native slash separators
-endmacro()
 
-# Add the tools directory for the 'proctest' module
-set_search_path(EXAMPLE_PYTHONPATH "${CMAKE_SOURCE_DIR}/tools/python" "$ENV{PYTHON_PATH}")
-set(EXAMPLE_ENV "PYTHONPATH=${EXAMPLE_PYTHONPATH}")
+  set(test_env
+    "PATH=${test_path}"
+    "PYTHONPATH=../../tests/py"
+    ${TEST_ENV})
 
-add_test(
-  NAME c-example-tests
-  COMMAND ${PN_ENV_SCRIPT} ${EXAMPLE_ENV} "PATH=${test_path}" ${VALGRIND_ENV} --
-          ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  add_test(
+    NAME c-example-tests
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMAND ${PYTHON_EXECUTABLE} testme -v)
+  set_tests_properties(c-example-tests PROPERTIES ENVIRONMENT "${test_env}")
+endif()
