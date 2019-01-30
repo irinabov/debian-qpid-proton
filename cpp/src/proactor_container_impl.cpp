@@ -20,6 +20,7 @@
 #include "proactor_container_impl.hpp"
 #include "proactor_work_queue_impl.hpp"
 
+#include "proton/connect_config.hpp"
 #include "proton/error_condition.hpp"
 #include "proton/listener.hpp"
 #include "proton/listen_handler.hpp"
@@ -350,6 +351,12 @@ returned<connection> container::impl::connect(
     return make_returned<proton::connection>(pnc);
 }
 
+returned<connection> container::impl::connect() {
+    connection_options opts;
+    std::string addr = connect_config::parse_default(opts);
+    return connect(addr, opts);
+}
+
 returned<sender> container::impl::open_sender(const std::string &urlstr, const proton::sender_options &o1, const connection_options &o2)
 {
     proton::url url(urlstr);
@@ -468,7 +475,7 @@ void container::impl::run_timer_jobs() {
 
         // Figure out how many tasks we need to execute and pop them to the back of the
         // queue (in reverse order)
-        int i = 0;
+        unsigned i = 0;
         for (;;) {
             // Have we seen all the queued tasks?
             if  ( deferred_.size()-i==0 ) break;

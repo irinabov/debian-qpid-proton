@@ -175,9 +175,9 @@ int test_container_capabilities() {
     opts.desired_capabilities(make_caps("desired"));
     test_handler th("", opts);
     proton::container(th).run();
-    ASSERT_EQUAL(th.peer_offered_capabilities.size(), 1);
+    ASSERT_EQUAL(th.peer_offered_capabilities.size(), 1u);
     ASSERT_EQUAL(th.peer_offered_capabilities[0], proton::symbol("offered"));
-    ASSERT_EQUAL(th.peer_desired_capabilities.size(), 1);
+    ASSERT_EQUAL(th.peer_desired_capabilities.size(), 1u);
     ASSERT_EQUAL(th.peer_desired_capabilities[0], proton::symbol("desired"));
     return 0;
 }
@@ -360,33 +360,50 @@ class container_runner {
     void operator()() {c_.run();}
 };
 
-int test_container_mt_stop_empty() {
+void test_container_mt_stop_empty() {
     test_mt_handler th;
     proton::container c(th);
     c.auto_stop( false );
     container_runner runner(c);
     auto t = std::thread(runner);
-    ASSERT_EQUAL("start", th.wait());
-    c.stop();
-    t.join();
-    ASSERT_EQUAL("", th.error().name());
-    return 0;
+    // Must ensure that thread is joined
+    try {
+        ASSERT_EQUAL("start", th.wait());
+        c.stop();
+        t.join();
+        ASSERT_EQUAL("", th.error().name());
+    } catch (const std::exception &e) {
+        std::cerr << FAIL_MSG(e.what()) << std::endl;
+        // If join hangs, let the test die by timeout.  We cannot
+        // detach and continue: deleting the container while t is
+        // still alive will put the process in an undefined state.
+        t.join();
+        throw;
+    }
 }
 
-int test_container_mt_stop() {
+void test_container_mt_stop() {
     test_mt_handler th;
     proton::container c(th);
     c.auto_stop(false);
     container_runner runner(c);
     auto t = std::thread(runner);
-    test_listen_handler lh;
-    c.listen("//:0", lh);       //  Also opens a connection
-    ASSERT_EQUAL("start", th.wait());
-    ASSERT_EQUAL("open", th.wait());
-    c.stop();
-    t.join();
-    // It is possible to get sporadic connection errors from this test depending on timing of stop()
-    return 0;
+    // Must ensure that thread is joined
+    try {
+        test_listen_handler lh;
+        ASSERT_EQUAL("start", th.wait());
+        c.listen("//:0", lh);       //  Also opens a connection
+        ASSERT_EQUAL("open", th.wait());
+        c.stop();
+        t.join();
+    } catch (const std::exception& e) {
+        std::cerr << FAIL_MSG(e.what()) << std::endl;
+        // If join hangs, let the test die by timeout.  We cannot
+        // detach and continue: deleting the container while t is
+        // still alive will put the process in an undefined state.
+        t.join();
+        throw;
+    }
 }
 
 #endif

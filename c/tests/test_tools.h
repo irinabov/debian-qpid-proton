@@ -44,6 +44,7 @@ typedef struct test_t {
   const char* name;
   int errors;
   uintptr_t data;               /* Test can store some non-error data here */
+  bool inverted;                /* An inverted test prints no output and reports failure if it passes */
 } test_t;
 
 /* Internal, use macros. Print error message and increase the t->errors count.
@@ -52,6 +53,7 @@ typedef struct test_t {
 void test_vlogf_(test_t *t, const char *prefix, const char* expr,
                  const char* file, int line, const char *fmt, va_list ap)
 {
+  if (t->inverted) return;
   fprintf(stderr, "%s:%d", file, line);
   if (prefix && *prefix) fprintf(stderr, ": %s", prefix);
   if (expr && *expr) fprintf(stderr, ": %s", expr);
@@ -158,6 +160,13 @@ bool test_str_equal_(test_t *t, const char* want, const char* got, const char *f
 }
 #define TEST_STR_EQUAL(TEST, WANT, GOT) test_str_equal_((TEST), (WANT), (GOT), __FILE__, __LINE__)
 
+#define TEST_INSPECT(TEST, WANT, GOT) do {              \
+    pn_string_t *s = pn_string(NULL);                   \
+    TEST_ASSERT(0 == pn_inspect(GOT, s));               \
+    TEST_STR_EQUAL((TEST), (WANT), pn_string_get(s));   \
+    pn_free(s);                                         \
+  } while (0)
+
 #define TEST_STR_IN(TEST, WANT, GOT)                                    \
   test_check_((TEST), strstr((GOT), (WANT)), NULL, __FILE__, __LINE__, "'%s' not in '%s'", (WANT), (GOT))
 
@@ -173,6 +182,11 @@ bool test_str_equal_(test_t *t, const char* want, const char* got, const char *f
   (TEST_CHECKNF(t, pn_condition_is_set((C)), "No condition, expected %s:", (WANT)) ? \
    TEST_STR_EQUAL(t, (WANT), pn_condition_get_name(C)) : 0);
 
+#define TEST_CONDITION(TEST, NAME, DESC, C) do {        \
+    TEST_COND_NAME(TEST, NAME, C);                      \
+    TEST_COND_DESC(TEST, DESC, C);                      \
+  } while(0)
+
 /* T is name of a test_t variable, EXPR is the test expression (which should update T)
    FAILED is incremented if the test has errors
 */
@@ -181,8 +195,11 @@ bool test_str_equal_(test_t *t, const char* want, const char* got, const char *f
     fflush(stdout);                                                     \
     test_t T = { #EXPR, 0 };                                            \
     (EXPR);                                                             \
-    if (T.errors) {                                                     \
+    if (T.errors && !t.inverted) {                                      \
       fprintf(stderr, "FAIL: %s (%d errors)\n", #EXPR, T.errors);       \
+      ++(FAILED);                                                       \
+    } else if (!T.errors && t.inverted) {                               \
+      fprintf(stderr, "UNEXPECTED PASS: %s", #EXPR);                    \
       ++(FAILED);                                                       \
     }                                                                   \
   } while(0)

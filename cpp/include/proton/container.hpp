@@ -113,6 +113,11 @@ class PN_CPP_CLASS_EXTERN container {
     /// @copydetails returned
     PN_CPP_EXTERN returned<connection> connect(const std::string& conn_url);
 
+    /// Connect using the default @ref connect-config file.
+    ///
+    /// @copydetails returned
+    PN_CPP_EXTERN returned<connection> connect();
+
     /// Listen for new connections on `listen_url`.
     ///
     /// If the listener opens successfully, listen_handler::on_open() is called.

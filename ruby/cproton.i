@@ -19,6 +19,8 @@
 %module cproton
 
 %{
+#define PN_USE_DEPRECATED_API 1
+
 #include <proton/connection_driver.h>
 #include <proton/engine.h>
 #include <proton/handlers.h>
@@ -673,3 +675,5 @@ int pn_ssl_get_peer_hostname(pn_ssl_t *ssl, char *OUTPUT, size_t *OUTPUT_SIZE);
 %}
 
 %include "proton/cproton.i"
+
+%include "proton/url.h"

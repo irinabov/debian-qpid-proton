@@ -53,7 +53,7 @@ set(GO_ENV ${PN_ENV_SCRIPT} --
   "CGO_CFLAGS=-I${PN_C_INCLUDE_DIR}"
   "CGO_LDFLAGS=-L${PN_C_LIBRARY_DIR}"
   "PN_INTEROP_DIR=${CMAKE_SOURCE_DIR}/tests/interop"
-  "SASLPASSWD=${SASLPASSWD_EXE}"
+  "SASLPASSWD=${CyrusSASL_Saslpasswd_EXECUTABLE}"
   CACHE INTERNAL "Run a command with Go environment variables")
 
 set(GO ${GO_ENV} ${GO_EXE} CACHE INTERNAL "Run go with environment set")
@@ -84,4 +84,7 @@ set (GO_INSTALL_DIR ${SHARE_INSTALL_DIR}/gocode/src CACHE PATH "Installation dir
 mark_as_advanced (GO_INSTALL_DIR)
 
 install(DIRECTORY src/qpid.apache.org DESTINATION ${GO_INSTALL_DIR} COMPONENT Go)
-install(DIRECTORY examples/ DESTINATION "${PROTON_SHARE}/examples/go" COMPONENT Go)
+install(DIRECTORY examples/
+  DESTINATION "${PROTON_SHARE}/examples/go"
+  COMPONENT Go
+  PATTERN "CMakeLists.txt" EXCLUDE)

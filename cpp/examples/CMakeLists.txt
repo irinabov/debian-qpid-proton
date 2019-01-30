@@ -23,7 +23,7 @@ enable_language(CXX)
 set (ProtonCpp_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(ProtonCpp REQUIRED)
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
-find_package(Threads)
+find_package(Threads REQUIRED)
 
 include_directories(${ProtonCpp_INCLUDE_DIRS})
 link_libraries(${ProtonCpp_LIBRARIES})
@@ -103,36 +103,30 @@ if(HAS_ENOUGH_CPP11)
   endif()
 endif()
 
-# Set result to a native search path - used by examples and binding tests.
-# args after result are directories or search paths.
-macro(set_search_path result)
-  set(${result} ${ARGN})
-  if (UNIX)
-    string(REPLACE ";" ":" ${result} "${${result}}") # native search path separators.
-  endif()
-  file(TO_NATIVE_PATH "${${result}}" ${result}) # native slash separators
-endmacro()
-
-# Add the tools directory for the 'proctest' module
-set_search_path(EXAMPLE_PYTHONPATH "${CMAKE_SOURCE_DIR}/tools/python" "$ENV{PYTHON_PATH}")
-set(EXAMPLE_ENV "PYTHONPATH=${EXAMPLE_PYTHONPATH}")
-
-# Add a test with the correct environment to find test executables and valgrind.
-macro(add_cpp_test name)
+find_package (PythonInterp)     # For test-driver script
+if (PYTHON_EXECUTABLE)
   if(WIN32)
-    set(test_path "$<TARGET_FILE_DIR:broker>;$<TARGET_FILE_DIR:qpid-proton>;$<TARGET_FILE_DIR:qpid-proton-cpp>")
-  else(WIN32)
+    # NOTE: need to escape semicolons as cmake uses them as list separators.
+    set(test_path "$<TARGET_FILE_DIR:broker>\;$<TARGET_FILE_DIR:qpid-proton-core>\;$<TARGET_FILE_DIR:qpid-proton-cpp>")
+  else()
     set(test_path "$<TARGET_FILE_DIR:broker>:$ENV{PATH}")
-  endif(WIN32)
+  endif()
+
+  set(test_env
+    "PATH=${test_path}"
+    "PYTHONPATH=../../tests/py"
+    "HAS_CPP11=$<$<BOOL:${HAS_ENOUGH_CPP11}>:1>"
+    ${TEST_ENV})
+
   add_test(
-    NAME ${name}
-    COMMAND ${PN_ENV_SCRIPT} ${EXAMPLE_ENV} "PATH=${test_path}" ${VALGRIND_ENV}
-            "HAS_CPP11=$<$<BOOL:${HAS_ENOUGH_CPP11}>:1>" -- ${ARGN}
-    )
-endmacro()
+    NAME cpp-example-container
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMAND ${PN_ENV_SCRIPT} -- ${test_env} ${PYTHON_EXECUTABLE} testme -v ContainerExampleTest)
 
-add_cpp_test(cpp-example-container ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v ContainerExampleTest)
-
-if (NOT SSL_IMPL STREQUAL none)
-add_cpp_test(cpp-example-container-ssl ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/example_test.py -v ContainerExampleSSLTest)
+  if (NOT SSL_IMPL STREQUAL none)
+    add_test(
+      NAME cpp-example-container-ssl
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      COMMAND ${PN_ENV_SCRIPT} -- ${test_env} ${PYTHON_EXECUTABLE}  testme -v ContainerExampleSSLTest)
+  endif()
 endif()

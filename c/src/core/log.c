@@ -17,12 +17,12 @@
  * under the License.
  */
 
-#include <proton/log.h>
-#include <proton/object.h>
-#include <stdio.h>
 #include "log_private.h"
 #include "util.h"
 
+#include <proton/error.h>
+#include <proton/log.h>
+#include <proton/object.h>
 
 static void stderr_logger(const char *message) {
     fprintf(stderr, "%s\n", message);
@@ -51,6 +51,7 @@ void pn_log_logger(pn_logger_t new_logger) {
 void pni_vlogf_impl(const char *fmt, va_list ap) {
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
+    fflush(stderr);
 }
 
 /**@internal
@@ -68,3 +69,15 @@ void pni_logf_impl(const char *fmt, ...) {
   va_end(ap);
 }
 
+void pn_log_data(const char *msg, const char *bytes, size_t size)
+{
+  char buf[256];
+  ssize_t n = pn_quote_data(buf, 256, bytes, size);
+  if (n >= 0) {
+    pn_logf("%s: %s", msg, buf);
+  } else if (n == PN_OVERFLOW) {
+    pn_logf("%s: %s (truncated)", msg, buf);
+  } else {
+    pn_logf("%s: cannot log data: %s", msg, pn_code(n));
+  }
+}

@@ -45,8 +45,10 @@ if [ -n $PIP ] && [ -x "$PIP" ]; then
     PATH="$ldir/bin:$PATH"
     echo "PATH=$PATH"
     if [ $VIRTUAL_ENV ]; then
+      pip install -U pip
       pip install -U tox
     else
+      pip install --user -U pip
       pip install --user -U tox
     fi
     RUN_TOX=true
@@ -69,7 +71,7 @@ $RUN_TOX && ctest -V -R 'python-tox-test'
 source config.sh
 
 # proton-c tests via python
-python ../tests/python/proton-test --xml=${XMLOUTPUT}
+python ../python/tests/proton-test --xml=${XMLOUTPUT}
 
 # proton-c native c-* tests
 ctest -V -R '^c-*'

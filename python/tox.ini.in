@@ -1,0 +1,26 @@
+[tox]
+envlist = @TOX_ENVLIST@
+minversion = 1.4
+skipdist = True
+setupdir = @py_bin@/dist
+
+[testenv]
+usedevelop = False
+setenv =
+    VIRTUAL_ENV={envdir}
+    DEBUG=True
+passenv =
+    PKG_CONFIG_PATH
+    CFLAGS
+    SASLPASSWD
+    TEST_EXE_PREFIX
+commands =
+    @CMAKE_SOURCE_DIR@/python/tests/proton-test '{posargs:--ignore-file=@CMAKE_SOURCE_DIR@/python/tests/tox-blacklist}'
+deps =
+    unittest2
+
+[testenv:pep8]
+commands = flake8
+
+[testenv:docs]
+commands = python setup.py build_sphinx
