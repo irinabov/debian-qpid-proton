@@ -266,3 +266,13 @@ Description: Python 3 language bindings for Qpid Proton messaging framework
  language.
  .
  This package provides Python 3 language bindings for Qpid Proton.
+
+Package: qpid-proton-tests
+Architecture: all
+Section: doc
+Depends: ${misc:Depends}
+Architecture: any
+Description: 
+ Qpid Proton tests.
+ .
+ This package provides qpid proton tests. 
