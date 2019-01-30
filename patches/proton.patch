@@ -1,0 +1,55 @@
+From 133a1c350c949c5f997706c1b7f71e24559b6718 Mon Sep 17 00:00:00 2001
+From: vagrant <vagrant@localhost.localdomain>
+Date: Thu, 29 Nov 2018 22:34:01 +0000
+Subject: [PATCH] PROTON-1974: Correctly detect libraries with earlier versions
+ of CMake
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Patch-from: Jiri Daněk
+---
+ tools/cmake/Modules/FindCyrusSASL.cmake | 1 +
+ tools/cmake/Modules/FindJsonCpp.cmake   | 1 +
+ tools/cmake/Modules/FindLibuv.cmake     | 1 +
+ 3 files changed, 3 insertions(+)
+
+diff --git a/tools/cmake/Modules/FindCyrusSASL.cmake b/tools/cmake/Modules/FindCyrusSASL.cmake
+index ebd0eab..eeb3dbf 100644
+--- a/tools/cmake/Modules/FindCyrusSASL.cmake
++++ b/tools/cmake/Modules/FindCyrusSASL.cmake
+@@ -47,6 +47,7 @@ set (CyrusSASL_VERSION ${PC_CyrusSASL_VERSION})
+ 
+ include (FindPackageHandleStandardArgs)
+ find_package_handle_standard_args (CyrusSASL
++  FOUND_VAR CyrusSASL_FOUND
+   REQUIRED_VARS CyrusSASL_LIBRARY CyrusSASL_INCLUDE_DIR
+   VERSION_VAR CyrusSASL_VERSION
+ )
+diff --git a/tools/cmake/Modules/FindJsonCpp.cmake b/tools/cmake/Modules/FindJsonCpp.cmake
+index 083d3fc..242718d 100644
+--- a/tools/cmake/Modules/FindJsonCpp.cmake
++++ b/tools/cmake/Modules/FindJsonCpp.cmake
+@@ -49,6 +49,7 @@ set(JsonCpp_VERSION ${PC_JsonCpp_VERSION})
+ 
+ include(FindPackageHandleStandardArgs)
+ find_package_handle_standard_args(JsonCpp
++  FOUND_VAR JsonCpp_FOUND
+   REQUIRED_VARS JsonCpp_LIBRARY JsonCpp_INCLUDE_DIR
+   VERSION_VAR JsonCpp_VERSION)
+ 
+diff --git a/tools/cmake/Modules/FindLibuv.cmake b/tools/cmake/Modules/FindLibuv.cmake
+index 422e124..e38cfaf 100644
+--- a/tools/cmake/Modules/FindLibuv.cmake
++++ b/tools/cmake/Modules/FindLibuv.cmake
+@@ -49,6 +49,7 @@ set(Libuv_VERSION ${PC_Libuv_VERSION})
+ 
+ include(FindPackageHandleStandardArgs)
+ find_package_handle_standard_args(Libuv
++  FOUND_VAR Libuv_FOUND
+   REQUIRED_VARS Libuv_LIBRARY Libuv_INCLUDE_DIR
+   VERSION_VAR Libuv_VERSION)
+ 
+-- 
+1.8.3.1
+
