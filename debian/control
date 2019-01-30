@@ -271,7 +271,6 @@ Package: qpid-proton-tests
 Architecture: any
 Section: doc
 Depends: ${misc:Depends}
-Description: 
- Qpid Proton tests.
+Description: Qpid Proton tests.
  .
  This package provides qpid proton tests. 
