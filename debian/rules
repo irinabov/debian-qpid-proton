@@ -12,7 +12,6 @@
 
 # Uncomment this to turn on verbose mode.
 export DH_VERBOSE=1
-export DEB_CFLAGS_MAINT_APPEND  = -Wno-error=format-security
 
 # DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 # DPKG_EXPORT_BUILDFLAGS = 1
@@ -36,13 +35,15 @@ override_dh_auto_clean:
 	rm -rf build
 
 override_dh_auto_configure:
+	export CPPFLAGS=$(dpkg-buildflags --get CFLAGS)
 	dh_auto_configure -- \
                              -DBUILD_RUBY=OFF \
                              -DSYSINSTALL_BINDINGS=on \
                              -DLIB_INSTALL_DIR=/usr/lib/${DEB_HOST_MULTIARCH}\
 			     -DPYTHON_EXECUTABLE=/usr/bin/python3 \
 			     -DPYTHON_INCLUDE_DIR=/usr/include/python3.6m \
-			     -DPYTHON_LIBRARY=/usr/lib/${DEB_HOST_MULTIARCH}/libpython3.6m.so
+			     -DPYTHON_LIBRARY=/usr/lib/${DEB_HOST_MULTIARCH}/libpython3.6m.so \
+			    "-DCMAKE_CXX_FLAGS=$CPPFLAGS -Wno-error=format-security"
 
 override_dh_auto_build:
 	dh_auto_build -- all docs
