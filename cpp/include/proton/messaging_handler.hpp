@@ -30,59 +30,41 @@
 
 namespace proton {
 
-/// A handler for Proton messaging events.
+
+/// Handler for Proton messaging events.
 ///
 /// Subclass and override the event-handling member functions.
 ///
-/// Event handling functions can always use the objects passed as
-/// arguments.
-///
-/// @note A handler function **must not** use proton objects that are
-/// not accessible via the arguments passed without taking extra
-/// care. For example an on_message() handler called for connection
-/// "A" cannot simply call sender::send() on a proton::sender
-/// belonging to connection "B".
-///
-/// **Thread-safety**: To be safe for both single- and multi-threaded
-/// use, a handler **must not** directly use objects belonging to
-/// another connection. See @ref mt_page and proton::work_queue for
-/// safe ways to communicate. We recommend writing safe handlers to
-/// avoid mysterious failures if the handler is ever used in a
-/// multi-threaded container.
+/// **Thread-safety**: A thread-safe handler can use the objects
+/// passed as arguments, and other objects belonging to the same
+/// proton::connection.  It *must not* use objects belonging to a
+/// different connection. See @ref mt_page and proton::work_queue for
+/// safe ways to communicate between connections.  Thread-safe
+/// handlers can also be used in single-threaded code.
 ///
 /// **Single-threaded only**: An application is single-threaded if it
-/// calls container::run() exactly once, and does not make proton
-/// calls from any other thread. In this case a handler can use
-/// objects belonging to another connection, but it must call
-/// connection::wake() on the other connection before returning.  Such
-/// a handler will fail mysteriously if the container is run with
-/// multiple threads.
+/// calls container::run() exactly once, and only makes make proton
+/// calls from handler functions. Single-threaded handler functions
+/// can use objects belonging to another connection, but *must* call
+/// connection::wake() on the other connection before returning. Such
+/// a handler is not thread-safe.
 ///
-/// #### Close and error handling
+/// ### Overview of connection life-cycle and automatic re-connect
 ///
-/// There are several objects that have `on_X_close` and `on_X_error`
-/// functions.  They are called as follows:
+/// See the documentation of individual event functions for more details.
 ///
-/// - If `X` is closed cleanly, with no error status, then `on_X_close`
-///   is called.
+/// on_connection_open() - @copybrief on_connection_open()
 ///
-/// - If `X` is closed with an error, then `on_X_error` is called,
-///   followed by `on_X_close`. The error condition is also available
-///   in `on_X_close` from `X::error()`.
+/// on_transport_error() -@copybrief on_transport_error()
 ///
-/// By default, if you do not implement `on_X_error`, it will call
-/// `on_error`.  If you do not implement `on_error` it will throw a
-/// `proton::error` exception, which may not be what you want but
-/// does help to identify forgotten error handling quickly.
+/// on_connection_error() - @copybrief on_connection_error()
 ///
-/// #### Resource cleanup
+/// on_connection_close() - @copybrief on_connection_close()
 ///
-/// Every `on_X_open` event is paired with an `on_X_close` event which
-/// can clean up any resources created by the open handler.  In
-/// particular this is still true if an error is reported with an
-/// `on_X_error` event.  The error-handling logic doesn't have to
-/// manage resource clean up.  It can assume that the close event will
-/// be along to handle it.
+/// on_transport_close() - @copybrief on_transport_close()
+///
+/// @see reconnect_options
+///
 class
 PN_CPP_CLASS_EXTERN messaging_handler {
   public:
@@ -110,20 +92,75 @@ PN_CPP_CLASS_EXTERN messaging_handler {
     /// The underlying network transport is open
     PN_CPP_EXTERN virtual void on_transport_open(transport&);
 
-    /// The underlying network transport has closed.
+    /// The final event for a connection: there will be no more
+    /// reconnect attempts and no more event functions.
+    ///
+    /// Called exactly once regardless of how many times the connection
+    /// was re-connected, whether it failed due to transport or connection
+    /// errors or was closed without error.
+    ///
+    /// This is a good place to do per-connection clean-up.
+    /// transport::connection() is always valid at this point.
+    ///
     PN_CPP_EXTERN virtual void on_transport_close(transport&);
 
-    /// The underlying network transport has closed with an error
-    /// condition.
+    /// Unexpected disconnect, transport::error() provides details; if @ref
+    /// reconnect_options are enabled there may be an automatic re-connect.
+    ///
+    /// If there is a successful automatic reconnect, on_connection_open() will
+    /// be called again.
+    ///
+    /// transport::connection() is always valid at this point.
+    ///
+    /// Calling connection::close() will cancel automatic re-connect and force
+    /// the transport to close immediately, see on_transport_close()
+    ///
     PN_CPP_EXTERN virtual void on_transport_error(transport&);
 
-    /// The remote peer opened the connection.
+    /// The remote peer opened the connection: called once on initial open, and
+    /// again on each successful automatic re-connect (see @ref
+    /// reconnect_options)
+    ///
+    /// connection::reconnected() is false for the initial call, true for
+    /// any subsequent calls due to reconnect.
+    ///
+    /// @note You can use the initial call to open initial @ref session, @ref
+    /// sender and @ref receiver endpoints. All active endpoints are *automatically*
+    /// re-opened after an automatic re-connect so you should take care
+    /// not to open them again, for example:
+    ///
+    ///     if (!c.reconnected()) {
+    ///         // Do initial per-connection setup here.
+    ///         // Open initial senders/receivers if needed.
+    ///     } else {
+    ///         // Handle a successful reconnect here.
+    ///         // NOTE: Don't re-open active senders/receivers
+    ///     }
+    ///
+    /// For a server on_connection_open() is called when a client attempts to
+    /// open a connection.  The server can call connection::open() to accept or
+    /// connection::close(const error_condition&) to reject.
+    ///
+    /// @see reconnect_options, on_transport_error()
     PN_CPP_EXTERN virtual void on_connection_open(connection&);
 
     /// The remote peer closed the connection.
+    ///
+    /// If there was a connection error, this is called immediately after
+    /// on_connection_error() and connection::error() is set
+    ///
     PN_CPP_EXTERN virtual void on_connection_close(connection&);
 
-    /// The remote peer closed the connection with an error condition.
+    /// The remote peer indicated a fatal error, connection::error() provides details.
+    ///
+    /// A connection error is an application problem, for example an illegal
+    /// action or a lack of resources. There will be no automatic re-connect
+    /// attempts, on_connection_close() will be called immediately after.
+    ///
+    /// @note A connection close with the special error condition
+    /// `amqp:connection-forced` is treated as a transport error, not a
+    /// connection error, see on_transport_error()
+    ///
     PN_CPP_EXTERN virtual void on_connection_error(connection&);
 
     /// The remote peer opened the session.
@@ -203,6 +240,6 @@ PN_CPP_CLASS_EXTERN messaging_handler {
     PN_CPP_EXTERN virtual void on_error(const error_condition&);
 };
 
-} // proton
+} // namespace proton
 
 #endif // PROTON_MESSAGING_HANDLER_HPP

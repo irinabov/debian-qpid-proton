@@ -2,7 +2,7 @@
 envlist = @TOX_ENVLIST@
 minversion = 1.4
 skipdist = True
-setupdir = @py_bin@/dist
+setupdir = @py_dist_dir@
 
 [testenv]
 usedevelop = False
@@ -15,7 +15,7 @@ passenv =
     SASLPASSWD
     TEST_EXE_PREFIX
 commands =
-    @CMAKE_SOURCE_DIR@/python/tests/proton-test '{posargs:--ignore-file=@CMAKE_SOURCE_DIR@/python/tests/tox-blacklist}'
+    python @CMAKE_SOURCE_DIR@/python/tests/proton-test '{posargs:--ignore-file=@CMAKE_SOURCE_DIR@/python/tests/tox-blacklist}'
 deps =
     unittest2
 

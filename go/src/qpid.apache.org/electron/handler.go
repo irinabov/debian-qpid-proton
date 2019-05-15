@@ -27,19 +27,19 @@ import (
 // NOTE: methods in this file are called only in the proton goroutine unless otherwise indicated.
 
 type handler struct {
-	delegator    *proton.MessagingAdapter
-	connection   *connection
-	links        map[proton.Link]Endpoint
-	sentMessages map[proton.Delivery]sentMessage
-	sessions     map[proton.Session]*session
+	delegator  *proton.MessagingAdapter
+	connection *connection
+	links      map[proton.Link]Endpoint
+	sent       map[proton.Delivery]*sendable // Waiting for outcome
+	sessions   map[proton.Session]*session
 }
 
 func newHandler(c *connection) *handler {
 	h := &handler{
-		connection:   c,
-		links:        make(map[proton.Link]Endpoint),
-		sentMessages: make(map[proton.Delivery]sentMessage),
-		sessions:     make(map[proton.Session]*session),
+		connection: c,
+		links:      make(map[proton.Link]Endpoint),
+		sent:       make(map[proton.Delivery]*sendable),
+		sessions:   make(map[proton.Session]*session),
 	}
 	h.delegator = proton.NewMessagingAdapter(h)
 	// Disable auto features of MessagingAdapter, we do these ourselves.
@@ -65,15 +65,15 @@ func (h *handler) HandleMessagingEvent(t proton.MessagingEvent, e proton.Event) 
 		}
 
 	case proton.MSettled:
-		if sm, ok := h.sentMessages[e.Delivery()]; ok {
+		if sm, ok := h.sent[e.Delivery()]; ok {
 			d := e.Delivery().Remote()
-			sm.ack <- Outcome{sentStatus(d.Type()), d.Condition().Error(), sm.value}
-			delete(h.sentMessages, e.Delivery())
+			sm.ack <- Outcome{sentStatus(d.Type()), d.Condition().Error(), sm.v}
+			delete(h.sent, e.Delivery())
 		}
 
 	case proton.MSendable:
 		if s, ok := h.links[e.Link()].(*sender); ok {
-			s.sendable()
+			s.trySend()
 		} else {
 			h.linkError(e.Link(), "no sender")
 		}
@@ -105,7 +105,7 @@ func (h *handler) HandleMessagingEvent(t proton.MessagingEvent, e proton.Event) 
 				}
 			}
 			if ep, ok := h.links[l]; ok {
-				ep.wakeSync()
+				ep.(endpointInternal).wakeSync()
 			} else {
 				h.linkError(l, "no link")
 			}
@@ -126,9 +126,13 @@ func (h *handler) HandleMessagingEvent(t proton.MessagingEvent, e proton.Event) 
 		h.shutdown(proton.EndpointError(e.Connection()))
 
 	case proton.MDisconnected:
-		err := e.Transport().Condition().Error()
-		if err == nil {
-			err = amqp.Errorf(amqp.IllegalState, "unexpected disconnect on %s", h.connection)
+		var err error
+		if err = e.Connection().RemoteCondition().Error(); err == nil {
+			if err = e.Connection().Condition().Error(); err == nil {
+				if err = e.Transport().Condition().Error(); err == nil {
+					err = amqp.Errorf(amqp.IllegalState, "unexpected disconnect on %s", h.connection)
+				}
+			}
 		}
 		h.shutdown(err)
 	}
@@ -157,7 +161,7 @@ func (h *handler) addLink(pl proton.Link, el Endpoint) {
 
 func (h *handler) linkClosed(l proton.Link, err error) {
 	if link, ok := h.links[l]; ok {
-		_ = link.closed(err)
+		_ = link.(endpointInternal).closed(err)
 		delete(h.links, l)
 		l.Free()
 	}
@@ -178,10 +182,10 @@ func (h *handler) sessionClosed(ps proton.Session, err error) {
 
 func (h *handler) shutdown(err error) {
 	err = h.connection.closed(err)
-	for _, sm := range h.sentMessages {
+	for _, sm := range h.sent {
 		// Don't block but ensure outcome is sent eventually.
 		if sm.ack != nil {
-			o := Outcome{Unacknowledged, err, sm.value}
+			o := Outcome{Unacknowledged, err, sm.v}
 			select {
 			case sm.ack <- o:
 			default:
@@ -189,9 +193,9 @@ func (h *handler) shutdown(err error) {
 			}
 		}
 	}
-	h.sentMessages = nil
+	h.sent = nil
 	for _, l := range h.links {
-		_ = l.closed(err)
+		_ = l.(endpointInternal).closed(err)
 	}
 	h.links = nil
 	for _, s := range h.sessions {

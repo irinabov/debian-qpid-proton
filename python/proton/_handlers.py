@@ -19,16 +19,22 @@
 
 from __future__ import absolute_import
 
+import errno
 import logging
+import socket
 import time
 import weakref
-from select import select
 
+from ._condition import Condition
 from ._delivery import Delivery
 from ._endpoints import Endpoint
-from ._message import Message
+from ._events import Event, Handler, _dispatch
 from ._exceptions import ProtonException
-from ._events import Handler, _dispatch
+from ._io import IO
+from ._message import Message
+from ._selectable import Selectable
+from ._transport import Transport
+from ._url import Url
 
 log = logging.getLogger("proton")
 
@@ -672,15 +678,6 @@ CFlowController = FlowController
 CHandshaker = Handshaker
 
 
-from ._reactor_impl import WrappedHandler
-from cproton import pn_iohandler
-
-class IOHandler(WrappedHandler):
-
-    def __init__(self):
-        WrappedHandler.__init__(self, pn_iohandler)
-
-
 class PythonIO:
 
     def __init__(self):
@@ -726,13 +723,11 @@ class PythonIO:
             timeout = deadline - time.time()
         else:
             timeout = reactor.timeout
-        if (timeout < 0): timeout = 0
+        if timeout < 0: timeout = 0
         timeout = min(timeout, reactor.timeout)
-        readable, writable, _ = select(reading, writing, [], timeout)
+        readable, writable, _ = IO.select(reading, writing, [], timeout)
 
-        reactor.mark()
-
-        now = time.time()
+        now = reactor.mark()
 
         for s in readable:
             s.readable()
@@ -743,3 +738,247 @@ class PythonIO:
                 s.expired()
 
         reactor.yield_()
+
+
+# For C style IO handler need to implement Selector
+class IOHandler(Handler):
+
+    def __init__(self):
+        self._selector = IO.Selector()
+
+    def on_selectable_init(self, event):
+        s = event.selectable
+        self._selector.add(s)
+        s._reactor._selectables += 1
+
+    def on_selectable_updated(self, event):
+        s = event.selectable
+        self._selector.update(s)
+
+    def on_selectable_final(self, event):
+        s = event.selectable
+        self._selector.remove(s)
+        s._reactor._selectables -= 1
+        s.release()
+
+    def on_reactor_quiesced(self, event):
+        r = event.reactor
+
+        if not r.quiesced:
+            return
+
+        d = r.timer_deadline
+        readable, writable, expired = self._selector.select(r.timeout)
+
+        now = r.mark()
+
+        for s in readable:
+            s.readable()
+        for s in writable:
+            s.writable()
+        for s in expired:
+            s.expired()
+
+        r.yield_()
+
+    def on_selectable_readable(self, event):
+        s = event.selectable
+        t = s._transport
+
+        # If we're an acceptor we can't have a transport
+        # and we don't want to do anything here in any case
+        if not t:
+            return
+
+        capacity = t.capacity()
+        if capacity > 0:
+            try:
+                b = s.recv(capacity)
+                if len(b) > 0:
+                    n = t.push(b)
+                else:
+                    # EOF handling
+                    self.on_selectable_error(event)
+            except socket.error as e:
+                # TODO: What's the error handling to be here?
+                log.error("Couldn't recv: %r" % e)
+                t.close_tail()
+
+        # Always update as we may have gone to not reading or from
+        # not writing to writing when processing the incoming bytes
+        r = s._reactor
+        self.update(t, s, r.now)
+
+    def on_selectable_writable(self, event):
+        s = event.selectable
+        t = s._transport
+
+        # If we're an acceptor we can't have a transport
+        # and we don't want to do anything here in any case
+        if not t:
+            return
+
+        pending = t.pending()
+        if pending > 0:
+
+            try:
+                n = s.send(t.peek(pending))
+                t.pop(n)
+            except socket.error as e:
+                log.error("Couldn't send: %r" % e)
+                # TODO: Error? or actually an exception
+                t.close_head()
+
+        newpending = t.pending()
+        if newpending != pending:
+            r = s._reactor
+            self.update(t, s, r.now)
+
+    def on_selectable_error(self, event):
+        s = event.selectable
+        t = s._transport
+
+        t.close_head()
+        t.close_tail()
+        s.terminate()
+        s.update()
+
+    def on_selectable_expired(self, event):
+        s = event.selectable
+        t = s._transport
+        r = s._reactor
+
+        self.update(t, s, r.now)
+
+    def on_connection_local_open(self, event):
+        c = event.connection
+        if not c.state & Endpoint.REMOTE_UNINIT:
+            return
+
+        t = Transport()
+        # It seems perverse, but the C code ignores bind errors too!
+        # and this is required or you get errors because Connector() has already
+        # bound the transport and connection!
+        t.bind_nothrow(c)
+
+    def on_connection_bound(self, event):
+        c = event.connection
+        t = event.transport
+
+        reactor = c._reactor
+
+        # link the new transport to its reactor:
+        t._reactor = reactor
+
+        if c._acceptor:
+            # this connection was created by the acceptor.  There is already a
+            # socket assigned to this connection.  Nothing needs to be done.
+            return
+
+        url = c.url or Url(c.hostname)
+        url.defaults()
+
+        host = url.host
+        port = int(url.port)
+
+        if not c.user:
+            user = url.username
+            if user:
+                c.user = user
+            password = url.password
+            if password:
+                c.password = password
+
+        addrs = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+
+        # Try first possible address
+        log.debug("Connect trying first transport address: %s", addrs[0])
+        sock = IO.connect(addrs[0])
+
+        # At this point we need to arrange to be called back when the socket is writable
+        connector = ConnectSelectable(sock, reactor, addrs[1:], t, self)
+        connector.collect(reactor._collector)
+        connector.writing = True
+        connector.push_event(connector, Event.SELECTABLE_INIT)
+
+        # TODO: Don't understand why we need this now - how can we get PN_TRANSPORT until the connection succeeds?
+        t._selectable = None
+
+    @staticmethod
+    def update(transport, selectable, now):
+        try:
+            capacity = transport.capacity()
+            selectable.reading = capacity>0
+        except:
+            if transport.closed:
+                selectable.terminate()
+        try:
+            pending = transport.pending()
+            selectable.writing = pending>0
+        except:
+            if transport.closed:
+                selectable.terminate()
+        selectable.deadline = transport.tick(now)
+        selectable.update()
+
+    def on_transport(self, event):
+        t = event.transport
+        r = t._reactor
+        s = t._selectable
+        if s and not s.is_terminal:
+            self.update(t, s, r.now)
+
+    def on_transport_closed(self, event):
+        t = event.transport
+        r = t._reactor
+        s = t._selectable
+        if s and not s.is_terminal:
+            s.terminate()
+            r.update(s)
+        t.unbind()
+
+
+class ConnectSelectable(Selectable):
+    def __init__(self, sock, reactor, addrs, transport, iohandler):
+        super(ConnectSelectable, self).__init__(sock, reactor)
+        self._addrs = addrs
+        self._transport = transport
+        self._iohandler = iohandler
+
+    def readable(self):
+        pass
+
+    def writable(self):
+        e = self._delegate.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+        t = self._transport
+        if e == 0:
+            log.debug("Connection succeeded")
+            s = self._reactor.selectable(delegate=self._delegate)
+            s._transport = t
+            t._selectable = s
+            self._iohandler.update(t, s, t._reactor.now)
+
+            # Disassociate from the socket (which has been passed on)
+            self._delegate = None
+            self.terminate()
+            self.update()
+            return
+        elif e == errno.ECONNREFUSED:
+            if len(self._addrs) > 0:
+                log.debug("Connection refused: trying next transport address: %s", self._addrs[0])
+                sock = IO.connect(self._addrs[0])
+                self._addrs = self._addrs[1:]
+                self._delegate.close()
+                self._delegate = sock
+                return
+            else:
+                log.debug("Connection refused, but tried all transport addresses")
+                t.condition = Condition("proton.pythonio", "Connection refused to all addresses")
+        else:
+            log.error("Couldn't connect: %s", e)
+            t.condition = Condition("proton.pythonio", "Connection error: %s" % e)
+
+        t.close_tail()
+        t.close_head()
+        self.terminate()
+        self.update()
