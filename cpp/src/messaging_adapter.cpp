@@ -84,6 +84,7 @@ void on_link_flow(messaging_handler& handler, pn_event_t* event) {
             // receiver
             if (!pn_link_credit(lnk) && lctx.draining) {
                 lctx.draining = false;
+                pn_link_set_drain(lnk, false);
                 receiver r(make_wrapper<receiver>(lnk));
                 handler.on_receiver_drain_finish(r);
             }
@@ -132,6 +133,7 @@ void on_delivery(messaging_handler& handler, pn_event_t* event) {
                     d.accept();
                 if (lctx.draining && !pn_link_credit(lnk)) {
                     lctx.draining = false;
+                    pn_link_set_drain(lnk, false);
                     receiver r(make_wrapper<receiver>(lnk));
                     handler.on_receiver_drain_finish(r);
                 }
@@ -229,6 +231,10 @@ void on_connection_remote_close(messaging_handler& handler, pn_event_t* event) {
     pn_connection_close(conn);
 }
 
+void on_connection_bound(messaging_handler& handler, pn_event_t* event) {
+    connection c(make_wrapper(pn_event_connection(event)));
+}
+
 void on_connection_remote_open(messaging_handler& handler, pn_event_t* event) {
     // Generate on_transport_open event here until we find a better place
     transport t(make_wrapper(pn_event_transport(event)));
@@ -303,7 +309,7 @@ void messaging_adapter::dispatch(messaging_handler& handler, pn_event_t* event)
 
     // Only handle events we are interested in
     switch(type) {
-
+      case PN_CONNECTION_BOUND: on_connection_bound(handler, event); break;
       case PN_CONNECTION_REMOTE_OPEN: on_connection_remote_open(handler, event); break;
       case PN_CONNECTION_REMOTE_CLOSE: on_connection_remote_close(handler, event); break;
 

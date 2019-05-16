@@ -72,6 +72,7 @@ set (pysrc
     proton/_endpoints.py
     proton/_events.py
     proton/_exceptions.py
+    proton/_io.py
     proton/_message.py
     proton/_transport.py
     proton/_url.py
@@ -83,7 +84,7 @@ set (pysrc
 
     proton/_handlers.py
     proton/_reactor.py
-    proton/_reactor_impl.py
+    proton/_selectable.py
     proton/_utils.py
     )
 # extra files included in the source distribution
@@ -189,7 +190,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/README.rst.in
 set (py_src "${CMAKE_CURRENT_SOURCE_DIR}")
 set (py_bin "${CMAKE_CURRENT_BINARY_DIR}")
 set (py_dll "$<TARGET_FILE_DIR:_cproton>")
-set (py_bld "$<TARGET_FILE_DIR:qpid-proton>") # For windows
+set (py_bld "$<TARGET_FILE_DIR:qpid-proton-core>") # For windows
 set (py_tests "${py_src}/tests")
 
 set (py_path ${CMAKE_BINARY_DIR}/c/tools ${py_bld} $ENV{PATH})
@@ -216,11 +217,11 @@ else ()
   option(ENABLE_TOX_TEST "Enable multi-version python testing with TOX" ON)
 
   set(tox_default "py26,py27,py34,py35,py36")
-  set(TOX_ENVLIST ${tox_default} CACHE STRING "List of python environments for TOX tests" )
+  set(TOX_ENVLIST "" CACHE STRING "List of python environments for TOX tests" )
   mark_as_advanced(TOX_ENVLIST)
 
-  if (NOT (TOX_ENVLIST STREQUAL tox_default))
-    message(WARNING "non-default TOX test set '${TOX_ENVLIST}' (default '${tox_default}')")
+  if (NOT TOX_ENVLIST)
+    set (TOX_ENVLIST ${tox_default})
   endif()
   if (ENABLE_TOX_TEST)
     if (CMAKE_BUILD_TYPE MATCHES "Coverage")

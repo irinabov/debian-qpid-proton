@@ -25,48 +25,41 @@ from __future__ import absolute_import
 
 import weakref
 
-from cproton import PN_LOCAL_UNINIT, PN_REMOTE_UNINIT, PN_LOCAL_ACTIVE, PN_REMOTE_ACTIVE, PN_LOCAL_CLOSED, \
-    PN_REMOTE_CLOSED, \
-    pn_object_reactor, pn_record_get_handler, pn_record_set_handler, pn_decref, \
-    pn_connection, pn_connection_attachments, pn_connection_transport, pn_connection_error, pn_connection_condition, \
-    pn_connection_remote_condition, pn_connection_collect, pn_connection_set_container, pn_connection_get_container, \
-    pn_connection_get_hostname, pn_connection_set_hostname, pn_connection_get_user, pn_connection_set_user, \
-    pn_connection_set_password, pn_connection_remote_container, pn_connection_remote_hostname, \
-    pn_connection_remote_offered_capabilities, pn_connection_remote_desired_capabilities, \
-    pn_connection_remote_properties, pn_connection_offered_capabilities, pn_connection_desired_capabilities, \
-    pn_connection_properties, pn_connection_open, pn_connection_close, pn_connection_state, pn_connection_release, \
-    pn_session, pn_session_head, pn_session_attachments, pn_session_condition, pn_session_remote_condition, \
-    pn_session_get_incoming_capacity, pn_session_set_incoming_capacity, pn_session_get_outgoing_window, \
-    pn_session_set_outgoing_window, pn_session_incoming_bytes, pn_session_outgoing_bytes, pn_session_open, \
-    pn_session_close, pn_session_next, pn_session_state, pn_session_connection, pn_session_free, \
-    PN_SND_UNSETTLED, PN_SND_SETTLED, PN_SND_MIXED, PN_RCV_FIRST, PN_RCV_SECOND, \
-    pn_link_head, pn_link_is_sender, pn_link_attachments, pn_link_error, pn_link_condition, pn_link_remote_condition, \
-    pn_link_open, pn_link_close, pn_link_state, pn_link_source, pn_link_target, pn_link_remote_source, \
-    pn_link_remote_target, pn_link_session, pn_link_current, pn_link_advance, pn_link_unsettled, pn_link_credit, \
-    pn_link_available, pn_link_queued, pn_link_next, pn_link_name, pn_link_is_receiver, pn_link_remote_snd_settle_mode, \
-    pn_link_remote_rcv_settle_mode, pn_link_snd_settle_mode, pn_link_set_snd_settle_mode, pn_link_rcv_settle_mode, \
-    pn_link_set_rcv_settle_mode, pn_link_get_drain, pn_link_set_drain, pn_link_drained, pn_link_remote_max_message_size, \
-    pn_link_max_message_size, pn_link_set_max_message_size, pn_link_detach, pn_link_free, pn_link_offered, pn_link_send, \
-    pn_link_flow, pn_link_recv, pn_link_drain, pn_link_draining, \
-    pn_sender, pn_receiver, \
-    PN_UNSPECIFIED, PN_SOURCE, PN_TARGET, PN_COORDINATOR, PN_NONDURABLE, PN_CONFIGURATION, \
-    PN_DELIVERIES, PN_DIST_MODE_UNSPECIFIED, PN_DIST_MODE_COPY, PN_DIST_MODE_MOVE, PN_EXPIRE_WITH_LINK, \
-    PN_EXPIRE_WITH_SESSION, PN_EXPIRE_WITH_CONNECTION, PN_EXPIRE_NEVER, \
-    pn_terminus_set_durability, pn_terminus_set_timeout, pn_terminus_set_dynamic, pn_terminus_get_type, \
-    pn_terminus_get_durability, pn_terminus_set_type, pn_terminus_get_address, pn_terminus_capabilities, \
-    pn_terminus_set_address, pn_terminus_get_timeout, pn_terminus_filter, pn_terminus_properties, \
-    pn_terminus_get_expiry_policy, pn_terminus_set_expiry_policy, pn_terminus_set_distribution_mode, \
-    pn_terminus_get_distribution_mode, pn_terminus_copy, pn_terminus_outcomes, pn_terminus_is_dynamic, \
-    PN_EOS, \
-    pn_delivery, \
-    pn_work_head, \
-    pn_error_code, pn_error_text
+from cproton import PN_CONFIGURATION, PN_COORDINATOR, PN_DELIVERIES, PN_DIST_MODE_COPY, PN_DIST_MODE_MOVE, \
+    PN_DIST_MODE_UNSPECIFIED, PN_EOS, PN_EXPIRE_NEVER, PN_EXPIRE_WITH_CONNECTION, PN_EXPIRE_WITH_LINK, \
+    PN_EXPIRE_WITH_SESSION, PN_LOCAL_ACTIVE, PN_LOCAL_CLOSED, PN_LOCAL_UNINIT, PN_NONDURABLE, PN_RCV_FIRST, \
+    PN_RCV_SECOND, PN_REMOTE_ACTIVE, PN_REMOTE_CLOSED, PN_REMOTE_UNINIT, PN_SND_MIXED, PN_SND_SETTLED, PN_SND_UNSETTLED, \
+    PN_SOURCE, PN_TARGET, PN_UNSPECIFIED, pn_connection, pn_connection_attachments, pn_connection_close, \
+    pn_connection_collect, pn_connection_condition, pn_connection_desired_capabilities, pn_connection_error, \
+    pn_connection_get_container, pn_connection_get_hostname, pn_connection_get_user, pn_connection_offered_capabilities, \
+    pn_connection_open, pn_connection_properties, pn_connection_release, pn_connection_remote_condition, \
+    pn_connection_remote_container, pn_connection_remote_desired_capabilities, pn_connection_remote_hostname, \
+    pn_connection_remote_offered_capabilities, pn_connection_remote_properties, pn_connection_set_container, \
+    pn_connection_set_hostname, pn_connection_set_password, pn_connection_set_user, pn_connection_state, \
+    pn_connection_transport, pn_delivery, pn_error_code, pn_error_text, pn_link_advance, pn_link_attachments, \
+    pn_link_available, pn_link_close, pn_link_condition, pn_link_credit, pn_link_current, pn_link_detach, pn_link_drain, \
+    pn_link_drained, pn_link_draining, pn_link_error, pn_link_flow, pn_link_free, pn_link_get_drain, pn_link_head, \
+    pn_link_is_receiver, pn_link_is_sender, pn_link_max_message_size, pn_link_name, pn_link_next, pn_link_offered, \
+    pn_link_open, pn_link_queued, pn_link_rcv_settle_mode, pn_link_recv, pn_link_remote_condition, \
+    pn_link_remote_max_message_size, pn_link_remote_rcv_settle_mode, pn_link_remote_snd_settle_mode, \
+    pn_link_remote_source, pn_link_remote_target, pn_link_send, pn_link_session, pn_link_set_drain, \
+    pn_link_set_max_message_size, pn_link_set_rcv_settle_mode, pn_link_set_snd_settle_mode, pn_link_snd_settle_mode, \
+    pn_link_source, pn_link_state, pn_link_target, pn_link_unsettled, pn_receiver, pn_sender, pn_session, \
+    pn_session_attachments, pn_session_close, pn_session_condition, pn_session_connection, pn_session_free, \
+    pn_session_get_incoming_capacity, pn_session_get_outgoing_window, pn_session_head, pn_session_incoming_bytes, \
+    pn_session_next, pn_session_open, pn_session_outgoing_bytes, pn_session_remote_condition, \
+    pn_session_set_incoming_capacity, pn_session_set_outgoing_window, pn_session_state, pn_terminus_capabilities, \
+    pn_terminus_copy, pn_terminus_filter, pn_terminus_get_address, pn_terminus_get_distribution_mode, \
+    pn_terminus_get_durability, pn_terminus_get_expiry_policy, pn_terminus_get_timeout, pn_terminus_get_type, \
+    pn_terminus_is_dynamic, pn_terminus_outcomes, pn_terminus_properties, pn_terminus_set_address, \
+    pn_terminus_set_distribution_mode, pn_terminus_set_durability, pn_terminus_set_dynamic, \
+    pn_terminus_set_expiry_policy, pn_terminus_set_timeout, pn_terminus_set_type, pn_work_head
 
-from ._common import utf82unicode, unicode2utf8
-from ._condition import obj2cond, cond2obj
-from ._data import Data, obj2dat, dat2obj
+from ._common import unicode2utf8, utf82unicode
+from ._condition import cond2obj, obj2cond
+from ._data import Data, dat2obj, obj2dat
 from ._delivery import Delivery
-from ._exceptions import EXCEPTIONS, LinkException, SessionException, ConnectionException
+from ._exceptions import ConnectionException, EXCEPTIONS, LinkException, SessionException
 from ._transport import Transport
 from ._wrapper import Wrapper
 
@@ -81,6 +74,7 @@ class Endpoint(object):
 
     def _init(self):
         self.condition = None
+        self._handler = None
 
     def _update_cond(self):
         obj2cond(self.condition, self._get_cond_impl())
@@ -97,34 +91,20 @@ class Endpoint(object):
         assert False, "Subclass must override this!"
 
     def _get_handler(self):
-        from . import _reactor
-        from . import _reactor_impl
-        ractor = _reactor.Reactor.wrap(pn_object_reactor(self._impl))
-        if ractor:
-            on_error = ractor.on_error_delegate()
-        else:
-            on_error = None
-        record = self._get_attachments()
-        return _reactor_impl.WrappedHandler.wrap(pn_record_get_handler(record), on_error)
+        return self._handler
 
     def _set_handler(self, handler):
-        from . import _reactor
-        from . import _reactor_impl
-        ractor = _reactor.Reactor.wrap(pn_object_reactor(self._impl))
-        if ractor:
-            on_error = ractor.on_error_delegate()
+        # TODO Hack This is here for some very odd (IMO) backwards compat behaviour
+        from ._events import Handler
+        if handler is None:
+          self._handler = None
+        elif issubclass(type(handler), Handler):
+            self._handler = handler
         else:
-            on_error = None
-        impl = _reactor_impl._chandler(handler, on_error)
-        record = self._get_attachments()
-        pn_record_set_handler(record, impl)
-        pn_decref(impl)
+            self._handler = Handler()
+            self._handler.add(handler)
 
     handler = property(_get_handler, _set_handler)
-
-    @property
-    def transport(self):
-        return self.connection.transport
 
 
 class Connection(Wrapper, Endpoint):
@@ -147,6 +127,8 @@ class Connection(Wrapper, Endpoint):
         self.offered_capabilities = None
         self.desired_capabilities = None
         self.properties = None
+        self.url = None
+        self._acceptor = None
 
     def _get_attachments(self):
         return pn_connection_attachments(self._impl)
@@ -183,7 +165,7 @@ class Connection(Wrapper, Endpoint):
         return utf82unicode(pn_connection_get_container(self._impl))
 
     def _set_container(self, name):
-        return pn_connection_set_container(self._impl, unicode2utf8(name))
+        pn_connection_set_container(self._impl, unicode2utf8(name))
 
     container = property(_get_container, _set_container)
 
@@ -191,7 +173,7 @@ class Connection(Wrapper, Endpoint):
         return utf82unicode(pn_connection_get_hostname(self._impl))
 
     def _set_hostname(self, name):
-        return pn_connection_set_hostname(self._impl, unicode2utf8(name))
+        pn_connection_set_hostname(self._impl, unicode2utf8(name))
 
     hostname = property(_get_hostname, _set_hostname,
                         doc="""
@@ -206,7 +188,7 @@ and SASL layers to identify the peer.
         return utf82unicode(pn_connection_get_user(self._impl))
 
     def _set_user(self, name):
-        return pn_connection_set_user(self._impl, unicode2utf8(name))
+        pn_connection_set_user(self._impl, unicode2utf8(name))
 
     user = property(_get_user, _set_user)
 
@@ -214,7 +196,7 @@ and SASL layers to identify the peer.
         return None
 
     def _set_password(self, name):
-        return pn_connection_set_password(self._impl, unicode2utf8(name))
+        pn_connection_set_password(self._impl, unicode2utf8(name))
 
     password = property(_get_password, _set_password)
 
@@ -242,6 +224,10 @@ and SASL layers to identify the peer.
     def remote_properties(self):
         """The properties specified by the remote peer for this connection."""
         return dat2obj(pn_connection_remote_properties(self._impl))
+
+    @property
+    def connected_address(self):
+        return self.url and str(self.url)
 
     def open(self):
         """
@@ -374,6 +360,10 @@ class Session(Wrapper, Endpoint):
     def connection(self):
         return Connection.wrap(pn_session_connection(self._impl))
 
+    @property
+    def transport(self):
+        return self.connection.transport
+
     def sender(self, name):
         return Sender(pn_sender(self._impl, unicode2utf8(name)))
 
@@ -485,6 +475,10 @@ class Link(Wrapper, Endpoint):
     def connection(self):
         """The connection on which this link was attached."""
         return self.session.connection
+
+    @property
+    def transport(self):
+        return self.session.transport
 
     def delivery(self, tag):
         return Delivery(pn_delivery(self._impl, tag))

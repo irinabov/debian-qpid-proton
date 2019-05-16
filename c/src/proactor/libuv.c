@@ -656,7 +656,7 @@ static void leader_listen_lh(pn_listener_t *l) {
     for (struct addrinfo *ai = l->addr.getaddrinfo.addrinfo; ai; ai = ai->ai_next) {
       ++len;
     }
-    l->addrs = (pn_netaddr_t*)calloc(len, sizeof(lsocket_t));
+    l->addrs = (pn_netaddr_t*)calloc(len, sizeof(pn_netaddr_t));
 
     /* Find the working addresses */
     for (struct addrinfo *ai = l->addr.getaddrinfo.addrinfo; ai; ai = ai->ai_next) {
@@ -968,8 +968,8 @@ static void on_proactor_disconnect(uv_handle_t* h, void* v) {
          if (cond) {
            pn_condition_copy(pn_listener_condition(l), cond);
          }
+         pn_listener_close(l);
        }
-       pn_listener_close(l);
        break;
      }
      default:

@@ -39,7 +39,7 @@ find_package (CyrusSASL)
 enable_testing ()
 
 # Set up runtime checks (valgrind, sanitizers etc.)
-include(tests/RuntimeCheck.cmake)  
+include(tests/RuntimeCheck.cmake)
 
 ## Variables used across components
 
@@ -76,7 +76,7 @@ else (CMAKE_CONFIGURATION_TYPES)
   # There is a single build configuration
   # If the build type is not set then set the default
   if (NOT CMAKE_BUILD_TYPE)
-  set (CMAKE_BUILD_TYPE RelWithDebInfo CACHE string
+  set (CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
        "Build type: Debug, Release, RelWithDebInfo, MinSizeRel or Coverage (default RelWithDebInfo)" FORCE)
   endif ()
 
@@ -114,15 +114,7 @@ endif()
 if (APPLE)
   set (NOENABLE_WARNING_ERROR ON)
   set (NOENABLE_UNDEFINED_ERROR ON)
-  # TODO: Currently segfaults on MacOS - fix bug and re-enable
-  set (NOENABLE_FUZZ_TESTING ON)
 endif (APPLE)
-
-# TODO: Can't build fuzz tests/or run regression tests on MSVC currently
-# (due to limit on command line length)
-if (MSVC)
-  set (NOENABLE_FUZZ_TESTING ON)
-endif (MSVC)
 
 # Make LTO default to off until we can figure out the valgrind issues
 set (NOENABLE_LINKTIME_OPTIMIZATION ON)
@@ -342,12 +334,19 @@ if(SWIG_FOUND)
   # Add any new swig bindings here - the directory name must be the same as the binding name
   list(APPEND BINDINGS python ruby)
 
+  if (POLICY CMP0078)
+    cmake_policy(SET CMP0078 OLD)
+  endif()
+  if (POLICY CMP0086)
+    cmake_policy(SET CMP0086 OLD)
+  endif()
   include(UseSWIG)
 
   # All swig modules should include ${PROTON_HEADERS} in SWIG_MODULE_<name>_EXTRA_DEPS
   file(GLOB PROTON_HEADERS "${CMAKE_SOURCE_DIR}/c/include/proton/*.h")
-  # All swig modules should include ${BINDING_DEPS} in swig_link_libraries
-  set (BINDING_DEPS qpid-proton)
+  # All swig modules should include ${BINDING_DEPS} or ${BINDING_DEPS_FULL} in swig_link_libraries
+  set (BINDING_DEPS qpid-proton-core)
+  set (BINDING_DEPS_FULL qpid-proton)
 
   # Add a block here to detect the prerequisites to build each language binding:
   #
