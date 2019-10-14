@@ -1,6 +1,3 @@
-#ifndef PROTON_CPP_RECONNECT_OPTIONSIMPL_H
-#define PROTON_CPP_RECONNECT_OPTIONSIMPL_H
-
 /*
  *
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -22,29 +19,34 @@
  *
  */
 
-#include "proton/duration.hpp"
-#include "proton/internal/pn_unique_ptr.hpp"
-#include "proton/reconnect_options.hpp"
+#include "proton/ssl.hpp"
 
-#include <string>
-#include <vector>
+struct pn_ssl_domain_t;
 
 namespace proton {
-class reconnect_options_base {
-  public:
-    reconnect_options_base() : delay(10), delay_multiplier(2.0), max_delay(duration::FOREVER), max_attempts(0) {}
 
-    duration delay;
-    float    delay_multiplier;
-    duration max_delay;
-    int      max_attempts;
+class ssl_options_impl {
+  public:
+    ssl_options_impl(bool is_server);
+    ~ssl_options_impl();
+
+    void incref() {++refcount_;}
+    void decref() {if (--refcount_==0) delete this;}
+    pn_ssl_domain_t* pn_domain() {return pn_domain_;}
+
+  private:
+    pn_ssl_domain_t *pn_domain_;
+    int refcount_;
 };
 
-class reconnect_options::impl : public reconnect_options_base {
-  public:
-    std::vector<std::string> failover_urls;
+class ssl_server_options::impl : public ssl_options_impl {
+public:
+    impl() : ssl_options_impl(true) {}
+};
+
+class ssl_client_options::impl : public ssl_options_impl {
+public:
+    impl() : ssl_options_impl(false) {}
 };
 
 }
-
-#endif  /*!PROTON_CPP_RECONNECT_OPTIONSIMPL_H*/
