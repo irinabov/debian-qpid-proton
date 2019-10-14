@@ -25,6 +25,7 @@
 #include "core/dispatch_actions.h"
 #include "core/engine-internal.h"
 #include "core/util.h"
+#include "platform/platform_fmt.h"
 #include "protocol.h"
 
 #include "proton/ssl.h"
@@ -542,9 +543,16 @@ static void pn_error_sasl(pn_transport_t* transport, unsigned int layer)
 static ssize_t pn_input_read_sasl_header(pn_transport_t* transport, unsigned int layer, const char* bytes, size_t available)
 {
   bool eos = transport->tail_closed;
+  if (eos && available==0) {
+    pn_do_error(transport, "amqp:connection:framing-error",
+                "Expected SASL protocol header: no protocol header found (connection aborted)");
+    pn_set_error_layer(transport);
+    return PN_EOS;
+  }
   pni_protocol_type_t protocol = pni_sniff_header(bytes, available);
   switch (protocol) {
   case PNI_PROTOCOL_AMQP_SASL:
+    transport->present_layers |= LAYER_AMQPSASL;
     if (transport->io_layers[layer] == &sasl_read_header_layer) {
         transport->io_layers[layer] = &sasl_layer;
     } else {
@@ -563,7 +571,7 @@ static ssize_t pn_input_read_sasl_header(pn_transport_t* transport, unsigned int
   char quoted[1024];
   pn_quote_data(quoted, 1024, bytes, available);
   pn_do_error(transport, "amqp:connection:framing-error",
-              "%s header mismatch: %s ['%s']%s", "SASL", pni_protocol_name(protocol), quoted,
+              "Expected SASL protocol header got: %s ['%s']%s", pni_protocol_name(protocol), quoted,
               !eos ? "" : " (connection aborted)");
   pn_set_error_layer(transport);
   return PN_EOS;
@@ -606,7 +614,7 @@ static ssize_t pn_input_read_sasl(pn_transport_t* transport, unsigned int layer,
   if (pni_sasl_impl_can_encrypt(transport)) {
     sasl->max_encrypt_size = pni_sasl_impl_max_encrypt_size(transport);
     if (transport->trace & PN_TRACE_DRV)
-      pn_transport_logf(transport, "SASL Encryption enabled: buffer=%d", sasl->max_encrypt_size);
+      pn_transport_logf(transport, "SASL Encryption enabled: buffer=%" PN_ZU, sasl->max_encrypt_size);
     transport->io_layers[layer] = &sasl_encrypt_layer;
   } else {
     transport->io_layers[layer] = &pni_passthru_layer;
@@ -685,7 +693,7 @@ static ssize_t pn_output_write_sasl(pn_transport_t* transport, unsigned int laye
   if (pni_sasl_impl_can_encrypt(transport)) {
     sasl->max_encrypt_size = pni_sasl_impl_max_encrypt_size(transport);
     if (transport->trace & PN_TRACE_DRV)
-      pn_transport_logf(transport, "SASL Encryption enabled: buffer=%d", sasl->max_encrypt_size);
+      pn_transport_logf(transport, "SASL Encryption enabled: buffer=%" PN_ZU, sasl->max_encrypt_size);
     transport->io_layers[layer] = &sasl_encrypt_layer;
   } else {
     transport->io_layers[layer] = &pni_passthru_layer;

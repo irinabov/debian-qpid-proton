@@ -17,24 +17,13 @@
 # under the License.
 #
 
-# Name: Proton
-# Description: Qpid Proton C library
-# Version: @PN_VERSION@
-# URL: http://qpid.apache.org/proton/
+from __future__ import absolute_import
 
-set (ProtonCpp_VERSION       @PN_VERSION@)
+from ._tracing import (
+    get_tracer, init_tracer
+)
 
-set (ProtonCpp_INCLUDE_DIRS  @INCLUDEDIR@)
-set (ProtonCpp_LIBRARIES     optimized @LIBDIR@/@PROTONCPPLIB@ debug @LIBDIR@/@PROTONCPPLIBDEBUG@)
-
-if (NOT TARGET Proton::cpp)
-  # Sigh.. have to make this compat with cmake 2.8.12
-  add_library(Proton::cpp UNKNOWN IMPORTED)
-  set_target_properties(Proton::cpp
-    PROPERTIES
-      IMPORTED_LOCATION "@LIBDIR@/@PROTONCPPLIB@"
-      IMPORTED_LOCATION_DEBUG "@LIBDIR@/@PROTONCPPLIBDEBUG@"
-      INTERFACE_INCLUDE_DIRECTORIES "${ProtonCpp_INCLUDE_DIRS}")
-endif()
-
-set (ProtonCpp_FOUND True)
+__all__ = [
+    'get_tracer',
+    'init_tracer'
+]
