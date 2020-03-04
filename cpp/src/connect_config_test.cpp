@@ -40,6 +40,14 @@
 #include <cstdio>
 #include <cstdlib>
 
+// Used to inspect items from the proton-c level of the API
+#include "proton/internal/object.hpp"
+#include "proton/returned.hpp"
+#include <proton/transport.h>
+#include <proton/connection.h>
+
+#include <json/version.h>
+
 // Windows has a different set of APIs for setting the environment
 #ifdef _WIN32
 #include <string.h>
@@ -113,16 +121,29 @@ void test_addr() {
 // Hack to write strings with embedded '"' and newlines
 #define RAW_STRING(...) #__VA_ARGS__
 
-void test_invalid() {
+void test_invalid_config() {
     connection_options opts;
-    ASSERT_THROWS_MSG(proton::error, "Missing '}'", configure(opts, "{"));
-    ASSERT_THROWS_MSG(proton::error, "Syntax error", configure(opts, ""));
-    ASSERT_THROWS_MSG(proton::error, "Missing ','", configure(opts, RAW_STRING({ "user":"x" "host":"y"})));
     ASSERT_THROWS_MSG(proton::error, "expected string", configure(opts, RAW_STRING({ "scheme":true})));
     ASSERT_THROWS_MSG(proton::error, "expected object", configure(opts, RAW_STRING({ "tls":""})));
     ASSERT_THROWS_MSG(proton::error, "expected object", configure(opts, RAW_STRING({ "sasl":true})));
     ASSERT_THROWS_MSG(proton::error, "expected boolean", configure(opts, RAW_STRING({ "sasl": { "enable":""}})));
     ASSERT_THROWS_MSG(proton::error, "expected boolean", configure(opts, RAW_STRING({ "tls": { "verify":""}})));
+}
+
+void test_invalid_json() {
+  connection_options opts;
+  // ancient versions of jsoncpp use a generic error message for parse errors
+  //  in the exception, and print the detailed message to stderr
+  // https://github.com/open-source-parsers/jsoncpp/commit/6b10ce8c0d07ea07861e82f65f17d9fd6abd658d
+  if (std::make_tuple(JSONCPP_VERSION_MAJOR, JSONCPP_VERSION_MINOR) < std::make_tuple(1, 7)) {
+    ASSERT_THROWS_MSG(proton::error, "reader error", configure(opts, "{"));
+    ASSERT_THROWS_MSG(proton::error, "reader error", configure(opts, ""));
+    ASSERT_THROWS_MSG(proton::error, "reader error", configure(opts, RAW_STRING({ "user" : "x" "host" : "y"})));
+  } else {
+    ASSERT_THROWS_MSG(proton::error, "Missing '}'", configure(opts, "{"));
+    ASSERT_THROWS_MSG(proton::error, "Syntax error", configure(opts, ""));
+    ASSERT_THROWS_MSG(proton::error, "Missing ','", configure(opts, RAW_STRING({ "user":"x" "host":"y"})));
+  }
 }
 
 // Extra classes to resolve clash of on_error in both messaging_handler and listen_handler
@@ -205,7 +226,7 @@ class test_handler : public messaging_handler,  public listen_handler {
     }
 };
 
-class test_default_connect : public test_handler {
+class test_almost_default_connect : public test_handler {
   public:
 
     void on_listener_start(container& c) PN_CPP_OVERRIDE {
@@ -217,6 +238,43 @@ class test_default_connect : public test_handler {
 
     void check_connection(connection& c) PN_CPP_OVERRIDE {
         ASSERT_EQUAL("localhost", c.virtual_host());
+    }
+};
+
+// Hack to use protected pn_object member of proton::object
+template <class P, class T>
+class internal_access_of: public P {
+
+public:
+    internal_access_of(const P& t) : P(t) {}
+    T* pn_object() { return proton::internal::object<T>::pn_object(); }
+};
+
+class test_default_connect : public test_handler {
+  public:
+
+    void on_listener_start(container& c) PN_CPP_OVERRIDE {
+        c.connect();
+    }
+
+    // on_transport_open will be called whatever happens to the connection whether it's
+    // connected or rejected due to error.
+    //
+    // We use a hacky way to get to the underlying C objects to check what's in them
+    void on_transport_open(proton::transport& transport) PN_CPP_OVERRIDE {
+        proton::connection connection = transport.connection();
+        internal_access_of<proton::connection, pn_connection_t> ic(connection);
+        pn_connection_t* c = ic.pn_object();
+        ASSERT_EQUAL(std::string("localhost"), pn_connection_get_hostname(c));
+    }
+
+    void on_transport_error(proton::transport& t) PN_CPP_OVERRIDE {
+        ASSERT_SUBSTRING("localhost:5671", t.error().description());
+        t.connection().container().stop();
+    }
+
+    void run() {
+        container(*this).run();
     }
 };
 
@@ -356,8 +414,10 @@ int main(int argc, char** argv) {
     int failed = 0;
     RUN_ARGV_TEST(failed, test_default_file());
     RUN_ARGV_TEST(failed, test_addr());
-    RUN_ARGV_TEST(failed, test_invalid());
+    RUN_ARGV_TEST(failed, test_invalid_config());
+    RUN_ARGV_TEST(failed, test_invalid_json());
     RUN_ARGV_TEST(failed, test_default_connect().run());
+    RUN_ARGV_TEST(failed, test_almost_default_connect().run());
 
     bool have_sasl = pn_sasl_extended() && getenv("PN_SASL_CONFIG_PATH");
     pn_ssl_domain_t *have_ssl = pn_ssl_domain(PN_SSL_MODE_SERVER);

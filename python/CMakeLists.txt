@@ -118,35 +118,23 @@ endmacro(py_compile)
 py_compile(${CMAKE_CURRENT_BINARY_DIR} ${pysrc-generated} CPROTON_ARTIFACTS)
 py_compile(${CMAKE_CURRENT_SOURCE_DIR} "${pysrc}" PROTON_ARTIFACTS)
 
-find_program(EPYDOC_EXE epydoc)
-mark_as_advanced (EPYDOC_EXE)
-if (EPYDOC_EXE)
-   foreach (py_src_doc ${pysrc})
-     list(APPEND PY_DOC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${py_src_doc}")
-   endforeach(py_src_doc)
-   add_custom_target(docs-py
-     COMMAND ${PN_ENV_SCRIPT} -- PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_CURRENT_SOURCE_DIR}
-             ${EPYDOC_EXE} -v --no-private --html -o ${CMAKE_CURRENT_BINARY_DIR}/html ${PY_DOC_FILES}
-     DEPENDS ${SWIG_MODULE_${cproton}_REAL_NAME})
-   add_dependencies(docs docs-py)
-   install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/html/"
-           DESTINATION "${PROTON_SHARE}/docs/api-py"
-           COMPONENT documentation
-           OPTIONAL)
-endif (EPYDOC_EXE)
-
-find_program(SPHINX_EXE sphinx-build)
-mark_as_advanced (SPHINX_EXE)
-if (SPHINX_EXE)
-   add_custom_target(tutorial-py
-     COMMAND ${PN_ENV_SCRIPT} -- PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_CURRENT_SOURCE_DIR}
-     ${SPHINX_EXE} -b html ${CMAKE_CURRENT_SOURCE_DIR}/docs ${CMAKE_CURRENT_BINARY_DIR}/tutorial)
-   add_dependencies(docs tutorial-py)
-   install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tutorial/"
-           DESTINATION "${PROTON_SHARE}/docs/tutorial-py"
-           COMPONENT documentation
-           OPTIONAL)
-endif (SPHINX_EXE)
+# Sphinx documentation
+check_python_module("sphinx" SPHINX_MODULE_FOUND)
+check_python_module("sphinx_automodapi" SPHINX_AUTOMODAPI_MODULE_FOUND)
+if (NOT SPHINX_MODULE_FOUND OR NOT SPHINX_AUTOMODAPI_MODULE_FOUND)
+    message(STATUS "Sphinx modules not found; doc generation disabled.")
+else ()
+    add_custom_target(docs-py
+        COMMAND ${PN_ENV_SCRIPT} --
+        PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_CURRENT_SOURCE_DIR}
+        LD_LIBRARY_PATH="${CMAKE_CURRENT_BINARY_DIR}/c"
+        ${PYTHON_EXECUTABLE} -m sphinx "${CMAKE_CURRENT_SOURCE_DIR}/docs" "${CMAKE_CURRENT_BINARY_DIR}/docs")
+    add_dependencies(docs docs-py)
+    install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/docs/"
+            DESTINATION "${PROTON_SHARE}/docs/api-py"
+            COMPONENT documentation
+            OPTIONAL)
+endif ()
 
 install(FILES ${CPROTON_ARTIFACTS}
         DESTINATION ${PYTHON_SITEARCH_PACKAGES}
@@ -162,7 +150,7 @@ install(DIRECTORY examples/
         COMPONENT Python
         USE_SOURCE_PERMISSIONS)
 
-set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "html;tutorial")
+set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES docs)
 
 #
 # Set up the directory 'dist' for building the python native package
@@ -186,7 +174,25 @@ add_custom_command(TARGET py_src_dist
                    COMMAND ${CMAKE_COMMAND} -E copy_directory ${PN_C_INCLUDE_DIR} "${py_dist_dir}/include")
 
 add_custom_command(TARGET py_src_dist
-                   COMMAND ${CMAKE_COMMAND} -E copy_directory ${PN_C_SOURCE_DIR} "${py_dist_dir}/src")
+                   COMMAND ${CMAKE_COMMAND} -E copy_directory ${PN_C_SOURCE_DIR}/core "${py_dist_dir}/src/core")
+
+add_custom_command(TARGET py_src_dist
+                   COMMAND ${CMAKE_COMMAND} -E copy_directory ${PN_C_SOURCE_DIR}/compiler "${py_dist_dir}/src/compiler")
+
+add_custom_command(TARGET py_src_dist
+                   COMMAND ${CMAKE_COMMAND} -E copy_directory ${PN_C_SOURCE_DIR}/platform "${py_dist_dir}/src/platform")
+
+add_custom_command(TARGET py_src_dist
+                   COMMAND ${CMAKE_COMMAND} -E copy_directory ${PN_C_SOURCE_DIR}/ssl "${py_dist_dir}/src/ssl")
+
+add_custom_command(TARGET py_src_dist
+                   COMMAND ${CMAKE_COMMAND} -E copy_directory ${PN_C_SOURCE_DIR}/sasl "${py_dist_dir}/src/sasl")
+
+add_custom_command(TARGET py_src_dist
+                   COMMAND ${CMAKE_COMMAND} -E copy ${PN_C_SOURCE_DIR}/encodings.h "${py_dist_dir}/src")
+
+add_custom_command(TARGET py_src_dist
+                   COMMAND ${CMAKE_COMMAND} -E copy ${PN_C_SOURCE_DIR}/protocol.h "${py_dist_dir}/src")
 
 add_custom_command(TARGET py_src_dist
                    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/README.rst "${py_dist_dir}")
@@ -198,6 +204,23 @@ foreach(file IN LISTS py_dist_files pysrc)
 add_custom_command(TARGET py_src_dist
                    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/${file} "${py_dist_dir}/${file}")
 endforeach()
+
+# Make python source and binary packages if we have prerequisistes
+check_python_module("setuptools" SETUPTOOLS_MODULE_FOUND)
+check_python_module("wheel" WHEEL_MODULE_FOUND)
+if (SETUPTOOLS_MODULE_FOUND)
+  add_custom_target(py_pkg_src ALL
+                     WORKING_DIRECTORY dist
+                     DEPENDS py_src_dist
+		     COMMAND ${PN_ENV_SCRIPT} "SWIG=${SWIG_EXECUTABLE}" --
+		      ${PYTHON_EXECUTABLE} setup.py sdist --dist-dir ${CMAKE_CURRENT_BINARY_DIR}/pkgs)
+  if (WHEEL_MODULE_FOUND)
+    add_custom_target(py_pkg_wheel ALL
+                       WORKING_DIRECTORY dist
+                       DEPENDS py_pkg_src
+                       COMMAND ${PYTHON_EXECUTABLE} setup.py bdist_wheel --dist-dir ${CMAKE_CURRENT_BINARY_DIR}/pkgs)
+  endif ()
+endif ()
 
 # python test: python/tests/proton-test
 set (py_src "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -229,7 +252,7 @@ if (NOT TOX_MODULE_FOUND)
 else ()
   option(ENABLE_TOX_TEST "Enable multi-version python testing with TOX" ON)
 
-  set(tox_default "py26,py27,py34,py35,py36")
+  set(tox_default "py26,py27,py35,py36,py37,py38")
   set(TOX_ENVLIST "" CACHE STRING "List of python environments for TOX tests" )
   mark_as_advanced(TOX_ENVLIST)
 
