@@ -1,3 +1,9 @@
+qpid-proton (0.30.0-1xenial+qpid1) xenial; urgency=medium
+
+  * Rebased on Proton 0.30.0
+
+ -- Irina Boverman <iboverma@redhat.com>  Wed,  4 Mar 2020 14:07:35 -0400
+
 qpid-proton (0.29.0-1xenial+qpid1) xenial; urgency=medium
 
   * Rebased on Proton 0.29.0
