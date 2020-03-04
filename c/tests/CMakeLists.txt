@@ -80,7 +80,10 @@ if (CMAKE_CXX_COMPILER)
     # problems are cleared up
     option(THREADERCISER "Run the threaderciser concurrency tests" OFF)
     if (THREADERCISER)
-      add_c_test(c-threaderciser threaderciser.c)
+      add_executable(c-threaderciser threaderciser.c)
+      set_target_properties(c-threaderciser PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${C_WARNING_FLAGS}")
+      add_test(NAME c-threaderciser COMMAND ${test_env} ${TEST_EXE_PREFIX_CMD} $<TARGET_FILE:c-threaderciser>)
+      set_tests_properties(c-threaderciser PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
       target_link_libraries (c-threaderciser qpid-proton-proactor)
       find_library(Pthread_LIBRARY pthread)
       if (Pthread_LIBRARY)
@@ -94,7 +97,12 @@ if (CMAKE_CXX_COMPILER)
       set(path "$<TARGET_FILE_DIR:c-broker>:$ENV{PATH}")
     endif(WIN32)
 
-    add_test(NAME c-fdlimit-tests COMMAND ${PN_ENV_SCRIPT} -- "PATH=${path}" "PYTHONPATH=${pypath}" ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fdlimit.py)
+    set(pypath "${CMAKE_SOURCE_DIR}/tests/py")
+
+    add_test(
+        NAME c-fdlimit-tests
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMAND ${PN_ENV_SCRIPT} -- "PATH=${path}" "PYTHONPATH=${pypath}" ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fdlimit.py)
   endif(HAS_PROACTOR)
 else (CMAKE_CXX_COMPILER)
   message(WARNING "No C++ compiler, some C library tests were not built")

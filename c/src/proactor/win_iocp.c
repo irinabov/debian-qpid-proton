@@ -44,7 +44,8 @@
 #include <iostream>
 #include <sstream>
 
-#include "./netaddr-internal.h" /* Include after socket/inet headers */
+#include "netaddr-internal.h" /* Include after socket/inet headers */
+#include "core/logger_private.h"
 
 /*
  * Proactor for Windows using IO completion ports.
@@ -219,8 +220,6 @@ void pni_zombie_check(iocp_t *, pn_timestamp_t);
 pn_timestamp_t pni_zombie_deadline(iocp_t *);
 
 int pni_win32_error(pn_error_t *error, const char *msg, HRESULT code);
-
-pn_timestamp_t pn_i_now2(void);
 }
 
 // ======================================================================
@@ -530,17 +529,6 @@ size_t pni_write_pipeline_size(write_pipeline_t *pl)
  */
 
 namespace pn_experimental {
-
-pn_timestamp_t pn_i_now2(void)
-{
-  FILETIME now;
-  GetSystemTimeAsFileTime(&now);
-  ULARGE_INTEGER t;
-  t.u.HighPart = now.dwHighDateTime;
-  t.u.LowPart = now.dwLowDateTime;
-  // Convert to milliseconds and adjust base epoch
-  return t.QuadPart / 10000 - 11644473600000;
-}
 
 static void iocp_log(const char *fmt, ...)
 {
@@ -1355,7 +1343,7 @@ static void zombie_list_add(iocpdesc_t *iocpd)
     return;
   }
   // Allow 2 seconds for graceful shutdown before releasing socket resource.
-  iocpd->reap_time = pn_i_now2() + 2000;
+  iocpd->reap_time = pn_proactor_now_64() + 2000;
   pn_list_add(iocpd->iocp->zombie_list, iocpd);
 }
 
@@ -1428,7 +1416,7 @@ static void drain_zombie_completions(iocp_t *iocp)
     if (grace > 0 && grace < 60000)
       shutdown_grace = (unsigned) grace;
   }
-  pn_timestamp_t now = pn_i_now2();
+  pn_timestamp_t now = pn_proactor_now_64();
   pn_timestamp_t deadline = now + shutdown_grace;
 
   while (pn_list_size(iocp->zombie_list)) {
@@ -1439,7 +1427,7 @@ static void drain_zombie_completions(iocp_t *iocp)
       iocp_log("unexpected IOCP failure on Proton IO shutdown %d\n", GetLastError());
       break;
     }
-    now = pn_i_now2();
+    now = pn_proactor_now_64();
   }
   if (now >= deadline && pn_list_size(iocp->zombie_list) && iocp->iocp_trace)
     // Should only happen if really slow TCP handshakes, i.e. total network failure
@@ -1556,8 +1544,8 @@ iocp_t *pni_iocp()
 // Proton Proactor support
 // ======================================================================
 
-#include "../core/log_private.h"
-#include "./proactor-internal.h"
+#include "core/logger_private.h"
+#include "proactor-internal.h"
 
 class csguard {
   public:
@@ -1615,8 +1603,8 @@ PN_HANDLE(PN_PROACTOR)
 /* pn_proactor_t and pn_listener_t are plain C structs with normal memory management.
    Class definitions are for identification as pn_event_t context only.
 */
-PN_STRUCT_CLASSDEF(pn_proactor, CID_pn_proactor)
-PN_STRUCT_CLASSDEF(pn_listener, CID_pn_listener)
+PN_STRUCT_CLASSDEF(pn_proactor)
+PN_STRUCT_CLASSDEF(pn_listener)
 
 /* Completion serialization context common to connection and listener. */
 /* And also the reaper singleton (which has no socket */
@@ -1968,9 +1956,9 @@ class reaper {
         // Call with lock
         if (timer_ || !running)
             return;
-        pn_timestamp_t now = pn_i_now2();
+        int64_t now = pn_proactor_now_64();
         pni_zombie_check(iocp_, now);
-        pn_timestamp_t zd = pni_zombie_deadline(iocp_);
+        int64_t zd = pni_zombie_deadline(iocp_);
         if (zd) {
             DWORD tm = (zd > now) ? zd - now : 1;
             if (!CreateTimerQueueTimer(&timer_, timer_queue_, reap_check_cb, this, tm,
@@ -2031,7 +2019,7 @@ static inline bool proactor_has_event(pn_proactor_t *p) {
 
 static pn_event_t *log_event(void* p, pn_event_t *e) {
   if (e) {
-    pn_logf("[%p]:(%s)", (void*)p, pn_event_type_name(pn_event_type(e)));
+    PN_LOG_DEFAULT(PN_SUBSYSTEM_EVENT, PN_LEVEL_DEBUG, "[%p]:(%s)", (void*)p, pn_event_type_name(pn_event_type(e)));
   }
   return e;
 }
@@ -2145,7 +2133,7 @@ static void pconnection_tick(pconnection_t *pc) {
     if(!stop_timer(pc->context.proactor->timer_queue, &pc->tick_timer)) {
       // TODO: handle error
     }
-    uint64_t now = pn_i_now2();
+    uint64_t now = pn_proactor_now_64();
     uint64_t next = pn_transport_tick(t, now);
     if (next) {
       if (!start_timer(pc->context.proactor->timer_queue, &pc->tick_timer, tick_timer_cb, pc, next - now)) {
@@ -2163,11 +2151,11 @@ static pconnection_t *get_pconnection(pn_connection_t* c) {
 
 
 pn_listener_t *pn_event_listener(pn_event_t *e) {
-  return (pn_event_class(e) == pn_listener__class()) ? (pn_listener_t*)pn_event_context(e) : NULL;
+  return (pn_event_class(e) == PN_CLASSCLASS(pn_listener)) ? (pn_listener_t*)pn_event_context(e) : NULL;
 }
 
 pn_proactor_t *pn_event_proactor(pn_event_t *e) {
-  if (pn_event_class(e) == pn_proactor__class()) return (pn_proactor_t*)pn_event_context(e);
+  if (pn_event_class(e) == PN_CLASSCLASS(pn_proactor)) return (pn_proactor_t*)pn_event_context(e);
   pn_listener_t *l = pn_event_listener(e);
   if (l) return l->context.proactor;
   pn_connection_t *c = pn_event_connection(e);
@@ -2482,7 +2470,7 @@ void pn_proactor_done(pn_proactor_t *p, pn_event_batch_t *batch) {
 }
 
 static void proactor_add_event(pn_proactor_t *p, pn_event_type_t t) {
-  pn_collector_put(p->collector, pn_proactor__class(), p, t);
+  pn_collector_put(p->collector, PN_CLASSCLASS(pn_proactor), p, t);
 }
 
 static pn_event_batch_t *proactor_process(pn_proactor_t *p) {
@@ -2531,7 +2519,7 @@ static pn_event_batch_t *proactor_completion_loop(struct pn_proactor_t* p, bool 
     if (!good_op && !overlapped) {
       // Should never happen.  shutdown?
       // We aren't expecting a timeout, closed completion port, or other error here.
-      pn_logf("%s", errno_str("Windows Proton proactor internal failure\n", false).c_str());
+      PN_LOG_DEFAULT(PN_SUBSYSTEM_EVENT, PN_LEVEL_CRITICAL, "%s", errno_str("Windows Proton proactor internal failure\n", false).c_str());
       abort();
     }
 
@@ -2727,7 +2715,7 @@ void pn_proactor_connect2(pn_proactor_t *p, pn_connection_t *c, pn_transport_t *
   assert(pc); // TODO: memory safety
   const char *err = pconnection_setup(pc, p, c, t, false, addr);
   if (err) {
-    pn_logf("pn_proactor_connect failure: %s", err);
+    PN_LOG_DEFAULT(PN_SUBSYSTEM_EVENT, PN_LEVEL_ERROR, "pn_proactor_connect failure: %s", err);
     return;
   }
   // TODO: check case of proactor shutting down
@@ -2838,7 +2826,7 @@ void pn_proactor_listen(pn_proactor_t *p, pn_listener_t *l, const char *addr, in
       psocket_error(l->psockets, wsa_err, "listen on");
     }
   } else {
-    pn_collector_put(l->collector, pn_listener__class(), l, PN_LISTENER_OPEN);
+    pn_collector_put(l->collector, PN_CLASSCLASS(pn_listener), l, PN_LISTENER_OPEN);
   }
   wakeup(l->psockets);
 }
@@ -2853,7 +2841,7 @@ static pn_event_batch_t *batch_owned(pn_listener_t *l) {
     }
     assert(!(l->context.closing && l->pending_events));
     if (l->pending_events) {
-      pn_collector_put(l->collector, pn_listener__class(), l, PN_LISTENER_ACCEPT);
+      pn_collector_put(l->collector, PN_CLASSCLASS(pn_listener), l, PN_LISTENER_ACCEPT);
       l->pending_events--;
       l->context.working = true;
       return &l->batch;
@@ -3047,7 +3035,7 @@ static pn_event_t *listener_batch_next(pn_event_batch_t *batch) {
   {
     csguard g(&l->context.cslock);
     if (!listener_has_event(l) && l->pending_events) {
-      pn_collector_put(l->collector, pn_listener__class(), l, PN_LISTENER_ACCEPT);
+      pn_collector_put(l->collector, PN_CLASSCLASS(pn_listener), l, PN_LISTENER_ACCEPT);
       l->pending_events--;
     }
     pn_event_t *e = pn_collector_next(l->collector);
@@ -3112,7 +3100,7 @@ static void listener_begin_close(pn_listener_t* l) {
   l->context.closing = true;
   listener_close_all(l);
   release_pending_accepts(l);
-  pn_collector_put(l->collector, pn_listener__class(), l, PN_LISTENER_CLOSE);
+  pn_collector_put(l->collector, PN_CLASSCLASS(pn_listener), l, PN_LISTENER_CLOSE);
 }
 
 void pn_listener_close(pn_listener_t* l) {
@@ -3185,7 +3173,7 @@ void pn_listener_accept2(pn_listener_t *l, pn_connection_t *c, pn_transport_t *t
     assert(pc);  // TODO: memory safety
     const char *err_str = pconnection_setup(pc, p, c, t, true, "");
     if (err_str) {
-      pn_logf("pn_listener_accept failure: %s", err_str);
+      PN_LOG_DEFAULT(PN_SUBSYSTEM_EVENT, PN_LEVEL_ERROR, "pn_listener_accept failure: %s", err_str);
       return;
     }
     proactor_add(&pc->context);
@@ -3431,11 +3419,9 @@ const pn_netaddr_t *pn_listener_addr(pn_listener_t *l) {
 }
 
 pn_millis_t pn_proactor_now(void) {
-  FILETIME now;
-  GetSystemTimeAsFileTime(&now);
-  ULARGE_INTEGER t;
-  t.u.HighPart = now.dwHighDateTime;
-  t.u.LowPart = now.dwLowDateTime;
-  // Convert to milliseconds and adjust base epoch
-  return t.QuadPart / 10000 - 11644473600000;
+    return (pn_millis_t) pn_proactor_now_64();
+}
+
+int64_t pn_proactor_now_64(void) {
+  return GetTickCount64();
 }
