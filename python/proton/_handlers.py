@@ -1136,7 +1136,7 @@ class PythonIO:
         sel = event.context
         if sel.is_terminal:
             self.selectables.remove(sel)
-            sel.release()
+            sel.close()
 
     def on_reactor_quiesced(self, event):
         reactor = event.reactor
@@ -1198,7 +1198,7 @@ class IOHandler(Handler):
         s = event.selectable
         self._selector.remove(s)
         s._reactor._selectables -= 1
-        s.release()
+        s.close()
 
     def on_reactor_quiesced(self, event):
         r = event.reactor
@@ -1337,10 +1337,7 @@ class IOHandler(Handler):
         sock = IO.connect(addrs[0])
 
         # At this point we need to arrange to be called back when the socket is writable
-        connector = ConnectSelectable(sock, reactor, addrs[1:], t, self)
-        connector.collect(reactor._collector)
-        connector.writing = True
-        connector.push_event(connector, Event.SELECTABLE_INIT)
+        ConnectSelectable(sock, reactor, addrs[1:], t, self)
 
         # TODO: Don't understand why we need this now - how can we get PN_TRANSPORT until the connection succeeds?
         t._selectable = None
@@ -1388,9 +1385,11 @@ class IOHandler(Handler):
 class ConnectSelectable(Selectable):
     def __init__(self, sock, reactor, addrs, transport, iohandler):
         super(ConnectSelectable, self).__init__(sock, reactor)
+        self.writing = True
         self._addrs = addrs
         self._transport = transport
         self._iohandler = iohandler
+        transport._connect_selectable = self
 
     def readable(self):
         pass
@@ -1398,26 +1397,34 @@ class ConnectSelectable(Selectable):
     def writable(self):
         e = self._delegate.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
         t = self._transport
+        t._connect_selectable = None
+
+        # Always cleanup this ConnectSelectable: either we failed or created a new one
+        # Do it first to ensure the socket gets deregistered before being registered again
+        # in the case of connecting
+        self.terminate()
+        self._transport = None
+        self.update()
+
         if e == 0:
             log.debug("Connection succeeded")
+
+            # Disassociate from the socket (which will be passed on)
+            self.release()
+
             s = self._reactor.selectable(delegate=self._delegate)
             s._transport = t
             t._selectable = s
             self._iohandler.update(t, s, t._reactor.now)
 
-            # Disassociate from the socket (which has been passed on)
-            self._delegate = None
-            self.terminate()
-            self._transport = None
-            self.update()
             return
         elif e == errno.ECONNREFUSED:
             if len(self._addrs) > 0:
                 log.debug("Connection refused: trying next transport address: %s", self._addrs[0])
+
                 sock = IO.connect(self._addrs[0])
-                self._addrs = self._addrs[1:]
-                self._delegate.close()
-                self._delegate = sock
+                # New ConnectSelectable for the new socket with rest of addresses
+                ConnectSelectable(sock, self._reactor, self._addrs[1:], t, self._iohandler)
                 return
             else:
                 log.debug("Connection refused, but tried all transport addresses")
@@ -1428,6 +1435,3 @@ class ConnectSelectable(Selectable):
 
         t.close_tail()
         t.close_head()
-        self.terminate()
-        self._transport = None
-        self.update()

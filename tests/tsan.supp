@@ -17,27 +17,12 @@
 # under the License.
 #
 
-cmake_minimum_required(VERSION 2.8.12)
+# ThreadSanitizer (tsan) suppression file
+#  https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
 
-project(ProtonExamples)
-include(CTest)
-enable_testing()
-include("tests/RuntimeCheck.cmake")
+# PROTON-2133 in c/src/proactor/epoll.c
+race:^stop_polling$
 
-# find example sub-directories that contain "CMakeLists.txt" or "testme"
-set(ex_dir "${CMAKE_SOURCE_DIR}/examples")
-file(GLOB subs ${ex_dir}/*)
-foreach(dir ${subs})
-  get_filename_component(ex "${dir}" NAME)
-  if(EXISTS ${dir}/CMakeLists.txt)
-    # Has CMakeLists.txt to define example tests.
-    add_subdirectory(${dir})
-  elseif(EXISTS ${dir}/testme)
-    # Has a "testme" script to run example tests.
-    pn_add_test(
-      UNWRAPPED
-      NAME ${ex}-example-tests
-      COMMAND ${dir}/testme
-      WORKING_DIRECTORY ${dir})
-  endif()
- endforeach()
+# PROTON-2133 in close (also match with .c/.cpp at the end)
+race:c/examples/broker
+race:cpp/examples/broker

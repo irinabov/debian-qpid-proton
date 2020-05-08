@@ -17,27 +17,6 @@
 # under the License.
 #
 
-cmake_minimum_required(VERSION 2.8.12)
-
-project(ProtonExamples)
-include(CTest)
-enable_testing()
-include("tests/RuntimeCheck.cmake")
-
-# find example sub-directories that contain "CMakeLists.txt" or "testme"
-set(ex_dir "${CMAKE_SOURCE_DIR}/examples")
-file(GLOB subs ${ex_dir}/*)
-foreach(dir ${subs})
-  get_filename_component(ex "${dir}" NAME)
-  if(EXISTS ${dir}/CMakeLists.txt)
-    # Has CMakeLists.txt to define example tests.
-    add_subdirectory(${dir})
-  elseif(EXISTS ${dir}/testme)
-    # Has a "testme" script to run example tests.
-    pn_add_test(
-      UNWRAPPED
-      NAME ${ex}-example-tests
-      COMMAND ${dir}/testme
-      WORKING_DIRECTORY ${dir})
-  endif()
- endforeach()
+# cpp/include/proton/scalar_base.hpp
+# gcc on travis does not accept vptr:, it needs vptr_check:
+vptr_check:conversion_error

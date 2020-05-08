@@ -44,7 +44,7 @@ from ._selectable import Selectable
 
 from ._handlers import OutgoingMessageHandler, IOHandler
 
-from ._io import IO, PN_INVALID_SOCKET
+from ._io import IO
 
 from . import _compat
 from ._compat import queue
@@ -83,15 +83,11 @@ class Task(object):
     def container(self):
         return self._reactor
 
+
 class TimerSelectable(Selectable):
 
-    def __init__(self, reactor, collector):
+    def __init__(self, reactor):
         super(TimerSelectable, self).__init__(None, reactor)
-        self.collect(collector)
-        collector.put(self, Event.SELECTABLE_INIT)
-
-    def fileno(self):
-        return PN_INVALID_SOCKET
 
     def readable(self):
         pass
@@ -196,7 +192,7 @@ class Reactor(object):
 
     def start(self):
         self.push_event(self, Event.REACTOR_INIT)
-        self._selectable = TimerSelectable(self, self._collector)
+        self._selectable = TimerSelectable(self)
         self._selectable.deadline = self.timer_deadline
         # TODO set up fd to read for wakeups - but problematic on windows
         #self._selectable.fileno(self._wakeup[0])
@@ -252,7 +248,7 @@ class Reactor(object):
             else:
                 if self._selectable:
                     self._selectable.terminate()
-                    self.update(self._selectable)
+                    self._selectable.update()
                     self._selectable = None
                 else:
                     if self._previous is not Event.REACTOR_FINAL:
@@ -365,9 +361,7 @@ class Reactor(object):
         if delegate is None:
             delegate = handler
         result = Selectable(delegate, self)
-        result.collect(self._collector)
         result.handler = handler
-        result.push_event(result, Event.SELECTABLE_INIT)
         return result
 
     def update(self, selectable):
@@ -453,8 +447,18 @@ class ApplicationEvent(EventBase):
     :type subject: any
     """
 
+    TYPES = {}
+
     def __init__(self, typename, connection=None, session=None, link=None, delivery=None, subject=None):
-        super(ApplicationEvent, self).__init__(EventType(typename))
+        if isinstance(typename, EventType):
+            eventtype = typename
+        else:
+            try:
+                eventtype = self.TYPES[typename]
+            except KeyError:
+                eventtype =  EventType(typename)
+                self.TYPES[typename] = eventtype
+        super(ApplicationEvent, self).__init__(eventtype)
         self.clazz = PN_PYREF
         self.connection = connection
         self.session = session
@@ -874,9 +878,8 @@ class Acceptor(Handler):
 
     def close(self):
         if not self._selectable.is_terminal:
-            IO.close(self._selectable)
             self._selectable.terminate()
-            self._reactor.update(self._selectable)
+            self._selectable.update()
 
     def on_selectable_readable(self, event):
         s = event.selectable
@@ -1175,7 +1178,7 @@ class Container(Reactor):
                 configuration, with two exceptions: ``GSSAPI`` and ``GSS-SPNEGO``
                 are disabled by default; to enable them, you must explicitly add
                 them using this option; clients must set the allowed mechanisms
-                before the the outgoing connection is attempted; servers must set
+                before the outgoing connection is attempted; servers must set
                 them before the listening connection is setup.
             *   ``allow_insecure_mechs`` (``bool``), a flag indicating whether insecure
                 mechanisms, such as PLAIN over a non-encrypted socket, are
