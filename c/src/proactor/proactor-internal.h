@@ -21,8 +21,14 @@
  */
 
 #include <proton/condition.h>
+#include <proton/event.h>
 #include <proton/import_export.h>
 #include <proton/type_compat.h>
+
+#include "core/logger_private.h"
+
+// Type safe version of containerof used to find parent structs from contained structs
+#define containerof(ptr, type, member) ((type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,6 +57,20 @@ extern const char *PNI_IO_CONDITION;
  */
 void pni_proactor_set_cond(
   pn_condition_t *cond, const char *what, const char *host, const char *port, const char *msg);
+
+/**
+ * pn_event_batch_next() can be re-implemented for different behaviors in different contexts.
+ */
+struct pn_event_batch_t {
+  pn_event_t *(*next_event)(pn_event_batch_t *batch);
+};
+
+static inline pn_event_t *pni_log_event(void* p, pn_event_t *e) {
+  if (e) {
+    PN_LOG_DEFAULT(PN_SUBSYSTEM_EVENT, PN_LEVEL_DEBUG, "[%p]:(%s)", (void*)p, pn_event_type_name(pn_event_type(e)));
+  }
+  return e;
+}
 
 #ifdef __cplusplus
 }

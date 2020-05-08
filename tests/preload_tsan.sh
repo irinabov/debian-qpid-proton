@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -17,27 +18,22 @@
 # under the License.
 #
 
-cmake_minimum_required(VERSION 2.8.12)
+if test $# -lt 2; then
+    echo <<EOF
+usage: $0 LIB EXE [args ...]
+Get the libtsan linked to LIB and preload it to run `EXE args ...`
+EOF
+fi
 
-project(ProtonExamples)
-include(CTest)
-enable_testing()
-include("tests/RuntimeCheck.cmake")
+LIB=$1; shift
+EXE=$2
 
-# find example sub-directories that contain "CMakeLists.txt" or "testme"
-set(ex_dir "${CMAKE_SOURCE_DIR}/examples")
-file(GLOB subs ${ex_dir}/*)
-foreach(dir ${subs})
-  get_filename_component(ex "${dir}" NAME)
-  if(EXISTS ${dir}/CMakeLists.txt)
-    # Has CMakeLists.txt to define example tests.
-    add_subdirectory(${dir})
-  elseif(EXISTS ${dir}/testme)
-    # Has a "testme" script to run example tests.
-    pn_add_test(
-      UNWRAPPED
-      NAME ${ex}-example-tests
-      COMMAND ${dir}/testme
-      WORKING_DIRECTORY ${dir})
-  endif()
- endforeach()
+# Preload the tsan library linked to LIB. Note we need to
+# check the actual linkage, there may be multiple tsan lib
+# versions installed and we must use the same one.
+
+libtsan=$(ldd "$LIB" | awk "/(tsan.*\\.so[.0-9]*)/ { print \$3 }")
+LD_PRELOAD="$libtsan:$LD_PRELOAD"
+export LD_PRELOAD
+
+exec "$@"

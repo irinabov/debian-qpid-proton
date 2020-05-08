@@ -120,8 +120,7 @@ py_compile(${CMAKE_CURRENT_SOURCE_DIR} "${pysrc}" PROTON_ARTIFACTS)
 
 # Sphinx documentation
 check_python_module("sphinx" SPHINX_MODULE_FOUND)
-check_python_module("sphinx_automodapi" SPHINX_AUTOMODAPI_MODULE_FOUND)
-if (NOT SPHINX_MODULE_FOUND OR NOT SPHINX_AUTOMODAPI_MODULE_FOUND)
+if (NOT SPHINX_MODULE_FOUND)
     message(STATUS "Sphinx modules not found; doc generation disabled.")
 else ()
     add_custom_target(docs-py
@@ -238,12 +237,14 @@ if (CMAKE_BUILD_TYPE MATCHES "Coverage")
   set (python_coverage_options -m coverage run)
 endif(CMAKE_BUILD_TYPE MATCHES "Coverage")
 
-add_test (NAME python-test
-  COMMAND ${PN_ENV_SCRIPT}
-  "PATH=${py_path}" "PYTHONPATH=${py_pythonpath}"
-  "SASLPASSWD=${CyrusSASL_Saslpasswd_EXECUTABLE}"
-  ${TEST_ENV}
-  ${TEST_WRAP_PREFIX_CMD} ${PYTHON_EXECUTABLE} -- ${python_coverage_options} "${py_tests}/proton-test")
+pn_add_test(
+  INTERPRETED
+  NAME python-test
+  PREPEND_ENVIRONMENT
+    "PATH=${py_path}"
+    "PYTHONPATH=${py_pythonpath}"
+    "SASLPASSWD=${CyrusSASL_Saslpasswd_EXECUTABLE}"
+  COMMAND ${PYTHON_EXECUTABLE} ${python_coverage_options} -- "${py_tests}/proton-test")
 set_tests_properties(python-test PROPERTIES PASS_REGULAR_EXPRESSION "Totals: .* 0 failed")
 
 check_python_module("tox" TOX_MODULE_FOUND)
@@ -266,13 +267,14 @@ else ()
       configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/tox.ini.in"
         "${CMAKE_CURRENT_BINARY_DIR}/tox.ini")
-      add_test (NAME python-tox-test
-        COMMAND ${PN_ENV_SCRIPT}
-        "PATH=${py_path}"
-        "SASLPASSWD=${CyrusSASL_Saslpasswd_EXECUTABLE}"
-        "SWIG=${SWIG_EXECUTABLE}"
-        ${TEST_ENV} --
-        ${TEST_WRAP_PREFIX_CMD} ${PYTHON_EXECUTABLE} -m tox)
+      pn_add_test(
+        INTERPRETED
+        NAME python-tox-test
+        PREPEND_ENVIRONMENT
+          "PATH=${py_path}"
+          "SASLPASSWD=${CyrusSASL_Saslpasswd_EXECUTABLE}"
+          "SWIG=${SWIG_EXECUTABLE}"
+        COMMAND ${PYTHON_EXECUTABLE} -m tox)
       set_tests_properties(python-tox-test
         PROPERTIES
         PASS_REGULAR_EXPRESSION "Totals: .* ignored, 0 failed"

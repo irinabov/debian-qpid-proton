@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -29,22 +29,27 @@ LIB=$1; shift
 EXE=$2
 
 case $EXE in
-    *ruby*|*.rb|*python*|*.py)
+    *ruby*|*.rb)
         # ruby has spurious leaks and causes asan errors.
-        #
-        # python tests have many leaks that may be real, but need to be
-        # analysed & fixed or suppressed before turning this on
 
         # Disable link order check to run with limited sanitizing
         # Still seeing problems.
-        export ASAN_OPTIONS=verify_asan_link_order=0
+
+        # https://github.com/google/sanitizers/issues/1066
+        # asan on Ubuntu Trusty does not recognize verify_asan_link_order=0 option
+        ASAN_OPTIONS=verify_asan_link_order=0
+        export ASAN_OPTIONS
         ;;
     *)
         # Preload the asan library linked to LIB. Note we need to
         # check the actual linkage, there may be multiple asan lib
         # versions installed and we must use the same one.
-        libasan=$(ldd $LIB | awk "/(libasan\\.so[.0-9]*)/ { print \$1 }")
-        export LD_PRELOAD="$libasan:$LD_PRELOAD"
+
+        # ldd prints something like this (proton compiled with clang)
+        #  libclang_rt.asan-x86_64.so => /lib64/.../libclang_rt.asan-x86_64.so (0x00007f3d7fdad000)
+        libasan=$(ldd "$LIB" | awk "/(asan.*\\.so[.0-9]*)/ { print \$3 }")
+        LD_PRELOAD="$libasan:$LD_PRELOAD"
+        export LD_PRELOAD
         ;;
 esac
 

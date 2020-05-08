@@ -296,7 +296,7 @@ void *pn_session_get_context(pn_session_t *session)
 
 void pn_session_set_context(pn_session_t *session, void *context)
 {
-  assert(context);
+  assert(session);
   pn_record_set(session->context, PN_LEGCTX, context);
 }
 
@@ -2062,6 +2062,8 @@ void pn_delivery_abort(pn_delivery_t *delivery) {
   if (!delivery->local.settled) { /* Can't abort a settled delivery */
     delivery->aborted = true;
     pn_delivery_settle(delivery);
+    delivery->link->session->outgoing_bytes -= pn_buffer_size(delivery->bytes);
+    pn_buffer_clear(delivery->bytes);
   }
 }
 
