@@ -1,4 +1,3 @@
-usr/share/proton/docs/api-py
 usr/share/proton/examples/python/*.py
 usr/share/proton/examples/python/README.txt 
 usr/share/proton/examples/python/proton-server.conf
