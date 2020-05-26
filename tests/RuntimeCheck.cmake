@@ -96,13 +96,22 @@ elseif(RUNTIME_CHECK STREQUAL "helgrind")
 elseif(RUNTIME_CHECK STREQUAL "asan")
   assert_has_sanitizers()
   message(STATUS "Runtime memory checker: gcc/clang memory sanitizers")
-  set(SANITIZE_FLAGS "-g -fno-omit-frame-pointer -fsanitize=address,undefined")
+  # clang defaults to static sanitizer libs (which is preferred), but then we cannot LD_PRELOAD
+  if (CMAKE_C_COMPILER_ID MATCHES "Clang")
+      set(CLANG_ASAN_FLAG "-shared-libasan")
+  endif()
+
+  set(SANITIZE_FLAGS "-g -fno-omit-frame-pointer ${CLANG_ASAN_FLAG} -fsanitize=address,undefined -fsanitize-recover=vptr")
   set(TEST_WRAP_PREFIX "${CMAKE_SOURCE_DIR}/tests/preload_asan.sh $<TARGET_FILE:qpid-proton-core>")
+  list(APPEND TEST_ENV "UBSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/tests/ubsan.supp")
+  list(APPEND TEST_ENV "LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/tests/lsan.supp")
 
 elseif(RUNTIME_CHECK STREQUAL "tsan")
   assert_has_sanitizers()
   message(STATUS "Runtime race checker: gcc/clang thread sanitizer")
   set(SANITIZE_FLAGS "-g -fno-omit-frame-pointer -fsanitize=thread")
+  set(TEST_WRAP_PREFIX "${CMAKE_SOURCE_DIR}/tests/preload_tsan.sh $<TARGET_FILE:qpid-proton-core>")
+  list(APPEND TEST_ENV "TSAN_OPTIONS=second_deadlock_stack=1 suppressions=${CMAKE_SOURCE_DIR}/tests/tsan.supp")
 
 elseif(RUNTIME_CHECK)
   message(FATAL_ERROR "'RUNTIME_CHECK=${RUNTIME_CHECK}' is invalid, valid values: ${runtime_checks}")
@@ -117,7 +126,7 @@ endif()
 if(TEST_EXE_PREFIX)
   # Add TEST_EXE_PREFIX to TEST_ENV so test runner scripts can use it.
   list(APPEND TEST_ENV "TEST_EXE_PREFIX=${TEST_EXE_PREFIX}")
-  # Make a CMake-list form of TEST_EXE_PREFIX for add_test() commands
+  # Make a CMake-list form of TEST_EXE_PREFIX for (pn_)add_test() commands
   separate_arguments(TEST_EXE_PREFIX_CMD UNIX_COMMAND "${TEST_EXE_PREFIX}")
 endif()
 separate_arguments(TEST_WRAP_PREFIX_CMD UNIX_COMMAND "${TEST_WRAP_PREFIX}")
