@@ -3,7 +3,7 @@ qpid-proton (0.31.0-2focal+qpid1) focal; urgency=medium
   * Corrected cmake for c/cpp examples
   * Resolved PROTON-2228
 
- -- Irina Boverman <iboverma@redhat.com>  Tue,  2 Jun 2020 15:53
+ -- Irina Boverman <iboverma@redhat.com>  Tue,  2 Jun 2020 15:53:32 -0400
 
 qpid-proton (0.31.0-1focal+qpid1) focal; urgency=medium
 
