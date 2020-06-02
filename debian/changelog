@@ -1,3 +1,10 @@
+qpid-proton (0.31.0-2bionic+qpid1) bionic; urgency=medium
+  
+  * Corrected cmake for c/cpp examples
+  * Resolved PROTON-2228
+
+ -- Irina Boverman <iboverma@redhat.com>  Tue,  2 Jun 2020 14:36:00 -0400
+
 qpid-proton (0.31.0-1bionic+qpid1) bionic; urgency=medium
   
   * Rebased on Proton 0.31.0
