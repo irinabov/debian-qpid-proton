@@ -1,3 +1,9 @@
+qpid-proton (0.31.0-3focal+qpid1) focal; urgency=medium
+  
+  * Changed python examples to use python3
+
+ -- Irina Boverman <iboverma@redhat.com>  Wed,  3 Jun 2020 16:11:32 -0400
+
 qpid-proton (0.31.0-2focal+qpid1) focal; urgency=medium
   
   * Corrected cmake for c/cpp examples

@@ -1,7 +1,7 @@
 From 669bd39f15e0d6daf9beaec3f70d59b7cb8cdba2 Mon Sep 17 00:00:00 2001
 From: Kim van der Riet <kvdr@localhost.localdomain>
 Date: Tue, 10 Dec 2019 10:56:30 -0500
-Subject: [PATCH 2/4] Changed Sphinx invocation from sphinx to sphinx-build for
+Subject: [PATCH 2/5] Changed Sphinx invocation from sphinx to sphinx-build for
  RHEL7
 
 ---
@@ -27,7 +27,7 @@ index 87057d8..9176ba5 100644
 From 4829ff36a427c13e25fce017d353ed7cb17644ff Mon Sep 17 00:00:00 2001
 From: Andrew Stitcher <astitcher@apache.org>
 Date: Fri, 22 May 2020 03:10:54 -0400
-Subject: [PATCH 3/4] PROTON-2228: pn_listener_close doesn't correctly close
+Subject: [PATCH 3/5] PROTON-2228: pn_listener_close doesn't correctly close
  the listener fds
 
 ---
@@ -68,7 +68,7 @@ index 6ae9660..20376e4 100644
 From a49b728fb652fd9ec864e1abd1183a78dd96e0e9 Mon Sep 17 00:00:00 2001
 From: Irina Boverman <iboverma@redhat.com>
 Date: Fri, 29 May 2020 14:17:27 -0400
-Subject: [PATCH 4/4] Temporary patch to enable installed examples to build
+Subject: [PATCH 4/5] Temporary patch to enable installed examples to build
 
 ---
  c/examples/CMakeLists.txt   | 22 ----------------------
@@ -144,6 +144,347 @@ index 4c6dc9f..74e41de 100644
 -      COMMAND ${PYTHON_EXECUTABLE} testme -v ContainerExampleSSLTest)
 -  endif()
 -endif()
+-- 
+1.8.3.1
+
+From 84cfaf9eaf9fb94f9241824509d2aa78d15ee339 Mon Sep 17 00:00:00 2001
+From: Irina Boverman <iboverma@redhat.com>
+Date: Wed, 3 Jun 2020 15:37:19 -0400
+Subject: [PATCH 5/5] Changed to python3
+
+---
+ python/examples/abstract_server.py           | 2 +-
+ python/examples/broker.py                    | 2 +-
+ python/examples/client.py                    | 2 +-
+ python/examples/client_http.py               | 2 +-
+ python/examples/colour_send.py               | 2 +-
+ python/examples/db_common.py                 | 2 +-
+ python/examples/db_ctrl.py                   | 2 +-
+ python/examples/db_recv.py                   | 2 +-
+ python/examples/db_send.py                   | 2 +-
+ python/examples/direct_recv.py               | 2 +-
+ python/examples/direct_send.py               | 2 +-
+ python/examples/helloworld.py                | 2 +-
+ python/examples/helloworld_blocking.py       | 2 +-
+ python/examples/helloworld_direct.py         | 2 +-
+ python/examples/helloworld_direct_tornado.py | 2 +-
+ python/examples/helloworld_tornado.py        | 2 +-
+ python/examples/proton_tornado.py            | 2 +-
+ python/examples/queue_browser.py             | 2 +-
+ python/examples/recurring_timer.py           | 2 +-
+ python/examples/recurring_timer_tornado.py   | 2 +-
+ python/examples/selected_recv.py             | 2 +-
+ python/examples/server.py                    | 2 +-
+ python/examples/server_direct.py             | 2 +-
+ python/examples/server_tx.py                 | 2 +-
+ python/examples/simple_recv.py               | 2 +-
+ python/examples/simple_send.py               | 2 +-
+ python/examples/sync_client.py               | 2 +-
+ python/examples/tx_recv.py                   | 2 +-
+ python/examples/tx_recv_interactive.py       | 2 +-
+ python/examples/tx_send.py                   | 2 +-
+ 30 files changed, 30 insertions(+), 30 deletions(-)
+
+diff --git a/python/examples/abstract_server.py b/python/examples/abstract_server.py
+index f536486..ec0722d 100755
+--- a/python/examples/abstract_server.py
++++ b/python/examples/abstract_server.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/broker.py b/python/examples/broker.py
+index b47c636..d2de71e 100755
+--- a/python/examples/broker.py
++++ b/python/examples/broker.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/client.py b/python/examples/client.py
+index 86f2c76..58c4f0c 100755
+--- a/python/examples/client.py
++++ b/python/examples/client.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/client_http.py b/python/examples/client_http.py
+index f756740..0332104 100755
+--- a/python/examples/client_http.py
++++ b/python/examples/client_http.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/colour_send.py b/python/examples/colour_send.py
+index 1da1cf5..7bc0700 100755
+--- a/python/examples/colour_send.py
++++ b/python/examples/colour_send.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/db_common.py b/python/examples/db_common.py
+index 54af87b..38cc69a 100755
+--- a/python/examples/db_common.py
++++ b/python/examples/db_common.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/db_ctrl.py b/python/examples/db_ctrl.py
+index 04770ce..be16e40 100755
+--- a/python/examples/db_ctrl.py
++++ b/python/examples/db_ctrl.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/db_recv.py b/python/examples/db_recv.py
+index ce27470..7648ebe 100755
+--- a/python/examples/db_recv.py
++++ b/python/examples/db_recv.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/db_send.py b/python/examples/db_send.py
+index c07dcc0..c5adb63 100755
+--- a/python/examples/db_send.py
++++ b/python/examples/db_send.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/direct_recv.py b/python/examples/direct_recv.py
+index 1c6bf36..11ac57a 100755
+--- a/python/examples/direct_recv.py
++++ b/python/examples/direct_recv.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/direct_send.py b/python/examples/direct_send.py
+index 35bd2f5..c583b61 100755
+--- a/python/examples/direct_send.py
++++ b/python/examples/direct_send.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/helloworld.py b/python/examples/helloworld.py
+index 7a91aa4..6824d4f 100755
+--- a/python/examples/helloworld.py
++++ b/python/examples/helloworld.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/helloworld_blocking.py b/python/examples/helloworld_blocking.py
+index 5a5ce6d..15d052b 100755
+--- a/python/examples/helloworld_blocking.py
++++ b/python/examples/helloworld_blocking.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/helloworld_direct.py b/python/examples/helloworld_direct.py
+index 0292abe..97b2ea1 100755
+--- a/python/examples/helloworld_direct.py
++++ b/python/examples/helloworld_direct.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/helloworld_direct_tornado.py b/python/examples/helloworld_direct_tornado.py
+index a3b017a..bfa8de3 100755
+--- a/python/examples/helloworld_direct_tornado.py
++++ b/python/examples/helloworld_direct_tornado.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/helloworld_tornado.py b/python/examples/helloworld_tornado.py
+index 0781bbb..140a117 100755
+--- a/python/examples/helloworld_tornado.py
++++ b/python/examples/helloworld_tornado.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/proton_tornado.py b/python/examples/proton_tornado.py
+index 55e8db8..a359b4c 100755
+--- a/python/examples/proton_tornado.py
++++ b/python/examples/proton_tornado.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/queue_browser.py b/python/examples/queue_browser.py
+index 34d2377..3acf2aa 100755
+--- a/python/examples/queue_browser.py
++++ b/python/examples/queue_browser.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/recurring_timer.py b/python/examples/recurring_timer.py
+index b59dbe1..02bddb0 100755
+--- a/python/examples/recurring_timer.py
++++ b/python/examples/recurring_timer.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/recurring_timer_tornado.py b/python/examples/recurring_timer_tornado.py
+index a9a7579..a0b48ac 100755
+--- a/python/examples/recurring_timer_tornado.py
++++ b/python/examples/recurring_timer_tornado.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/selected_recv.py b/python/examples/selected_recv.py
+index 0f9ded1..0c4ccf7 100755
+--- a/python/examples/selected_recv.py
++++ b/python/examples/selected_recv.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/server.py b/python/examples/server.py
+index 5d7650a..1ac055a 100755
+--- a/python/examples/server.py
++++ b/python/examples/server.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/server_direct.py b/python/examples/server_direct.py
+index 71f73e9..377bf60 100755
+--- a/python/examples/server_direct.py
++++ b/python/examples/server_direct.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/server_tx.py b/python/examples/server_tx.py
+index 51e734c..61ad4ec 100755
+--- a/python/examples/server_tx.py
++++ b/python/examples/server_tx.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/simple_recv.py b/python/examples/simple_recv.py
+index 5322500..1463e8d 100755
+--- a/python/examples/simple_recv.py
++++ b/python/examples/simple_recv.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/simple_send.py b/python/examples/simple_send.py
+index 7717a16..196977d 100755
+--- a/python/examples/simple_send.py
++++ b/python/examples/simple_send.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/sync_client.py b/python/examples/sync_client.py
+index 7b86e29..5613055 100755
+--- a/python/examples/sync_client.py
++++ b/python/examples/sync_client.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/tx_recv.py b/python/examples/tx_recv.py
+index 4baddcf..aef2870 100755
+--- a/python/examples/tx_recv.py
++++ b/python/examples/tx_recv.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/tx_recv_interactive.py b/python/examples/tx_recv_interactive.py
+index c38f651..a5a8281 100755
+--- a/python/examples/tx_recv_interactive.py
++++ b/python/examples/tx_recv_interactive.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+diff --git a/python/examples/tx_send.py b/python/examples/tx_send.py
+index bda6780..c52bdc0 100755
+--- a/python/examples/tx_send.py
++++ b/python/examples/tx_send.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
 -- 
 1.8.3.1
 
