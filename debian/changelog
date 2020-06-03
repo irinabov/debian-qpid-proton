@@ -1,3 +1,9 @@
+qpid-proton (0.31.0-3bionic+qpid1) bionic; urgency=medium
+  
+  * Changed python examples to use python3
+
+ -- Irina Boverman <iboverma@redhat.com>  Wed,  3 Jun 2020 15:47:00 -0400
+
 qpid-proton (0.31.0-2bionic+qpid1) bionic; urgency=medium
   
   * Corrected cmake for c/cpp examples
