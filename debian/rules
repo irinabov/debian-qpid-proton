@@ -43,7 +43,7 @@ override_dh_auto_configure:
 			     -DPYTHON_EXECUTABLE=/usr/bin/python3 \
 			     -DPYTHON_INCLUDE_DIR=/usr/include/python3.6m \
 			     -DPYTHON_LIBRARY=/usr/lib/${DEB_HOST_MULTIARCH}/libpython3.6m.so \
-			     -DCMAKE_CXX_FLAGS=${CPPFLAGS} -Wno-error=format-security
+			     -DCMAKE_C_FLAGS=${CFLAGS} -Wno-error=format
 
 override_dh_auto_build:
 	dh_auto_build -- all docs
