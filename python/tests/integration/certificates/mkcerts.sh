@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -17,18 +18,13 @@
 # under the License.
 #
 
-#
-# Check qpid-proton.dll after linking for dangerous calls to
-# Windows functions that suggest but deviate from C99 behavior:
-#   _snprintf, vsnprintf, _vsnprintf
-# See platform.h for safe wrapper calls.
-#
+set -Eeuxo pipefail
 
-set(obj_dir ${CMAKE_CURRENT_BINARY_DIR}/qpid-proton.dir/${CMAKE_CFG_INTDIR})
+# Uses https://github.com/cloudflare/cfssl
+# it is bit more approachable than openssl
 
-add_custom_command(
-    TARGET qpid-proton
-	PRE_LINK
-    COMMAND ${PYTHON_EXECUTABLE}
-	    ${CMAKE_MODULE_PATH}/WindowsC99SymbolCheck.py $<TARGET_FILE_DIR:qpid-proton>
-    COMMENT "Checking for dangerous use of C99-violating functions")
+cfssl gencert -initca ca.json | cfssljson -bare ca1
+cfssl gencert -ca ca1.pem -ca-key ca1-key.pem localhost.json | cfssljson -bare localhost_ca1
+
+cfssl gencert -initca ca.json | cfssljson -bare ca2
+cfssl gencert -ca ca2.pem -ca-key ca2-key.pem localhost.json | cfssljson -bare localhost_ca2

@@ -87,7 +87,7 @@ pn_timestamp_t pn_i_now(void)
 static void pn_i_strerror(int errnum, char *buf, size_t buflen)
 {
   // PROTON-1029 provide a simple default in case strerror fails
-  pni_snprintf(buf, buflen, "errno: %d", errnum);
+  snprintf(buf, buflen, "errno: %d", errnum);
 #ifdef USE_STRERROR_R
   strerror_r(errnum, buf, buflen);
 #elif USE_STRERROR_S
@@ -106,17 +106,3 @@ int pn_i_error_from_errno(pn_error_t *error, const char *msg)
       code = PN_INTR;
   return pn_error_format(error, code, "%s: %s", msg, err);
 }
-
-#ifdef USE_ATOLL
-#include <stdlib.h>
-int64_t pn_i_atoll(const char* num) {
-  return atoll(num);
-}
-#elif USE_ATOI64
-#include <stdlib.h>
-int64_t pn_i_atoll(const char* num) {
-  return _atoi64(num);
-}
-#else
-#error "Don't know how to convert int64_t values on this platform"
-#endif

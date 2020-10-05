@@ -35,6 +35,8 @@ std::string pn_ptr_base::inspect(void* p) {
     if (!p) return std::string();
     ::pn_string_t* s = ::pn_string(NULL);
     (void) ::pn_inspect(p, s);
-    return std::string(pn_string_get(s));
+    std::string tmp = std::string(pn_string_get(s));
+    pn_free(s);
+    return tmp;
 }
 }}

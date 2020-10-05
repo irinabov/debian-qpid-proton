@@ -49,22 +49,43 @@ set (PN_C_INCLUDE_DIR "${CMAKE_BINARY_DIR}/c/include")
 set (PN_C_LIBRARY_DIR "${CMAKE_BINARY_DIR}/c")
 set (PN_C_SOURCE_DIR "${CMAKE_BINARY_DIR}/c/src")
 
-## C++
-
-check_language (CXX)
-
-if (CMAKE_CXX_COMPILER)
-  enable_language(CXX)
+## C
+if (DEFINED CMAKE_C_COMPILE_FEATURES)
+  set(CMAKE_C_STANDARD 99)
+  set(CMAKE_C_EXTENSIONS OFF)
+  set(CMAKE_C_STANDARD_REQUIRED ON)
+else()
+  set (C_STANDARD_GNU -std=c99)
+  set (C_EXTENDED_GNU -std=gnu99)
+  set (C_STANDARD_Clang -std=c99)
+  set (C_EXTENDED_Clang -std=gnu99)
 endif()
 
-# TODO - Should change this test to take account of recent MSVC that does support C99
-if (MSVC)
-  # No C99 capability, use C++
-  set(DEFAULT_BUILD_WITH_CXX ON)
-endif (MSVC)
+set (C_STANDARD_FLAGS ${C_STANDARD_${CMAKE_C_COMPILER_ID}})
+set (C_EXTENDED_FLAGS ${C_EXTENDED_${CMAKE_C_COMPILER_ID}})
 
+## C++
+check_language (CXX)
 if (CMAKE_CXX_COMPILER)
-  option(BUILD_WITH_CXX "Compile Proton using C++" ${DEFAULT_BUILD_WITH_CXX})
+  enable_language(CXX)
+
+  # This effectively checks for cmake version 3.1 or later
+  if (DEFINED CMAKE_CXX_COMPILE_FEATURES)
+    set(CMAKE_CXX_STANDARD 11)
+    set(CMAKE_CXX_EXTENSIONS OFF)
+    # Every supported version of Visual Studio (2015 onwards) supports enough C++11 that we
+    # no longer need to run the individual feature tests
+  else ()
+    include(CheckCXXCompilerFlag)
+    # These flags work with GCC/Clang/SunPro compilers
+    check_cxx_compiler_flag("-std=c++11" ACCEPTS_CXX11)
+    check_cxx_compiler_flag("-std=c++0x" ACCEPTS_CXX0X)
+    if (ACCEPTS_CXX11)
+      set(CXX_STANDARD "-std=c++11")
+    elseif(ACCEPTS_CXX0X)
+      set(CXX_STANDARD "-std=c++0x")
+    endif()
+  endif ()
 endif()
 
 # Build static C and C++ libraries in addition to shared libraries.
@@ -116,9 +137,12 @@ if (APPLE)
   set (NOENABLE_WARNING_ERROR ON)
 endif (APPLE)
 
+# Benchmarks should be disabled by default
+set (NOENABLE_BENCHMARKS ON)
+
 # Add options here called <whatever> they will turn into "ENABLE_<whatever" and can be
 # overridden on a platform specific basis above by NOENABLE_<whatever>
-set (OPTIONS WARNING_ERROR UNDEFINED_ERROR LINKTIME_OPTIMIZATION HIDE_UNEXPORTED_SYMBOLS FUZZ_TESTING)
+set (OPTIONS WARNING_ERROR UNDEFINED_ERROR LINKTIME_OPTIMIZATION HIDE_UNEXPORTED_SYMBOLS FUZZ_TESTING BENCHMARKS)
 
 foreach (OPTION ${OPTIONS})
   if (NOT NOENABLE_${OPTION})
@@ -132,31 +156,33 @@ option(ENABLE_UNDEFINED_ERROR "Check for unresolved library symbols" ${DEFAULT_U
 option(ENABLE_LINKTIME_OPTIMIZATION "Perform link time optimization" ${DEFAULT_LINKTIME_OPTIMIZATION})
 option(ENABLE_HIDE_UNEXPORTED_SYMBOLS "Only export library symbols that are explicitly requested" ${DEFAULT_HIDE_UNEXPORTED_SYMBOLS})
 option(ENABLE_FUZZ_TESTING "Enable building fuzzers and regression testing with libFuzzer" ${DEFAULT_FUZZ_TESTING})
+option(ENABLE_BENCHMARKS "Enable building and running benchmarks with Google Benchmark" ${DEFAULT_BENCHMARKS})
 
 # Set any additional compiler specific flags
+set (LTO_GNU "-flto -fno-fat-lto-objects")
+set (LTO_Clang "-flto=thin")
+set (LTO_MSVC "/GL")
+set (LINK_LTO_GNU "-flto -fno-fat-lto-objects")
+set (LINK_LTO_Clang "-flto=thin")
+set (LINK_LTO_MSVC "/LTCG")
+
+if (ENABLE_LINKTIME_OPTIMIZATION)
+  set (LTO ${LTO_${CMAKE_C_COMPILER_ID}})
+  set (LINK_LTO ${LINK_LTO_${CMAKE_C_COMPILER_ID}})
+endif (ENABLE_LINKTIME_OPTIMIZATION)
+
 if (CMAKE_COMPILER_IS_GNUCC)
   if (ENABLE_WARNING_ERROR)
     set (WERROR "-Werror")
   endif (ENABLE_WARNING_ERROR)
   set (COMPILE_WARNING_FLAGS "${WERROR} -Wall -pedantic-errors")
-  # C++ allow "%z" format specifier and variadic macros
-  set (CXX_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wno-format -Wno-variadic-macros")
-  if (NOT BUILD_WITH_CXX)
-    set (COMPILE_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wstrict-prototypes -Wc++-compat -Wvla -Wsign-compare -Wwrite-strings")
-    set (COMPILE_LANGUAGE_FLAGS "-std=c99")
-    set (COMPILE_PLATFORM_FLAGS "-std=gnu99")
-  else (NOT BUILD_WITH_CXX)
-    set (COMPILE_WARNING_FLAGS "${CXX_WARNING_FLAGS}")
-  endif (NOT BUILD_WITH_CXX)
+  set (CXX_WARNING_FLAGS "${COMPILE_WARNING_FLAGS}")
+  set (COMPILE_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wstrict-prototypes -Wvla -Wsign-compare -Wwrite-strings")
 
   if (ENABLE_UNDEFINED_ERROR)
     set (CATCH_UNDEFINED "-Wl,--no-undefined")
     set (ALLOW_UNDEFINED "-Wl,--allow-shlib-undefined")
   endif (ENABLE_UNDEFINED_ERROR)
-
-  if (ENABLE_LINKTIME_OPTIMIZATION)
-    set (LTO "-flto")
-  endif (ENABLE_LINKTIME_OPTIMIZATION)
 
   if (ENABLE_HIDE_UNEXPORTED_SYMBOLS)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
@@ -171,7 +197,6 @@ endif (CMAKE_COMPILER_IS_GNUCC)
 
 if (CMAKE_C_COMPILER_ID MATCHES "Clang")
   set (COMPILE_WARNING_FLAGS  "-Wall -pedantic")
-  set (COMPILE_LANGUAGE_FLAGS "-std=c99")
   if (ENABLE_WARNING_ERROR)
     set (COMPILE_WARNING_FLAGS "-Werror ${COMPILE_WARNING_FLAGS}")
   endif (ENABLE_WARNING_ERROR)
