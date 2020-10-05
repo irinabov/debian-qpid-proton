@@ -35,7 +35,7 @@ override_dh_auto_clean:
 	rm -rf build
 
 override_dh_auto_configure:
-	export CPPFLAGS=$(dpkg-buildflags --get CFLAGS)
+	export CFLAGS=$(dpkg-buildflags --get CFLAGS)
 	dh_auto_configure -- \
                              -DBUILD_RUBY=OFF \
                              -DSYSINSTALL_BINDINGS=on \
