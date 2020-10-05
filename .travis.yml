@@ -17,37 +17,82 @@
 # under the License
 #
 
-sudo: false
-language: cpp
-compiler:
-- gcc
-- clang
-env:
-- OPENSSL_ia32cap='0x00000000'
-
-matrix:
+jobs:
   include:
   - os: linux
-    dist: bionic
+    dist: xenial
+    language: cpp
     compiler: gcc
     env:
+    - OPENSSL_ia32cap='0x00000000'
+  - os: linux
+    dist: xenial
+    language: cpp
+    compiler: clang
+    env:
+    - OPENSSL_ia32cap='0x00000000'
+    # c-threaderciser test hangs on older clang
+    - QPID_PROTON_CMAKE_ARGS='-DENABLE_LINKTIME_OPTIMIZATION=OFF'
+    - QPID_PROTON_CTEST_ARGS='--exclude-regex c-threaderciser'
+  - name: static libs
+    os: linux
+    dist: focal
+    language: cpp
+    compiler: gcc
+    env:
+    - PYTHON=python3
+    - QPID_PROTON_CMAKE_ARGS='-DBUILD_STATIC_LIBS=ON'
+  - name: benchmarks
+    os: linux
+    dist: focal
+    language: cpp
+    compiler: gcc
+    env:
+    - PYTHON=python3
+    - QPID_PROTON_CMAKE_ARGS='-DENABLE_BENCHMARKS=ON -DRUNTIME_CHECK=OFF'
+    before_install:
+    - sudo apt-get install -y libbenchmark-dev
+  - name: gcc asan
+    os: linux
+    dist: focal
+    before_install:
+    - sudo apt-get install -y gcc-10 g++-10
+    env:
+    - CC=gcc-10
+    - CXX=g++-10
+    - PYTHON=python3
     # python-tox-test fails and ruby tests segfault
     - QPID_PROTON_CMAKE_ARGS='-DRUNTIME_CHECK=asan -DENABLE_TOX_TEST=OFF'
     - QPID_PROTON_CTEST_ARGS='-E ^ruby.*'
-  - os: linux
-    dist: bionic
-    compiler: clang
+  - name: clang asan
+    os: linux
+    dist: focal
+    before_install:
+    - sudo apt-get install -y clang-10 llvm-10-dev
     env:
+    - CC=clang-10
+    - CXX=clang++-10
+    - PYTHON=python3
     - QPID_PROTON_CMAKE_ARGS='-DRUNTIME_CHECK=asan -DENABLE_TOX_TEST=OFF'
     # otherwise, on Travis ldd gives `libclang_rt.asan-x86_64.so => not found` and binaries don't work
-    - LD_LIBRARY_PATH=/usr/local/clang-7.0.0/lib/clang/7.0.0/lib/linux/
-  - os: linux
-    dist: bionic
+    - LD_LIBRARY_PATH=/usr/lib/llvm-10/lib/clang/10.0.0/lib/linux/
+  - name: gcc tsan
+    os: linux
+    dist: focal
+    before_install:
+    - sudo apt-get install -y gcc-10 g++-10
     env:
-    # python-test and python-tox-test segfault
+    - CC=gcc-10
+    - CXX=g++-10
+    - PYTHON=python3
+    # python-test, python-integration-test, and python-tox-test segfault
     - QPID_PROTON_CMAKE_ARGS='-DRUNTIME_CHECK=tsan -DENABLE_TOX_TEST=OFF'
-    - QPID_PROTON_CTEST_ARGS='-E python-test'
-  - os: linux
+    - QPID_PROTON_CTEST_ARGS="-E 'python-test|python-integration-test'"
+  - name: coverage
+    os: linux
+    dist: bionic
+    language: cpp
+    compiler: gcc
     env:
     - QPID_PROTON_CMAKE_ARGS='-DCMAKE_BUILD_TYPE=Coverage'
     after_success:
@@ -55,24 +100,30 @@ matrix:
 
   - os: osx
     osx_image: xcode9.4
+    language: cpp
+    compiler: clang
     env:
     - PATH="/usr/local/opt/python/libexec/bin:/usr/local/bin:$PATH"
     - PKG_CONFIG_PATH='/usr/local/opt/openssl@1.1/lib/pkgconfig'
     - QPID_PROTON_CMAKE_ARGS='-DCMAKE_OSX_DEPLOYMENT_TARGET=10.13'
+    # c-threaderciser test hangs on older clang
     # python-tox-test segfaults and ruby tests do not start due to dynamic library issues
-    - QPID_PROTON_CTEST_ARGS="--exclude-regex 'python-tox-test|ruby.*'"
+    - QPID_PROTON_CTEST_ARGS="--exclude-regex 'c-threaderciser|python-tox-test|ruby.*'"
 
   - os: osx
     osx_image: xcode11.3
+    language: cpp
+    compiler: clang
     env:
     - PATH="/usr/local/opt/python/libexec/bin:/usr/local/bin:$PATH"
     - PKG_CONFIG_PATH='/usr/local/opt/openssl@1.1/lib/pkgconfig'
     - QPID_PROTON_CMAKE_ARGS='-DCMAKE_OSX_DEPLOYMENT_TARGET=10.14'
+    # TODO PROTON-2225: c-threaderciser sometimes fails with assertion error
     # python-tox-test segfaults and ruby tests do not start due to dynamic library issues
-    - QPID_PROTON_CTEST_ARGS="--exclude-regex 'python-tox-test|ruby.*'"
+    - QPID_PROTON_CTEST_ARGS="--exclude-regex 'c-threaderciser|python-tox-test|ruby.*'"
 
 addons:
-  # Ubuntu 16.04 APT dependencies, https://packages.ubuntu.com/
+  # Ubuntu APT dependencies, https://packages.ubuntu.com/
   apt:
     packages:
     - cmake
@@ -96,17 +147,20 @@ addons:
       - swig
 # update:true workaround as of Feb. 22/20 as per
 # https://travis-ci.community/t/macos-build-fails-because-of-homebrew-bundle-unknown-command/7296/10
-    update: true 
+    update: true
 
 install:
-- python -m pip install --user --upgrade pip
-- python -m pip install --user coverage setuptools wheel tox
-- gem install minitest
+- echo "Using PYTHON=${PYTHON:=python}"
+# use older version of virtualenv to workaround https://github.com/pypa/virtualenv/issues/1873
+- ${PYTHON} -m pip install --user --upgrade pip
+- ${PYTHON} -m pip install --user coverage setuptools wheel tox virtualenv==20.0.23
+# PROTON-2125 suppress annoying deprecation warning from Minitest in Ruby tests
+- gem install minitest:4.3.2 simplecov codecov
 
 before_script:
 - mkdir build
 - cd build
-- cmake .. -DCMAKE_INSTALL_PREFIX=$PWD/install ${QPID_PROTON_CMAKE_ARGS}
+- cmake .. -DCMAKE_INSTALL_PREFIX=$PWD/install -DPYTHON_EXECUTABLE="$(which ${PYTHON})" ${QPID_PROTON_CMAKE_ARGS}
 
 script:
 - cmake --build . --target install -- -j$(nproc) && eval ctest -V ${QPID_PROTON_CTEST_ARGS}

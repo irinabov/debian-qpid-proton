@@ -80,7 +80,7 @@ add_custom_target(
   DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/src/protocol.h ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
   )
 
-file (GLOB_RECURSE source_files "src/*.[ch]")
+file (GLOB_RECURSE source_files "src/*.h" "src/*.c" "src/*.cpp")
 
 foreach (sfile ${source_files})
   file (RELATIVE_PATH rfile ${CMAKE_CURRENT_SOURCE_DIR} ${sfile})
@@ -118,7 +118,7 @@ if (SSL_IMPL STREQUAL openssl)
   set (pn_ssl_impl src/ssl/openssl.c)
   set (SSL_LIB OpenSSL::SSL Threads::Threads)
 elseif (SSL_IMPL STREQUAL schannel)
-  set (pn_ssl_impl src/ssl/schannel.c)
+  set (pn_ssl_impl src/ssl/schannel.cpp)
   set (SSL_LIB Crypt32.lib Secur32.lib)
 else ()
   set (pn_ssl_impl src/ssl/ssl_stub.c)
@@ -160,18 +160,6 @@ else (PN_WINAPI)
   endif (STRERROR_R_IN_LIBC)
 endif (PN_WINAPI)
 
-CHECK_SYMBOL_EXISTS(atoll "stdlib.h" C99_ATOLL)
-if (C99_ATOLL)
-  list(APPEND PLATFORM_DEFINITIONS "USE_ATOLL")
-else (C99_ATOLL)
-  CHECK_SYMBOL_EXISTS(_atoi64 "stdlib.h" WINAPI_ATOI64)
-  if (WINAPI_ATOI64)
-    list(APPEND PLATFORM_DEFINITIONS "USE_ATOI64")
-  else (WINAPI_ATOI64)
-    message(FATAL_ERROR "No atoll API found")
-  endif (WINAPI_ATOI64)
-endif (C99_ATOLL)
-
 if (PN_WINAPI)
   set (PLATFORM_LIBS ws2_32 Rpcrt4)
   list(APPEND PLATFORM_DEFINITIONS "PN_WINAPI")
@@ -187,17 +175,17 @@ if (MSVC)
     )
 endif (MSVC)
 
-# Ensure that examples build with c90 on gcc/clang, to deal with older c++03-as-c compilers.
-set(C_EXAMPLE_FLAGS_GNU "-std=iso9899:1990 -pedantic")
-set(C_EXAMPLE_FLAGS_Clang "-std=iso9899:1990 -pedantic")
+# Ensure that examples build with c99 on gcc/clang
+set(C_EXAMPLE_FLAGS_GNU "-pedantic")
+set(C_EXAMPLE_FLAGS_Clang "-pedantic")
 
 # Flags for example self-test build
-set(C_EXAMPLE_FLAGS "${COMPILE_WARNING_FLAGS} ${C_EXAMPLE_FLAGS_${CMAKE_C_COMPILER_ID}}")
+set(C_EXAMPLE_FLAGS "${C_STANDARD_FLAGS} ${COMPILE_WARNING_FLAGS} ${C_EXAMPLE_FLAGS_${CMAKE_C_COMPILER_ID}}")
 set(C_EXAMPLE_LINK_FLAGS "${SANITIZE_FLAGS}")
 
 set(qpid-proton-platform_GNU src/compiler/gcc/start.c)
 set(qpid-proton-platform_Clang src/compiler/gcc/start.c)
-set(qpid-proton-platform_MSVC src/compiler/msvc/snprintf.c src/compiler/msvc/start.c)
+set(qpid-proton-platform_MSVC src/compiler/msvc/start.c)
 
 set(qpid-proton-platform ${qpid-proton-platform_${CMAKE_C_COMPILER_ID}})
 
@@ -226,7 +214,7 @@ set (qpid-proton-layers-all
   src/sasl/cyrus_sasl.c
   src/sasl/cyrus_stub.c
   src/ssl/openssl.c
-  src/ssl/schannel.c
+  src/ssl/schannel.cpp
   src/ssl/ssl_stub.c
   )
 
@@ -314,6 +302,7 @@ set (qpid-proton-include
   include/proton/netaddr.h
   include/proton/object.h
   include/proton/proactor.h
+  include/proton/raw_connection.h
   include/proton/sasl.h
   include/proton/sasl-plugin.h
   include/proton/session.h
@@ -341,26 +330,25 @@ set (qpid-proton-include-extra
 set(PROACTOR "" CACHE STRING "Override default proactor, one of: epoll, libuv, iocp, none")
 string(TOLOWER "${PROACTOR}" PROACTOR)
 
+set (qpid-proton-proactor-common
+  src/proactor/proactor-internal.c
+  src/proactor/netaddr-internal.c
+  src/proactor/raw_connection.c
+  )
+
 if (PROACTOR STREQUAL "epoll" OR (NOT PROACTOR AND NOT BUILD_PROACTOR))
   check_symbol_exists(epoll_wait "sys/epoll.h" HAVE_EPOLL)
   if (HAVE_EPOLL)
     set (PROACTOR_OK epoll)
-    set (qpid-proton-proactor src/proactor/epoll.c src/proactor/proactor-internal.c)
-    set (PROACTOR_LIBS Threads::Threads)
-    set_source_files_properties (${qpid-proton-proactor} PROPERTIES
-      COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS} ${LTO}"
-      )
+    set (qpid-proton-proactor src/proactor/epoll.c src/proactor/epoll_raw_connection.c ${qpid-proton-proactor-common})
+    set (PROACTOR_LIBS Threads::Threads ${TIME_LIB})
   endif()
 endif()
 
 if (PROACTOR STREQUAL "iocp" OR (NOT PROACTOR AND NOT PROACTOR_OK))
   if(WIN32 AND NOT CYGWIN)
     set (PROACTOR_OK iocp)
-    set (qpid-proton-proactor src/proactor/win_iocp.c src/proactor/proactor-internal.c)
-    set_source_files_properties (${qpid-proton-proactor} PROPERTIES
-      COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_PLATFORM_FLAGS} ${LTO}"
-      COMPILE_DEFINITIONS "${PLATFORM_DEFINITIONS}"
-      )
+    set (qpid-proton-proactor src/proactor/win_iocp.cpp ${qpid-proton-proactor-common})
   endif(WIN32 AND NOT CYGWIN)
 endif()
 
@@ -368,11 +356,8 @@ if (PROACTOR STREQUAL "libuv" OR (NOT PROACTOR AND NOT PROACTOR_OK))
   find_package(Libuv)
   if (Libuv_FOUND)
     set (PROACTOR_OK libuv)
-    set (qpid-proton-proactor src/proactor/libuv.c src/proactor/proactor-internal.c)
+    set (qpid-proton-proactor src/proactor/libuv.c ${qpid-proton-proactor-common})
     set (PROACTOR_LIBS Libuv::Libuv)
-    set_source_files_properties (${qpid-proton-proactor} PROPERTIES
-      COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS} ${LTO}"
-      )
   endif()
 endif()
 
@@ -388,29 +373,17 @@ set_source_files_properties (
   ${qpid-proton-core}
   ${qpid-proton-layers}
   ${qpid-proton-extra}
+  ${qpid-proton-platform}
   PROPERTIES
-  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS} ${LTO}"
+  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${C_STANDARD_FLAGS}"
   )
 
 set_source_files_properties (
-  ${qpid-proton-platform}
   ${qpid-proton-platform-io}
   PROPERTIES
-  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_PLATFORM_FLAGS} ${LTO}"
+  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${C_EXTENDED_FLAGS}"
   COMPILE_DEFINITIONS "${PLATFORM_DEFINITIONS}"
   )
-
-if (BUILD_WITH_CXX)
-  set_source_files_properties (
-    ${qpid-proton-core}
-    ${qpid-proton-proactor}
-    ${qpid-proton-layers}
-    ${qpid-proton-extra}
-    ${qpid-proton-platform}
-    ${qpid-proton-platform-io}
-    PROPERTIES LANGUAGE CXX
-    )
-endif (BUILD_WITH_CXX)
 
 set(qpid-proton-core-src
   ${qpid-proton-core}
@@ -422,79 +395,107 @@ set(qpid-proton-core-src
 
 add_library (qpid-proton-core-objects OBJECT ${qpid-proton-core-src})
 add_dependencies (qpid-proton-core-objects generated_c_files)
-set_target_properties(qpid-proton-core-objects PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(qpid-proton-core-objects PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+  COMPILE_FLAGS "${LTO}"
+  LINK_FLAGS "${CATCH_UNDEFINED} ${LINK_LTO}")
 target_compile_definitions(qpid-proton-core-objects PRIVATE qpid_proton_core_EXPORTS)
 
 # Can't use target_link_libraries() because cmake 2.8.12 doesn't allow object libraries as the first param
 # otherwise for cmake 3.9 and on this would be:
-#   target_link_libraries (qpid-proton-core-objects ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS})
+#   target_link_libraries (qpid-proton-core-objects ${SSL_LIB} ${SASL_LIB} ${PLATFORM_LIBS})
 target_compile_definitions(qpid-proton-core-objects PRIVATE $<TARGET_PROPERTY:qpid-proton-core,COMPILE_DEFINITIONS>)
 target_compile_options    (qpid-proton-core-objects PRIVATE $<TARGET_PROPERTY:qpid-proton-core,COMPILE_OPTIONS>)
 target_include_directories(qpid-proton-core-objects PRIVATE $<TARGET_PROPERTY:qpid-proton-core,INCLUDE_DIRECTORIES>)
 
+add_library (qpid-proton-platform-io-objects OBJECT ${qpid-proton-platform-io})
+set_target_properties(qpid-proton-platform-io-objects PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+  C_EXTENSIONS ON
+  COMPILE_FLAGS "${LTO}"
+  LINK_FLAGS "${CATCH_UNDEFINED} ${LINK_LTO}")
+target_compile_definitions(qpid-proton-platform-io-objects PRIVATE qpid_proton_EXPORTS)
+
+target_compile_definitions(qpid-proton-platform-io-objects PRIVATE $<TARGET_PROPERTY:qpid-proton,COMPILE_DEFINITIONS>)
+target_compile_options    (qpid-proton-platform-io-objects PRIVATE $<TARGET_PROPERTY:qpid-proton,COMPILE_OPTIONS>)
+target_include_directories(qpid-proton-platform-io-objects PRIVATE $<TARGET_PROPERTY:qpid-proton,INCLUDE_DIRECTORIES>)
+
 add_library (qpid-proton-core SHARED $<TARGET_OBJECTS:qpid-proton-core-objects>)
-target_link_libraries (qpid-proton-core ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS})
+target_link_libraries (qpid-proton-core LINK_PRIVATE ${SSL_LIB} ${SASL_LIB} ${PLATFORM_LIBS})
 set_target_properties (qpid-proton-core
   PROPERTIES
   VERSION   "${PN_LIB_CORE_VERSION}"
   SOVERSION "${PN_LIB_CORE_MAJOR_VERSION}"
-  LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
-)
+  COMPILE_FLAGS "${LTO}"
+  LINK_FLAGS "${CATCH_UNDEFINED} ${LINK_LTO}")
 
 if (BUILD_STATIC_LIBS)
   add_library (qpid-proton-core-static STATIC ${qpid-proton-core-src})
+  target_compile_definitions(qpid-proton-core-static PUBLIC PROTON_DECLARE_STATIC)
+  target_link_libraries (qpid-proton-core-static ${SSL_LIB} ${SASL_LIB} ${PLATFORM_LIBS})
 endif(BUILD_STATIC_LIBS)
-
-set(qpid-proton-noncore-src
-  # Proactor
-  ${qpid-proton-proactor}
-  # Proton Reactor/Messenger
-  ${qpid-proton-extra}
-  ${qpid-proton-platform-io}
-  ${qpid-proton-include-extra}
-)
-
-add_library (qpid-proton SHARED $<TARGET_OBJECTS:qpid-proton-core-objects> ${qpid-proton-noncore-src})
-target_link_libraries (qpid-proton LINK_PRIVATE ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS} ${PROACTOR_LIBS})
-set_target_properties (qpid-proton
-  PROPERTIES
-  VERSION   "${PN_LIB_LEGACY_VERSION}"
-  SOVERSION "${PN_LIB_LEGACY_MAJOR_VERSION}"
-  LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
-)
-
-if (BUILD_STATIC_LIBS)
-  add_library(qpid-proton-static STATIC ${qpid-proton-core-src} ${qpid-proton-noncore-src})
-endif(BUILD_STATIC_LIBS)
-
-if (MSVC)
-  # Add a phony dependency for Windows builds to serialize creation
-  # of generated files. See issue PROTON-1376.
-  # When a Windows build creates src/encodings.h and src/protocol.h
-  # only once then this can be removed.
-  add_dependencies(qpid-proton qpid-proton-core)
-endif (MSVC)
-
-if (MSVC)
-  # guard against use of C99 violating functions on Windows
-  include(WindowsC99CheckDef)
-endif(MSVC)
 
 if (qpid-proton-proactor)
   set(HAS_PROACTOR True)
-  add_library (qpid-proton-proactor SHARED ${qpid-proton-proactor})
+  set_source_files_properties (${qpid-proton-proactor} PROPERTIES
+    COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${C_STANDARD_FLAGS}"
+    )
+
+  add_library (qpid-proton-proactor-objects OBJECT ${qpid-proton-proactor})
+  set_target_properties(qpid-proton-proactor-objects PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    COMPILE_FLAGS "${LTO}"
+    LINK_FLAGS "${CATCH_UNDEFINED} ${LINK_LTO}")
+  target_compile_definitions(qpid-proton-proactor-objects PRIVATE qpid_proton_proactor_EXPORTS)
+
+  # Can't use target_link_libraries() because cmake 2.8.12 doesn't allow object libraries as the first param
+  # otherwise for cmake 3.9 and on this would be:
+  #   target_link_libraries (qpid-proton-proactor-objects ${PLATFORM_LIBS} ${PROACTOR_LIBS})
+  target_compile_definitions(qpid-proton-proactor-objects PRIVATE $<TARGET_PROPERTY:qpid-proton-proactor,COMPILE_DEFINITIONS>)
+  target_compile_options    (qpid-proton-proactor-objects PRIVATE $<TARGET_PROPERTY:qpid-proton-proactor,COMPILE_OPTIONS>)
+  target_include_directories(qpid-proton-proactor-objects PRIVATE $<TARGET_PROPERTY:qpid-proton-proactor,INCLUDE_DIRECTORIES>)
+
+  add_library (qpid-proton-proactor SHARED $<TARGET_OBJECTS:qpid-proton-proactor-objects>)
   target_link_libraries (qpid-proton-proactor  LINK_PUBLIC qpid-proton-core)
   target_link_libraries (qpid-proton-proactor  LINK_PRIVATE ${PLATFORM_LIBS} ${PROACTOR_LIBS})
   set_target_properties (qpid-proton-proactor
     PROPERTIES
     VERSION   "${PN_LIB_PROACTOR_VERSION}"
     SOVERSION "${PN_LIB_PROACTOR_MAJOR_VERSION}"
-    LINK_FLAGS "${CATCH_UNDEFINED} ${LTO}"
-  )
+    LINK_FLAGS "${CATCH_UNDEFINED} ${LINK_LTO}"
+    COMPILE_FLAGS "${LTO}"
+    )
   if (BUILD_STATIC_LIBS)
     add_library (qpid-proton-proactor-static STATIC ${qpid-proton-proactor})
+    target_compile_definitions(qpid-proton-proactor-static PUBLIC PROTON_DECLARE_STATIC)
+    target_link_libraries (qpid-proton-proactor-static ${PLATFORM_LIBS} ${PROACTOR_LIBS})
   endif(BUILD_STATIC_LIBS)
 endif()
+
+set(qpid-proton-noncore-src
+  # Proton Reactor/Messenger
+  ${qpid-proton-extra}
+  ${qpid-proton-include-extra}
+)
+
+add_library (qpid-proton SHARED $<TARGET_OBJECTS:qpid-proton-core-objects> $<TARGET_OBJECTS:qpid-proton-platform-io-objects> $<TARGET_OBJECTS:qpid-proton-proactor-objects> ${qpid-proton-noncore-src})
+target_link_libraries (qpid-proton LINK_PRIVATE ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS} ${PROACTOR_LIBS})
+set_target_properties (qpid-proton
+  PROPERTIES
+  VERSION   "${PN_LIB_LEGACY_VERSION}"
+  SOVERSION "${PN_LIB_LEGACY_MAJOR_VERSION}"
+  LINK_FLAGS "${CATCH_UNDEFINED} ${LINK_LTO}"
+  COMPILE_FLAGS "${LTO}"
+)
+
+if (BUILD_STATIC_LIBS)
+  add_library (qpid-proton-platform-io-static OBJECT ${qpid-proton-platform-io})
+  set_target_properties(qpid-proton-platform-io-static PROPERTIES
+    C_EXTENSIONS ON)
+  add_library(qpid-proton-static STATIC $<TARGET_OBJECTS:qpid-proton-platform-io-static> ${qpid-proton-noncore-src})
+  target_compile_definitions(qpid-proton-static PUBLIC PROTON_DECLARE_STATIC)
+  target_link_libraries (qpid-proton-static qpid-proton-core-static qpid-proton-proactor-static ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS} ${PROACTOR_LIBS})
+endif(BUILD_STATIC_LIBS)
 
 # Install executables and libraries
 if (BUILD_STATIC_LIBS)
@@ -575,6 +576,10 @@ install (FILES
   ${CMAKE_CURRENT_BINARY_DIR}/ProtonConfig.cmake
   ${CMAKE_CURRENT_BINARY_DIR}/ProtonConfigVersion.cmake
   DESTINATION ${LIB_INSTALL_DIR}/cmake/Proton)
+
+if (ENABLE_BENCHMARKS)
+  add_subdirectory(benchmarks)
+endif (ENABLE_BENCHMARKS)
 
 add_subdirectory(docs)
 add_subdirectory(examples)

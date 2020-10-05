@@ -17,19 +17,7 @@
 # under the License.
 #
 
-include(CheckIncludeFiles)
-
 include_directories (${PN_C_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-CHECK_INCLUDE_FILES("inttypes.h" INTTYPES_AVAILABLE)
-if (INTTYPES_AVAILABLE)
-  list(APPEND PLATFORM_DEFINITIONS "USE_INTTYPES")
-else (INTTYPES_AVAILABLE)
-  if (CMAKE_COMPILER_IS_GNUCC)
-    # since inttypes.h provides portable printf format macros
-    set (COMPILE_WARNING_FLAGS "${COMPILE_WARNING_FLAGS} -Wno-format")
-  endif (CMAKE_COMPILER_IS_GNUCC)
-endif (INTTYPES_AVAILABLE)
 
 add_executable(msgr-recv msgr-recv.c msgr-common.c)
 add_executable(msgr-send msgr-send.c msgr-common.c)
@@ -44,10 +32,5 @@ target_link_libraries(reactor-send qpid-proton)
 set_target_properties (
   msgr-recv msgr-send reactor-recv reactor-send
   PROPERTIES
-  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${COMPILE_LANGUAGE_FLAGS}"
-  COMPILE_DEFINITIONS "${PLATFORM_DEFINITIONS}"
+  COMPILE_FLAGS "${COMPILE_WARNING_FLAGS} ${C_STANDARD_FLAGS}"
 )
-
-if (BUILD_WITH_CXX)
-  set_source_files_properties (msgr-recv.c msgr-send.c msgr-common.c reactor-recv.c reactor-send.c PROPERTIES LANGUAGE CXX)
-endif (BUILD_WITH_CXX)
