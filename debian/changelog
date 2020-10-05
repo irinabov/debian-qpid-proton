@@ -1,3 +1,9 @@
+qpid-proton (0.32.0-1bionic+qpid1) bionic; urgency=medium
+  
+  * Rebased tp 0.32.0
+
+ -- Irina Boverman <iboverma@redhat.com>  Mon,  5 Jun 2020 13:30:00 -0400
+
 qpid-proton (0.31.0-3bionic+qpid1) bionic; urgency=medium
   
   * Changed python examples to use python3
