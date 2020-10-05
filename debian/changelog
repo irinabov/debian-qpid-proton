@@ -1,4 +1,4 @@
-qpid-proton (0.32.0-2bionic+qpid1) bionic; urgency=medium
+qpid-proton (0.32.0-3bionic+qpid1) bionic; urgency=medium
   
   * Rebased to 0.32.0
 
