@@ -44,7 +44,8 @@ if (CMAKE_CXX_COMPILER)
   macro(add_c_test exe)
     add_executable(${exe} $<TARGET_OBJECTS:test_main> pn_test.cpp ${ARGN})
     set_target_properties(${exe} PROPERTIES
-      COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARNING_FLAGS}")
+      COMPILE_FLAGS "${CXX_STANDARD} ${CMAKE_CXX_FLAGS} ${CXX_WARNING_FLAGS} ${LTO}"
+      LINK_FLAGS "${CATCH_UNDEFINED} ${LINK_LTO}")
     pn_add_test(
       EXECUTABLE
       NAME ${exe}
@@ -75,28 +76,32 @@ if (CMAKE_CXX_COMPILER)
     add_c_test(c-proactor-test pn_test_proactor.cpp proactor_test.cpp)
     target_link_libraries(c-proactor-test qpid-proton-core qpid-proton-proactor ${PLATFORM_LIBS})
 
+    add_c_test(c-raw-connection-test raw_connection_test.cpp $<TARGET_OBJECTS:qpid-proton-proactor-objects>)
+    target_link_libraries(c-raw-connection-test qpid-proton-core ${PLATFORM_LIBS} ${PROACTOR_LIBS})
+
     add_c_test(c-ssl-proactor-test pn_test_proactor.cpp ssl_proactor_test.cpp)
     target_link_libraries(c-ssl-proactor-test qpid-proton-core qpid-proton-proactor ${PLATFORM_LIBS})
 
     # Thread race test.
-    #
-    # TODO aconway 2018-11-14: enable by default when races and xcode
-    # problems are cleared up
-    option(THREADERCISER "Run the threaderciser concurrency tests" OFF)
+    if (CMAKE_USE_PTHREADS_INIT OR CMAKE_HP_PTHREADS_INIT)
+      # test requires pthreads
+      set(DEFAULT_THREADERCISER ON)
+    else (CMAKE_USE_PTHREADS_INIT OR CMAKE_HP_PTHREADS_INIT)
+      set(DEFAULT_THREADERCISER OFF)
+    endif (CMAKE_USE_PTHREADS_INIT OR CMAKE_HP_PTHREADS_INIT)
+    option(THREADERCISER "Run the threaderciser concurrency tests" ${DEFAULT_THREADERCISER})
     if (THREADERCISER)
       add_executable(c-threaderciser threaderciser.c)
-      set_target_properties(c-threaderciser PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${C_WARNING_FLAGS}")
+      set_target_properties(c-threaderciser
+        PROPERTIES COMPILE_FLAGS "${C_STANDARD_FLAGS} ${COMPILE_WARNING_FLAGS}")
+      target_link_libraries (c-threaderciser qpid-proton-proactor Threads::Threads)
       pn_add_test(
         EXECUTABLE
         NAME c-threaderciser
         PREPEND_ENVIRONMENT ${test_env}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMAND $<TARGET_FILE:c-threaderciser>)
-      target_link_libraries (c-threaderciser qpid-proton-proactor)
-      find_library(Pthread_LIBRARY pthread)
-      if (Pthread_LIBRARY)
-        target_link_libraries (c-threaderciser ${Pthread_LIBRARY})
-      endif()
+      set_tests_properties (c-threaderciser PROPERTIES TIMEOUT 120)
     endif()
 
     if(WIN32)
