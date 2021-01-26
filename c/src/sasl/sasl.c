@@ -43,18 +43,18 @@ static const char pni_excluded_mechs[] = "GSSAPI GSS-SPNEGO GS2-KRB5 GS2-IAKERB"
 //-----------------------------------------------------------------------------
 // pnx_sasl: API for SASL implementations to use
 
-void pnx_sasl_logf(pn_transport_t *logger, const char *fmt, ...)
+void pnx_sasl_logf(pn_transport_t *logger, pn_log_level_t level, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    if (PN_SHOULD_LOG(&logger->logger, PN_SUBSYSTEM_SASL, PN_LEVEL_ERROR))
-        pni_logger_vlogf(&logger->logger, PN_SUBSYSTEM_SASL, PN_LEVEL_ERROR, fmt, ap);
+    if (PN_SHOULD_LOG(&logger->logger, PN_SUBSYSTEM_SASL, level))
+        pni_logger_vlogf(&logger->logger, PN_SUBSYSTEM_SASL, level, fmt, ap);
     va_end(ap);
 }
 
 void pnx_sasl_error(pn_transport_t *logger, const char* err, const char* condition_name)
 {
-    pnx_sasl_logf(logger, "sasl error: %s", err);
+    pnx_sasl_logf(logger, PN_LEVEL_ERROR, "sasl error: %s", err);
     pn_condition_t* c = pn_transport_condition(logger);
     pn_condition_set_name(c, condition_name);
     pn_condition_set_description(c, err);
@@ -80,12 +80,12 @@ bool  pnx_sasl_is_transport_encrypted(pn_transport_t *transport)
   return transport->sasl ? transport->sasl->external_ssf>0 : false;
 }
 
-bool  pnx_sasl_get_allow_insecure_mechs(pn_transport_t *transport)
+bool  pnx_sasl_get_allow_insecure_mechanisms(pn_transport_t *transport)
 {
   return transport->sasl ? transport->sasl->allow_insecure_mechs : false;
 }
 
-bool  pnx_sasl_get_auth_required(pn_transport_t *transport)
+bool  pnx_sasl_get_authentication_required(pn_transport_t *transport)
 {
   return transport->auth_required;
 }
@@ -93,6 +93,11 @@ bool  pnx_sasl_get_auth_required(pn_transport_t *transport)
 const char *pnx_sasl_get_username(pn_transport_t *transport)
 {
   return transport->sasl ? transport->sasl->username : NULL;
+}
+
+const char *pnx_sasl_get_authorization(pn_transport_t *transport)
+{
+  return transport->sasl ? transport->sasl->authzid : NULL;
 }
 
 const char *pnx_sasl_get_external_username(pn_transport_t *transport)
@@ -143,19 +148,25 @@ void  pnx_sasl_set_selected_mechanism(pn_transport_t *transport, const char *mec
   }
 }
 
-void  pnx_sasl_succeed_authentication(pn_transport_t *transport, const char *username)
+void  pnx_sasl_set_succeeded(pn_transport_t *transport, const char *username, const char *authzid)
 {
   if (transport->sasl) {
     transport->sasl->username = username;
+    transport->sasl->authzid = authzid;
     transport->sasl->outcome = PN_SASL_OK;
     transport->authenticated = true;
 
-    PN_LOG(&transport->logger, PN_SUBSYSTEM_SASL, PN_LEVEL_INFO, "Authenticated user: %s with mechanism %s",
-                  username, transport->sasl->selected_mechanism);
+    if (authzid) {
+      PN_LOG(&transport->logger, PN_SUBSYSTEM_SASL, PN_LEVEL_INFO, "Authenticated user: %s for %s with mechanism %s",
+             username, authzid, transport->sasl->selected_mechanism);
+    } else {
+      PN_LOG(&transport->logger, PN_SUBSYSTEM_SASL, PN_LEVEL_INFO, "Authenticated user: %s with mechanism %s",
+             username, transport->sasl->selected_mechanism);
+    }
   }
 }
 
-void  pnx_sasl_fail_authentication(pn_transport_t *transport)
+void  pnx_sasl_set_failed(pn_transport_t *transport)
 {
   if (transport->sasl) {
     transport->sasl->outcome = PN_SASL_AUTH;
@@ -173,6 +184,17 @@ void pnx_sasl_set_default_implementation(const pnx_sasl_implementation* impl)
   global_sasl_impl = impl;
 }
 
+// Aliases for linkage compatibility in face of renamings
+PN_EXTERN bool  pnx_sasl_is_included_mech(pn_transport_t *transport, pn_bytes_t s)
+{ return pnx_sasl_is_mechanism_included(transport, s); }
+PN_EXTERN bool  pnx_sasl_get_allow_insecure_mechs(pn_transport_t *transport)
+{ return pnx_sasl_get_allow_insecure_mechanisms(transport); }
+PN_EXTERN bool  pnx_sasl_get_auth_required(pn_transport_t *transport)
+{ return pnx_sasl_get_authentication_required(transport); }
+PN_EXTERN void  pnx_sasl_succeed_authentication(pn_transport_t *transport, const char *username, const char *authzid)
+{ pnx_sasl_set_succeeded(transport, username, authzid);}
+PN_EXTERN void  pnx_sasl_fail_authentication(pn_transport_t *transport)
+{pnx_sasl_set_failed(transport); }
 
 //-----------------------------------------------------------------------------
 // pni_sasl_impl: Abstract the entry points to the SASL implementation (virtual function calls)
@@ -184,7 +206,7 @@ static inline void pni_sasl_impl_free(pn_transport_t *transport)
 
 static inline const char *pni_sasl_impl_list_mechs(pn_transport_t *transport)
 {
-  return transport->sasl->impl->list_mechs(transport);
+  return transport->sasl->impl->list_mechanisms(transport);
 }
 
 static inline bool pni_sasl_impl_init_server(pn_transport_t *transport)
@@ -222,9 +244,9 @@ static inline void pni_sasl_impl_process_challenge(pn_transport_t *transport, co
   transport->sasl->impl->process_challenge(transport, recv);
 }
 
-static inline void pni_sasl_impl_process_outcome(pn_transport_t *transport)
+static inline void pni_sasl_impl_process_outcome(pn_transport_t *transport, const pn_bytes_t *recv)
 {
-  transport->sasl->impl->process_outcome(transport);
+  transport->sasl->impl->process_outcome(transport, recv);
 }
 
 static inline bool pni_sasl_impl_can_encrypt(pn_transport_t *transport)
@@ -321,16 +343,16 @@ static bool pni_sasl_is_client_state(enum pnx_sasl_state state)
   return state==SASL_NONE
       || state==SASL_POSTED_INIT
       || state==SASL_POSTED_RESPONSE
-      || state==SASL_RECVED_OUTCOME_SUCCEED
-      || state==SASL_RECVED_OUTCOME_FAIL
+      || state==SASL_RECVED_SUCCESS
+      || state==SASL_RECVED_FAILURE
       || state==SASL_ERROR;
 }
 
 static bool pni_sasl_is_final_input_state(pni_sasl_t *sasl)
 {
   enum pnx_sasl_state desired_state = sasl->desired_state;
-  return desired_state==SASL_RECVED_OUTCOME_SUCCEED
-      || desired_state==SASL_RECVED_OUTCOME_FAIL
+  return desired_state==SASL_RECVED_SUCCESS
+      || desired_state==SASL_RECVED_FAILURE
       || desired_state==SASL_ERROR
       || desired_state==SASL_POSTED_OUTCOME;
 }
@@ -339,9 +361,9 @@ static bool pni_sasl_is_final_output_state(pni_sasl_t *sasl)
 {
   enum pnx_sasl_state last_state = sasl->last_state;
   enum pnx_sasl_state desired_state = sasl->desired_state;
-  return (desired_state==SASL_RECVED_OUTCOME_SUCCEED && last_state>=SASL_POSTED_INIT)
-      || last_state==SASL_RECVED_OUTCOME_SUCCEED
-      || last_state==SASL_RECVED_OUTCOME_FAIL
+  return (desired_state==SASL_RECVED_SUCCESS && last_state>=SASL_POSTED_INIT)
+      || last_state==SASL_RECVED_SUCCESS
+      || last_state==SASL_RECVED_FAILURE
       || last_state==SASL_ERROR
       || last_state==SASL_POSTED_OUTCOME;
 }
@@ -418,7 +440,7 @@ static bool pni_sasl_client_included_mech(const char *included_mech_list, pn_byt
 // Look for symbol in the mech include list - plugin API version
 //
 // Note that if there is no inclusion list then every mech is implicitly included.
-bool pnx_sasl_is_included_mech(pn_transport_t* transport, pn_bytes_t s)
+bool pnx_sasl_is_mechanism_included(pn_transport_t* transport, pn_bytes_t s)
 {
   return pni_sasl_server_included_mech(transport->sasl->included_mechanisms, s);
 }
@@ -502,7 +524,7 @@ static void pni_post_sasl_frame(pn_transport_t *transport)
         desired_state = SASL_POSTED_MECHANISMS;
         continue;
       }
-      pn_post_frame(transport, SASL_FRAME_TYPE, 0, "DL[B]", SASL_OUTCOME, sasl->outcome);
+      pn_post_frame(transport, SASL_FRAME_TYPE, 0, "DL[Bz]", SASL_OUTCOME, sasl->outcome, out.size, out.start);
       pni_emit(transport);
       if (sasl->outcome!=PN_SASL_OK) {
         pn_do_error(transport, "amqp:unauthorized-access", "Failed to authenticate client [mech=%s]",
@@ -510,13 +532,13 @@ static void pni_post_sasl_frame(pn_transport_t *transport)
         desired_state = SASL_ERROR;
       }
       break;
-    case SASL_RECVED_OUTCOME_SUCCEED:
+    case SASL_RECVED_SUCCESS:
       if (sasl->last_state < SASL_POSTED_INIT) {
         desired_state = SASL_POSTED_INIT;
         continue;
       }
       break;
-    case SASL_RECVED_OUTCOME_FAIL:
+    case SASL_RECVED_FAILURE:
       pn_do_error(transport, "amqp:unauthorized-access", "Authentication failed [mech=%s]",
                   transport->sasl->selected_mechanism ? transport->sasl->selected_mechanism : "none");
       desired_state = SASL_ERROR;
@@ -729,6 +751,7 @@ pn_sasl_t *pn_sasl(pn_transport_t *transport)
     sasl->selected_mechanism = NULL;
     sasl->included_mechanisms = NULL;
     sasl->username = NULL;
+    sasl->authzid = NULL;
     sasl->password = NULL;
     sasl->remote_fqdn = NULL;
     sasl->local_fqdn = NULL;
@@ -783,10 +806,11 @@ void pnx_sasl_set_local_hostname(pn_transport_t * transport, const char * fqdn)
   sasl->local_fqdn = pn_strdup(fqdn);
 }
 
-void pni_sasl_set_user_password(pn_transport_t *transport, const char *user, const char *password)
+void pni_sasl_set_user_password(pn_transport_t *transport, const char *user, const char *authzid, const char *password)
 {
   pni_sasl_t *sasl = transport->sasl;
   sasl->username = user;
+  sasl->authzid = authzid;
   free(sasl->password);
   sasl->password = password ? pn_strdup(password) : NULL;
 }
@@ -803,6 +827,12 @@ const char *pn_sasl_get_user(pn_sasl_t *sasl0)
 {
     pni_sasl_t *sasl = get_sasl_internal(sasl0);
     return sasl->username;
+}
+
+const char *pn_sasl_get_authorization(pn_sasl_t *sasl0)
+{
+    pni_sasl_t *sasl = get_sasl_internal(sasl0);
+    return sasl->authzid;
 }
 
 const char *pn_sasl_get_mech(pn_sasl_t *sasl0)
@@ -925,7 +955,7 @@ int pn_do_mechanisms(pn_transport_t *transport, uint8_t frame_type, uint16_t cha
         pn_string_size(mechs) &&
         pni_sasl_impl_process_mechanisms(transport, pn_string_get(mechs)))) {
     sasl->outcome = PN_SASL_PERM;
-    pnx_sasl_set_desired_state(transport, SASL_RECVED_OUTCOME_FAIL);
+    pnx_sasl_set_desired_state(transport, SASL_RECVED_FAILURE);
   }
 
   pn_free(mechs);
@@ -987,16 +1017,21 @@ int pn_do_outcome(pn_transport_t *transport, uint8_t frame_type, uint16_t channe
   if (!sasl->client) return PN_ERR;
 
   uint8_t outcome;
-  int err = pn_data_scan(args, "D.[B]", &outcome);
+  pn_bytes_t recv;
+  int err = pn_data_scan(args, "D.[Bz]", &outcome, &recv);
   if (err) return err;
 
+  // Preset the outcome to what the server sent us - the plugin can alter this.
+  // In practise the plugin processing here should only fail because it fails
+  // to authenticate the server id after the server authenticates our user.
+  // It should never succeed after the server outcome was failure.
   sasl->outcome = (pn_sasl_outcome_t) outcome;
+
+  pni_sasl_impl_process_outcome(transport, &recv);
+
   bool authenticated = sasl->outcome==PN_SASL_OK;
   transport->authenticated = authenticated;
-  pnx_sasl_set_desired_state(transport, authenticated ? SASL_RECVED_OUTCOME_SUCCEED : SASL_RECVED_OUTCOME_FAIL);
-
-  pni_sasl_impl_process_outcome(transport);
-
+  pnx_sasl_set_desired_state(transport, authenticated ? SASL_RECVED_SUCCESS : SASL_RECVED_FAILURE);
   return 0;
 }
 

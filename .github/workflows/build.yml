@@ -6,6 +6,7 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
         buildType: [RelWithDebInfo]
@@ -15,7 +16,7 @@ jobs:
           cmake_generator: '-G "Visual Studio 16 2019"'
         - os: macOS-latest
           pkg_config_path: '/usr/local/opt/openssl@1.1/lib/pkgconfig'
-          cmake_extra: '-DBUILD_RUBY=no'
+          cmake_extra: '-DBUILD_RUBY=no -DTHREADERCISER=ON'
     env:
       BuildType: ${{matrix.buildType}}
       BuildDir: ${{github.workspace}}/BLD
@@ -27,6 +28,14 @@ jobs:
     - name: Create Build and Install directories
       run: mkdir -p "${BuildDir}" "{InstallPrefix}"
       shell: bash
+
+    # PROTON-2295 avoid using go 1.15.3 on macOS, which is broken
+    - if: runner.os == 'macOS'
+      name: Setup go (Mac OS)
+      uses: actions/setup-go@v2
+      with:
+        go-version: '^1.15.4'
+
     - name: Setup python
       uses: actions/setup-python@v2
       with:
@@ -37,17 +46,17 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install setuptools wheel tox unittest2
     - name: Install Linux dependencies
-      if: ${{ runner.os == 'Linux' }}
+      if: runner.os == 'Linux'
       run: |
         sudo apt install -y swig libpython3-dev libsasl2-dev libjsoncpp-dev
     - name: Install Windows dependencies
-      if: ${{ runner.os == 'Windows' }}
+      if: runner.os == 'Windows'
       run: |
         choco install -y swig --version=4.0.1
         vcpkg install jsoncpp
         vcpkg integrate install
     - name: Install MacOS dependencies
-      if: ${{ runner.os == 'macOS' }}
+      if: runner.os == 'macOS'
       run: |
         brew install libuv swig pkgconfig jsoncpp
     - name: cmake configure
@@ -67,12 +76,13 @@ jobs:
       with:
         name: python-pkgs
         path: ${{env.BuildDir}}/python/pkgs
-    - name: ctest
-      continue-on-error: true
+    - id: ctest
+      name: ctest
       working-directory: ${{env.BuildDir}}
       run: ctest -C ${BuildType} -V -T Test --no-compress-output
       shell: bash
     - name: Upload Test results
+      if: always() && (steps.ctest.outcome == 'failure' || steps.ctest.outcome == 'success')
       uses: actions/upload-artifact@v2
       with:
         name: Test_Results_${{matrix.os}}_${{matrix.buildType}}
@@ -86,10 +96,10 @@ jobs:
           ${{env.BuildDir}}/c
           ${{env.BuildDir}}/python
     - name: Environment (Linux/Windows)
-      if: ${{ always() && runner.os != 'macOS' }}
+      if: always() && runner.os != 'macOS'
       run: env -0 | sort -z | tr '\0' '\n'
       shell: bash
     - name: Environment (macOS)
-      if: ${{ always() && runner.os == 'macOS' }}
+      if: always() && runner.os == 'macOS'
       run: env | sort
       shell: bash
