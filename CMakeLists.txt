@@ -36,11 +36,14 @@ find_package (PythonInterp REQUIRED)
 find_package (SWIG)
 find_package (CyrusSASL)
 
-enable_testing ()
 include(tests/PNAddTest.cmake)
 
 # Set up runtime checks (valgrind, sanitizers etc.)
 include(tests/RuntimeCheck.cmake)
+
+## Set up so that find_package(Proton) & find_package(ProtonCpp) work in the build tree
+set (Proton_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/cmake/config)
+set (ProtonCpp_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/cmake/config)
 
 ## Variables used across components
 
@@ -157,6 +160,8 @@ option(ENABLE_LINKTIME_OPTIMIZATION "Perform link time optimization" ${DEFAULT_L
 option(ENABLE_HIDE_UNEXPORTED_SYMBOLS "Only export library symbols that are explicitly requested" ${DEFAULT_HIDE_UNEXPORTED_SYMBOLS})
 option(ENABLE_FUZZ_TESTING "Enable building fuzzers and regression testing with libFuzzer" ${DEFAULT_FUZZ_TESTING})
 option(ENABLE_BENCHMARKS "Enable building and running benchmarks with Google Benchmark" ${DEFAULT_BENCHMARKS})
+
+option(BUILD_EXAMPLES "Enable building example programs" ON)
 
 # Set any additional compiler specific flags
 set (LTO_GNU "-flto -fno-fat-lto-objects")
@@ -424,3 +429,7 @@ configure_file(${CMAKE_SOURCE_DIR}/misc/config.sh.in
                ${CMAKE_BINARY_DIR}/config.sh @ONLY)
 configure_file(${CMAKE_SOURCE_DIR}/misc/config.bat.in
                ${CMAKE_BINARY_DIR}/config.bat @ONLY)
+
+if (BUILD_EXAMPLES)
+  add_subdirectory(tests/examples)
+endif (BUILD_EXAMPLES)

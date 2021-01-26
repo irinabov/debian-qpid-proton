@@ -83,12 +83,8 @@ if (CMAKE_CXX_COMPILER)
     target_link_libraries(c-ssl-proactor-test qpid-proton-core qpid-proton-proactor ${PLATFORM_LIBS})
 
     # Thread race test.
-    if (CMAKE_USE_PTHREADS_INIT OR CMAKE_HP_PTHREADS_INIT)
-      # test requires pthreads
-      set(DEFAULT_THREADERCISER ON)
-    else (CMAKE_USE_PTHREADS_INIT OR CMAKE_HP_PTHREADS_INIT)
-      set(DEFAULT_THREADERCISER OFF)
-    endif (CMAKE_USE_PTHREADS_INIT OR CMAKE_HP_PTHREADS_INIT)
+    # Temporarily disable threaderciser tests by default. Re-enabled in CI configs as appropriate.
+    set(DEFAULT_THREADERCISER OFF)
     option(THREADERCISER "Run the threaderciser concurrency tests" ${DEFAULT_THREADERCISER})
     if (THREADERCISER)
       add_executable(c-threaderciser threaderciser.c)
@@ -101,7 +97,6 @@ if (CMAKE_CXX_COMPILER)
         PREPEND_ENVIRONMENT ${test_env}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMAND $<TARGET_FILE:c-threaderciser>)
-      set_tests_properties (c-threaderciser PROPERTIES TIMEOUT 120)
     endif()
 
     if(WIN32)
