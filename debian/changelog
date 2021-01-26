@@ -1,3 +1,9 @@
+qpid-proton (0.323.0-3bionic+qpid1) bionic; urgency=medium
+  
+  * Rebased to 0.33.0
+
+ -- Irina Boverman <iboverma@redhat.com>  Tue, 26 Jan 2021 12:27:00 -0400
+
 qpid-proton (0.32.0-3bionic+qpid1) bionic; urgency=medium
   
   * Rebased to 0.32.0

@@ -1,7 +1,7 @@
-From 0553600784903773655c98b8ca41847c1ce8b9e1 Mon Sep 17 00:00:00 2001
+From dd8a5dc47f513a6596c221149aa60accdfcdb434 Mon Sep 17 00:00:00 2001
 From: Kim van der Riet <kvdr@localhost.localdomain>
 Date: Tue, 10 Dec 2019 10:56:30 -0500
-Subject: [PATCH] Changed Sphinx invocation from sphinx to sphinx-build for
+Subject: [PATCH 1/6] Changed Sphinx invocation from sphinx to sphinx-build for
  RHEL7
 
 ---
