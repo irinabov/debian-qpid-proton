@@ -180,7 +180,7 @@ set(C_EXAMPLE_FLAGS_GNU "-pedantic")
 set(C_EXAMPLE_FLAGS_Clang "-pedantic")
 
 # Flags for example self-test build
-set(C_EXAMPLE_FLAGS "${C_STANDARD_FLAGS} ${COMPILE_WARNING_FLAGS} ${C_EXAMPLE_FLAGS_${CMAKE_C_COMPILER_ID}}")
+set(C_EXAMPLE_FLAGS "${COMPILE_WARNING_FLAGS} ${C_EXAMPLE_FLAGS_${CMAKE_C_COMPILER_ID}}")
 set(C_EXAMPLE_LINK_FLAGS "${SANITIZE_FLAGS}")
 
 set(qpid-proton-platform_GNU src/compiler/gcc/start.c)
@@ -304,7 +304,7 @@ set (qpid-proton-include
   include/proton/proactor.h
   include/proton/raw_connection.h
   include/proton/sasl.h
-  include/proton/sasl-plugin.h
+  include/proton/sasl_plugin.h
   include/proton/session.h
   include/proton/ssl.h
   include/proton/terminus.h
@@ -340,7 +340,7 @@ if (PROACTOR STREQUAL "epoll" OR (NOT PROACTOR AND NOT BUILD_PROACTOR))
   check_symbol_exists(epoll_wait "sys/epoll.h" HAVE_EPOLL)
   if (HAVE_EPOLL)
     set (PROACTOR_OK epoll)
-    set (qpid-proton-proactor src/proactor/epoll.c src/proactor/epoll_raw_connection.c ${qpid-proton-proactor-common})
+    set (qpid-proton-proactor src/proactor/epoll.c src/proactor/epoll_raw_connection.c src/proactor/epoll_timer.c ${qpid-proton-proactor-common})
     set (PROACTOR_LIBS Threads::Threads ${TIME_LIB})
   endif()
 endif()
@@ -582,11 +582,16 @@ if (ENABLE_BENCHMARKS)
 endif (ENABLE_BENCHMARKS)
 
 add_subdirectory(docs)
-add_subdirectory(examples)
-add_subdirectory(tests)
+if (BUILD_EXAMPLES)
+  add_subdirectory(examples)
+endif (BUILD_EXAMPLES)
+if (BUILD_TESTING)
+  add_subdirectory(tests)
+endif (BUILD_TESTING)
 add_subdirectory(tools)
 
 install (DIRECTORY examples/
          DESTINATION "${PROTON_SHARE}/examples/c"
          USE_SOURCE_PERMISSIONS
-         PATTERN ProtonConfig.cmake EXCLUDE)
+         PATTERN "ProtonConfig.cmake" EXCLUDE
+         PATTERN "testme" EXCLUDE)

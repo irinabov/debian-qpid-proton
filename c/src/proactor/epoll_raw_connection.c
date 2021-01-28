@@ -85,7 +85,7 @@ static void praw_connection_connected_lh(praw_connection_t *prc) {
 
 /* multi-address connections may call pconnection_start multiple times with diffferent FDs  */
 static void praw_connection_start(praw_connection_t *prc, int fd) {
-  int efd = prc->psocket.proactor->epollfd;
+  int efd = prc->context.proactor->epollfd;
 
   /* Get the local socket name now, get the peer name in pconnection_connected */
   socklen_t len = sizeof(prc->local.ss);
@@ -95,7 +95,7 @@ static void praw_connection_start(praw_connection_t *prc, int fd) {
   if (ee->polling) {     /* This is not the first attempt, stop polling and close the old FD */
     int fd = ee->fd;     /* Save fd, it will be set to -1 by stop_polling */
     stop_polling(ee, efd);
-    pclosefd(prc->psocket.proactor, fd);
+    pclosefd(prc->context.proactor, fd);
   }
   ee->fd = fd;
   ee->wanted = EPOLLIN | EPOLLOUT;
@@ -140,7 +140,7 @@ static pn_event_t * pni_raw_batch_next(pn_event_batch_t *batch);
 
 static void praw_connection_init(praw_connection_t *prc, pn_proactor_t *p, pn_raw_connection_t *rc) {
   pcontext_init(&prc->context, RAW_CONNECTION, p);
-  psocket_init(&prc->psocket, p, RAW_CONNECTION_IO);
+  psocket_init(&prc->psocket, RAW_CONNECTION_IO);
 
   prc->connected = false;
   prc->disconnected = false;
@@ -152,14 +152,15 @@ static void praw_connection_init(praw_connection_t *prc, pn_proactor_t *p, pn_ra
 
 static void praw_connection_cleanup(praw_connection_t *prc) {
   int fd = prc->psocket.epoll_io.fd;
-  stop_polling(&prc->psocket.epoll_io, prc->psocket.proactor->epollfd);
+  stop_polling(&prc->psocket.epoll_io, prc->context.proactor->epollfd);
   if (fd != -1)
-    pclosefd(prc->psocket.proactor, fd);
+    pclosefd(prc->context.proactor, fd);
 
   lock(&prc->context.mutex);
   bool can_free = proactor_remove(&prc->context);
   unlock(&prc->context.mutex);
   if (can_free) {
+    pcontext_finalize(&prc->context);
     free(prc);
   }
   // else proactor_disconnect logic owns prc and its final free
@@ -172,9 +173,6 @@ pn_raw_connection_t *pn_raw_connection(void) {
   pni_raw_initialize(&conn->raw_connection);
 
   return &conn->raw_connection;
-}
-
-void pn_raw_connection_free(pn_raw_connection_t *conn) {
 }
 
 void pn_proactor_raw_connect(pn_proactor_t *p, pn_raw_connection_t *rc, const char *addr) {
@@ -270,19 +268,35 @@ const pn_netaddr_t *pn_raw_connection_remote_addr(pn_raw_connection_t *rc) {
 void pn_raw_connection_wake(pn_raw_connection_t *rc) {
   bool notify = false;
   praw_connection_t *prc = containerof(rc, praw_connection_t, raw_connection);
-  if (prc) {
-    lock(&prc->context.mutex);
-    if (!prc->context.closing) {
-      prc->waking = true;
-      notify = wake(&prc->context);
-    }
-    unlock(&prc->context.mutex);
+  lock(&prc->context.mutex);
+  if (!prc->context.closing) {
+    prc->waking = true;
+    notify = wake(&prc->context);
   }
+  unlock(&prc->context.mutex);
   if (notify) wake_notify(&prc->context);
 }
 
+void pn_raw_connection_close(pn_raw_connection_t *rc) {
+  praw_connection_t *prc = containerof(rc, praw_connection_t, raw_connection);
+  lock(&prc->context.mutex);
+  prc->context.closing = true;
+  unlock(&prc->context.mutex);
+  pni_raw_close(rc);
+}
+
 static pn_event_t *pni_raw_batch_next(pn_event_batch_t *batch) {
-  pn_raw_connection_t *raw = &containerof(batch, praw_connection_t, batch)->raw_connection;
+  praw_connection_t *rc = containerof(batch, praw_connection_t, batch);
+  pn_raw_connection_t *raw = &rc->raw_connection;
+
+  // Check wake status every event processed
+  bool waking = false;
+  lock(&rc->context.mutex);
+  waking = rc->waking;
+  rc->waking = false;
+  unlock(&rc->context.mutex);
+  if (waking) pni_raw_wake(raw);
+
   return pni_raw_event_next(raw);
 }
 
@@ -320,7 +334,7 @@ pn_event_batch_t *pni_raw_connection_process(pcontext_t *c, bool sched_wake) {
       praw_connection_maybe_connect_lh(rc);
     }
     if (rc->disconnected) {
-      pni_raw_disconnect(&rc->raw_connection);
+      pni_raw_connect_failed(&rc->raw_connection);
       return &rc->batch;
     }
     if (events & (EPOLLHUP | EPOLLERR)) {
@@ -332,9 +346,11 @@ pn_event_batch_t *pni_raw_connection_process(pcontext_t *c, bool sched_wake) {
   bool wake = false;
   lock(&c->mutex);
   c->working = true;
-  if (sched_wake) wake_done(c);
-  wake = sched_wake || rc->waking;
-  rc->waking = false;
+  if (sched_wake) {
+    wake_done(c);
+    wake = rc->waking;
+    rc->waking = false;
+  }
   unlock(&c->mutex);
 
   if (wake) pni_raw_wake(&rc->raw_connection);
@@ -345,11 +361,15 @@ pn_event_batch_t *pni_raw_connection_process(pcontext_t *c, bool sched_wake) {
 
 void pni_raw_connection_done(praw_connection_t *rc) {
   bool self_notify = false;
+  bool wake_pending = false;
   lock(&rc->context.mutex);
   pn_proactor_t *p = rc->context.proactor;
   tslot_t *ts = rc->context.runner;
   rc->context.working = false;
   self_notify = rc->waking && wake(&rc->context);
+  // There could be a scheduler wake pending even if we've got no raw connection
+  // wakes outstanding because we dealt with it already in pni_raw_batch_next()
+  wake_pending = rc->context.wake_pending;
   unlock(&rc->context.mutex);
   if (self_notify) wake_notify(&rc->context);
 
@@ -361,7 +381,7 @@ void pni_raw_connection_done(praw_connection_t *rc) {
     rc->psocket.epoll_io.wanted = wanted;
     rearm_polling(&rc->psocket.epoll_io, p->epollfd);  // TODO: check for error
   } else {
-    bool finished_disconnect = raw->rclosed && raw->wclosed && !raw->disconnectpending;
+    bool finished_disconnect = raw->rclosed && raw->wclosed && !wake_pending && !raw->disconnectpending;
     if (finished_disconnect) {
       // If we're closed and we've sent the disconnect then close
       pni_raw_finalize(raw);
