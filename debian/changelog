@@ -1,3 +1,9 @@
+qpid-proton (0.33.0-1focal+qpid1) focal; urgency=medium
+
+  * Rebased to 0.33.0
+
+ -- Kim van der Riet <kvanderr@redhat.com>  Thu,  28 Jan 2021 15:04:00 -0400
+
 qpid-proton (0.32.0-1focal+qpid1) focal; urgency=medium
   
   * Rebased to 0.32.0
