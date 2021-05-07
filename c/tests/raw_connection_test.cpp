@@ -63,7 +63,11 @@ namespace {
   size_t max_send_size = 0;
   size_t max_recv_size = 0;
 
-#ifdef MSG_DONTWAIT
+#if defined(MSG_DONTWAIT) && defined(MSG_NOSIGNAL) && defined(__linux__)
+  // This version uses socketpairs and only gets run on Linux
+  // It seems that some versions of macOSX define both symbols but don't
+  // implement them fully.
+
   long rcv(int fd, void* b, size_t s) {
     read_err = 0;
     if (max_recv_size && max_recv_size < s) s = max_recv_size;
@@ -83,7 +87,6 @@ namespace {
       ::shutdown(fd, SHUT_WR);
   }
 
-#ifdef MSG_NOSIGNAL
   long snd(int fd, const void* b, size_t s) {
     write_err = 0;
     if (max_send_size && max_send_size < s) s = max_send_size;
@@ -93,27 +96,9 @@ namespace {
   int makepair(int fds[2]) {
     return ::socketpair(AF_LOCAL, SOCK_STREAM, PF_UNSPEC, fds);
   }
-#elif defined(SO_NOSIGPIPE)
-  long snd(int fd, const void* b, size_t s) {
-    write_err = 0;
-    if (max_send_size && max_send_size < s) s = max_send_size;
-    return ::send(fd, b, s, MSG_DONTWAIT);
-  }
-
-  int makepair(int fds[2]) {
-    int rc = ::socketpair(AF_LOCAL, SOCK_STREAM, PF_UNSPEC, fds);
-    if (rc == 0) {
-      int optval = 1;
-      ::setsockopt(fds[0], SOL_SOCKET, SO_NOSIGPIPE, &optval, sizeof(optval));
-      ::setsockopt(fds[1], SOL_SOCKET, SO_NOSIGPIPE, &optval, sizeof(optval));
-    }
-    return rc;
-  }
-#endif
 #else
   // Simple mock up of the read/write functions of a socketpair for testing
-  // systems without socketpairs (Windows really)
-  // TODO: perhaps this should used everywhere
+  // systems without socketpairs or MSG_NOSIGNAL/MSG_DONTWAIT (Windows/BSDs)
   static const uint16_t buffsize = 4096;
   struct fbuf {
     uint8_t buff[buffsize*2] = {};
@@ -545,7 +530,7 @@ TEST_CASE("raw connection") {
       // No need buffers event as we already gave buffers
       REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_EVENT_NONE);
 
-      pni_raw_close(p);
+      pni_raw_write_close(p);
 
       size_t rgiven = pn_raw_connection_take_read_buffers(p, &read[0], rtaken);
       REQUIRE(pni_raw_validate(p));
@@ -554,20 +539,37 @@ TEST_CASE("raw connection") {
       REQUIRE(pni_raw_validate(p));
       CHECK(wgiven==0);
 
-      REQUIRE(pn_raw_connection_is_read_closed(p));
       REQUIRE(pn_raw_connection_is_write_closed(p));
 
-      REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_CLOSED_READ);
-      REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_EVENT_NONE);
-
-      REQUIRE_FALSE(pni_raw_can_read(p));
       REQUIRE(pni_raw_can_write(p));
       pni_raw_write(p, fds[0], snd, set_write_error);
       REQUIRE(pni_raw_validate(p));
       CHECK(write_err == 0);
 
+      REQUIRE_FALSE(pni_raw_can_write(p));
+
+      REQUIRE(pni_raw_can_read(p));
+      pni_raw_read(p, fds[0], rcv, set_read_error);
+      REQUIRE(pni_raw_validate(p));
+      CHECK(read_err == 0);
+
       REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_WRITTEN);
+
+      SECTION("Read close after write close") {
+        pni_raw_read_close(p);
+      }
+
+      SECTION("Full close after write close") {
+        // We should be able to fully close here (even if we read close would be more specific)
+        pni_raw_close(p);
+      }
+
+      REQUIRE(pn_raw_connection_is_read_closed(p));
+      REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_CLOSED_READ);
+
+      REQUIRE_FALSE(pni_raw_can_read(p));
       REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_CLOSED_WRITE);
+      REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_DRAIN_BUFFERS);
       REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_READ);
       rgiven = pn_raw_connection_take_read_buffers(p, &read[0], rtaken);
       REQUIRE(pni_raw_validate(p));
@@ -576,6 +578,10 @@ TEST_CASE("raw connection") {
       wgiven = pn_raw_connection_take_written_buffers(p, &written[0], wtaken);
       REQUIRE(pni_raw_validate(p));
       CHECK(wgiven==wtaken);
+
+      // This should have no affect because we are already read and write closed
+      pni_raw_close(p);
+
       REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_DISCONNECTED);
       REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_EVENT_NONE);
 
@@ -628,9 +634,35 @@ TEST_CASE("raw connection") {
         REQUIRE(pni_raw_validate(p));
         CHECK(pn_raw_connection_is_write_closed(p));
         REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_CLOSED_WRITE);
-        REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_READ);
-        REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_WRITTEN);
+        // TODO: Remove  the inapplicable tests when the drain buffers completely replaces read/written
+        SECTION("Ensure get read/written events before disconnect if not drained") {
+          REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_DRAIN_BUFFERS);
+          REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_READ);
+          REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_WRITTEN);
+        }
+        SECTION("Ensure no read/written events before disconnect if drained") {
+          REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_DRAIN_BUFFERS);
+          while(pn_raw_connection_take_read_buffers(p, &read[0], read.size())>0);
+          while(pn_raw_connection_take_written_buffers(p, &written[0], written.size())>0);
+        }
+        SECTION("Ensure no written events before disconnect if write drained") {
+          REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_DRAIN_BUFFERS);
+          REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_READ);
+          while(pn_raw_connection_take_read_buffers(p, &read[0], read.size())>0);
+          while(pn_raw_connection_take_written_buffers(p, &written[0], written.size())>0);
+        }
+        SECTION("Ensure no read events before disconnect if read drained") {
+          REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_DRAIN_BUFFERS);
+          while(pn_raw_connection_take_read_buffers(p, &read[0], read.size())>0);
+          REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_WRITTEN);
+          while(pn_raw_connection_take_written_buffers(p, &written[0], written.size())>0);
+        }
+        SECTION("Ensure no events before disconnect if already drained") {
+          while(pn_raw_connection_take_read_buffers(p, &read[0], read.size())>0);
+          while(pn_raw_connection_take_written_buffers(p, &written[0], written.size())>0);
+        }
         REQUIRE(pn_event_type(pni_raw_event_next(p)) == PN_RAW_CONNECTION_DISCONNECTED);
+
       }
 
       SECTION("Read/Write interleaved") {
@@ -785,7 +817,6 @@ TEST_CASE("raw connection") {
         REQUIRE(pni_raw_validate(p));
         CHECK(rgiven > 0);
 
-        CHECK(pn_raw_connection_read_buffers_capacity(p) == rgiven);
         CHECK(read[rgiven-1].size == 0);
 
         // At this point we should have read everything - make sure it matches

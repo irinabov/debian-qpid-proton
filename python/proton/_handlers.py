@@ -160,6 +160,7 @@ class Acking(object):
     """
     A class containing methods for handling received messages.
     """
+
     def accept(self, delivery):
         """
         Accepts a received message.
@@ -234,8 +235,8 @@ class IncomingMessageHandler(Handler, Acking):
     events related to incoming i.e. received messages.
 
     :type auto_accept: ``bool``
-    :param auto_settle: If ``True``, settle all messages (default). Otherwise
-        messages must be explicitly settled.
+    :param auto_accept: If ``True``, accept all messages (default). Otherwise
+        messages must be individually accepted or rejected.
     :param delegate: A client handler for the endpoint event
     """
 
@@ -245,7 +246,8 @@ class IncomingMessageHandler(Handler, Acking):
 
     def on_delivery(self, event):
         dlv = event.delivery
-        if not dlv.link.is_receiver: return
+        if not dlv.link.is_receiver:
+            return
         if dlv.aborted:
             self.on_aborted(event)
             dlv.settle()
@@ -322,8 +324,8 @@ class EndpointStateHandler(Handler):
 
     :param peer_close_is_error: If ``True``, a peer endpoint closing will be
         treated as an error with an error callback. Otherwise (default), the
-        normal callbacks for the closing will occur. 
-    :type peer_close_is_error:  ``bool`` 
+        normal callbacks for the closing will occur.
+    :type peer_close_is_error:  ``bool``
     :param delegate: A client handler for the endpoint event
     """
 
@@ -704,16 +706,16 @@ class MessagingHandler(Handler, Acking):
 
     :param prefetch: Initial flow credit for receiving messages, defaults to 10.
     :type prefetch: ``int``
-    :param auto_accept: If ``True``, accept all messages (default). Otherwise messages
-        must be individually accepted or rejected.
+    :param auto_accept: If ``True``, accept all messages (default). Otherwise
+        messages must be individually accepted or rejected.
     :type auto_accept: ``bool``
     :param auto_settle: If ``True``, settle all messages (default). Otherwise
         messages must be explicitly settled.
     :type auto_settle: ``bool``
     :param peer_close_is_error: If ``True``, a peer endpoint closing will be
         treated as an error with an error callback. Otherwise (default), the
-        normal callbacks for the closing will occur. 
-    :type peer_close_is_error:  ``bool``  
+        normal callbacks for the closing will occur.
+    :type peer_close_is_error:  ``bool``
     """
 
     def __init__(self, prefetch=10, auto_accept=True, auto_settle=True, peer_close_is_error=False):
@@ -993,7 +995,7 @@ class TransactionHandler(object):
 
     def on_transaction_commit_failed(self, event):
         """
-        Called when the commit of a local transaction fails. 
+        Called when the commit of a local transaction fails.
 
         :param event: The underlying event object. Use this to obtain further
             information on the event.
@@ -1020,8 +1022,8 @@ class TransactionalClientHandler(MessagingHandler, TransactionHandler):
     :type auto_settle: ``bool``
     :param peer_close_is_error: If ``True``, a peer endpoint closing will be
         treated as an error with an error callback. Otherwise (default), the
-        normal callbacks for the closing will occur. 
-    :type peer_close_is_error:  ``bool`` 
+        normal callbacks for the closing will occur.
+    :type peer_close_is_error:  ``bool``
     """
 
     def __init__(self, prefetch=10, auto_accept=False, auto_settle=True, peer_close_is_error=False):
@@ -1142,7 +1144,8 @@ class PythonIO:
         reactor = event.reactor
         # check if we are still quiesced, other handlers of
         # on_reactor_quiesced could have produced events to process
-        if not reactor.quiesced: return
+        if not reactor.quiesced:
+            return
 
         reading = []
         writing = []
@@ -1162,7 +1165,8 @@ class PythonIO:
             timeout = deadline - time.time()
         else:
             timeout = reactor.timeout
-        if timeout < 0: timeout = 0
+        if timeout < 0:
+            timeout = 0
         timeout = min(timeout, reactor.timeout)
         readable, writable, _ = IO.select(reading, writing, [], timeout)
 
@@ -1346,7 +1350,7 @@ class IOHandler(Handler):
     def update(transport, selectable, now):
         try:
             capacity = transport.capacity()
-            selectable.reading = capacity>0
+            selectable.reading = capacity > 0
         except:
             if transport.closed:
                 selectable.terminate()
@@ -1354,7 +1358,7 @@ class IOHandler(Handler):
                 transport._selectable = None
         try:
             pending = transport.pending()
-            selectable.writing = pending>0
+            selectable.writing = pending > 0
         except:
             if transport.closed:
                 selectable.terminate()

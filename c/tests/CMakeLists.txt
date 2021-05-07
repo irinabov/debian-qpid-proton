@@ -58,6 +58,8 @@ if (CMAKE_CXX_COMPILER)
   add_c_test(c-core-test
     pn_test_test.cpp
     object_test.cpp
+    event_test.cpp
+    message_test.cpp
     condition_test.cpp
     connection_driver_test.cpp
     data_test.cpp
@@ -114,7 +116,7 @@ if (CMAKE_CXX_COMPILER)
       PREPEND_ENVIRONMENT "PATH=${path}" "PYTHONPATH=${pypath}" "${test_env}"
       APPEND_ENVIRONMENT "TEST_EXE_PREFIX="
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fdlimit.py)
+      COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fdlimit.py)
   endif(HAS_PROACTOR)
 else (CMAKE_CXX_COMPILER)
   message(WARNING "No C++ compiler, some C library tests were not built")

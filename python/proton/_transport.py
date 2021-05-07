@@ -74,13 +74,11 @@ class Transport(Wrapper):
     TRACE_RAW = PN_TRACE_RAW
     """ Log raw binary data going in and out of the transport. """
 
-
     CLIENT = 1
     """ Transport mode is as a client. """
 
     SERVER = 2
     """ Transport mode is as a server. """
-
 
     @staticmethod
     def wrap(impl):
@@ -131,7 +129,7 @@ class Transport(Wrapper):
     def log(self, message):
         """
         Log a message using a transport's logging mechanism.
-        
+
         This can be useful in a debugging context as the log message will
         be prefixed with the transport's identifier.
 
@@ -201,7 +199,7 @@ class Transport(Wrapper):
     def user(self):
         """
         The authenticated user.
- 
+
         On the client it will return whatever user was passed in to the
         :attr:`Connection.user` attribute of the bound connection.
 
@@ -279,7 +277,7 @@ class Transport(Wrapper):
         """
         Get the amount of free space for input following the transport's
         tail pointer.
-        
+
         :return: Available space for input in bytes.
         :rtype: ``int``
         :raise: :exc:`TransportException` if there is any Proton error.
@@ -639,7 +637,7 @@ class SASL(Wrapper):
 
         The returned value is only reliable after the ``PN_TRANSPORT_AUTHENTICATED``
         event has been received.
-        
+
         :rtype: The authentication mechanism selected by the SASL layer.
         """
         return pn_sasl_get_mech(self._sasl)
@@ -648,7 +646,7 @@ class SASL(Wrapper):
     def outcome(self):
         """
         Retrieve the outcome of SASL negotiation.
-        
+
         :rtype: * ``None`` if no negotiation has taken place.
                 * Otherwise the outcome of the negotiation.
         """
@@ -759,7 +757,6 @@ class SSLDomain(object):
     ANONYMOUS_PEER = PN_SSL_ANONYMOUS_PEER
     """Do not require a certificate nor cipher authorization."""
 
-
     def __init__(self, mode):
         self._domain = pn_ssl_domain(mode)
         if self._domain is None:
@@ -849,7 +846,7 @@ class SSLDomain(object):
             previous setting.
 
         :param verify_mode: The level of validation to apply to the peer, one of :const:`VERIFY_PEER`,
-                            :const:`VERIFY_PEER_NAME`, :const:`ANONYMOUS_PEER`, 
+                            :const:`VERIFY_PEER_NAME`, :const:`ANONYMOUS_PEER`,
         :type verify_mode: ``int``
         :param trusted_CAs: Path to a database of trusted CAs that the server will advertise.
         :type trusted_CAs: ``str``
@@ -880,7 +877,7 @@ class SSLDomain(object):
 class SSL(object):
     """
     An SSL session associated with a transport. A transport must have
-    an SSL object in order to "speak" SSL over its connection.   
+    an SSL object in order to "speak" SSL over its connection.
     """
 
     @staticmethod
@@ -998,11 +995,11 @@ class SSL(object):
         usually contains the following values:
 
             * :const:`CERT_COUNTRY_NAME`
-            * :const:`CERT_STATE_OR_PROVINCE` 
+            * :const:`CERT_STATE_OR_PROVINCE`
             * :const:`CERT_CITY_OR_LOCALITY`
             * :const:`CERT_ORGANIZATION_NAME`
             * :const:`CERT_ORGANIZATION_UNIT`
-            * :const:`CERT_COMMON_NAME` 
+            * :const:`CERT_COMMON_NAME`
 
         :param subfield_name: The enumeration representing the required
                               sub field listed above
@@ -1033,7 +1030,7 @@ class SSL(object):
         """
         A convenience method to get a string that contains the :const:`CERT_COMMON_NAME`
         sub field of the subject field in the ssl certificate.
-        
+
         :return: A string containing the :const:`CERT_COMMON_NAME` sub field.
         :rtype: ``str``
         """
@@ -1043,7 +1040,7 @@ class SSL(object):
         """
         A convenience method to get a string that contains the :const:`CERT_ORGANIZATION_NAME`
         sub field of the subject field in the ssl certificate.
-        
+
         :return: A string containing the :const:`CERT_ORGANIZATION_NAME` sub field.
         :rtype: ``str``
         """
@@ -1053,7 +1050,7 @@ class SSL(object):
         """
         A convenience method to get a string that contains the :const:`CERT_ORGANIZATION_UNIT`
         sub field of the subject field in the ssl certificate.
-        
+
         :return: A string containing the :const:`CERT_ORGANIZATION_UNIT` sub field.
         :rtype: ``str``
         """
@@ -1063,7 +1060,7 @@ class SSL(object):
         """
         A convenience method to get a string that contains the :const:`CERT_CITY_OR_LOCALITY`
         sub field of the subject field in the ssl certificate.
-        
+
         :return: A string containing the :const:`CERT_CITY_OR_LOCALITY` sub field.
         :rtype: ``str``
         """
@@ -1073,7 +1070,7 @@ class SSL(object):
         """
         A convenience method to get a string that contains the :const:`CERT_COUNTRY_NAME`
         sub field of the subject field in the ssl certificate.
-        
+
         :return: A string containing the :const:`CERT_COUNTRY_NAME` sub field.
         :rtype: ``str``
         """
@@ -1083,7 +1080,7 @@ class SSL(object):
         """
         A convenience method to get a string that contains the :const:`CERT_STATE_OR_PROVINCE`
         sub field of the subject field in the ssl certificate.
-        
+
         :return: A string containing the :const:`CERT_STATE_OR_PROVINCE` sub field.
         :rtype: ``str``
         """
@@ -1121,7 +1118,7 @@ class SSL(object):
         """
         A convenience method to get the :const:`SHA1` fingerprint of the
         certificate.
-        
+
         :return: Hex fingerprint in a string, or ``None`` if an error occurred.
         :rtype: ``str`` or ``None``
         """
@@ -1131,7 +1128,7 @@ class SSL(object):
         """
         A convenience method to get the :const:`SHA256` fingerprint of the
         certificate.
-        
+
         :return: Hex fingerprint in a string, or ``None`` if an error occurred.
         :rtype: ``str`` or ``None``
         """
@@ -1142,7 +1139,7 @@ class SSL(object):
         """
         A convenience method to get the :const:`SHA512` fingerprint of the
         certificate.
-        
+
         :return: Hex fingerprint in a string, or ``None`` if an error occurred.
         :rtype: ``str`` or ``None``
         """
@@ -1153,7 +1150,7 @@ class SSL(object):
         """
         A convenience method to get the :const:`MD5` fingerprint of the
         certificate.
-        
+
         :return: Hex fingerprint in a string, or ``None`` if an error occurred.
         :rtype: ``str`` or ``None``
         """
@@ -1210,7 +1207,7 @@ class SSL(object):
         Manage the expected name of the remote peer.
 
         The hostname is used for two purposes:
-        
+
             1. when set on an SSL client, it is sent to the server during the
                handshake (if Server Name Indication is supported)
             2. it is used to check against the identifying name provided in the
@@ -1218,7 +1215,7 @@ class SSL(object):
                SubjectAltName (type DNS name), or the CommonName entry in the
                peer's certificate, the peer is considered unauthenticated
                (potential imposter), and the SSL connection is aborted.
- 
+
         .. note:: Verification of the hostname is only done if
             :const:`SSLDomain.VERIFY_PEER_NAME` is set using
             :meth:`SSLDomain.set_peer_authentication`.
@@ -1239,7 +1236,7 @@ class SSLSessionDetails(object):
     def get_session_id(self):
         """
         Get the unique identifier for this SSL session
-        
+
         :return: Session identifier
         :rtype: ``str``
         """

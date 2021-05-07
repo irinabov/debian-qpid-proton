@@ -23,9 +23,9 @@ from __future__ import print_function
 import os
 import subprocess
 import time
+import unittest
 
 import test_subprocess
-from test_unittest import unittest
 
 # Check if we can run prlimit to control resources
 try:
@@ -51,8 +51,7 @@ class FdLimitTest(unittest.TestCase):
         if cls.devnull:
             cls.devnull.close()
 
-    # @unittest.skipUnless(prlimit_available, "prlimit not available")
-    @unittest.skip("temporarily disabled (epoll fix pending)")
+    @unittest.skipUnless(prlimit_available, "prlimit not available")
     def test_fd_limit_broker(self):
         """Check behaviour when running out of file descriptors on accept"""
         # Not too many FDs but not too few either, some are used for system purposes.
@@ -64,28 +63,33 @@ class FdLimitTest(unittest.TestCase):
             # NOTE: broker does not log a file descriptor related error at any point in the test, only
             #  PN_TRANSPORT_CLOSED: amqp:connection:framing-error: connection aborted
             #  PN_TRANSPORT_CLOSED: proton:io: Connection reset by peer - disconnected :5672 (connection aborted)
-            for i in range(fdlimit + 1):
-                receiver = test_subprocess.Popen(["receive", "", b.port, str(i)], stdout=self.devnull)
+            for i in range(fdlimit):
+                receiver = subprocess.Popen(["receive", "", b.port, str(i)], stdout=self.devnull, stderr=subprocess.STDOUT)
                 receivers.append(receiver)
+            # Allow these subprocesses time to establish ahead of the upcoming test sender.
+            time.sleep(1)
 
-            # All FDs are now in use, send attempt will (with present implementation) hang
-            with test_subprocess.Popen(["send", "", b.port, "x"],
-                                       stdout=self.devnull, stderr=subprocess.STDOUT) as sender:
-                time.sleep(1)  # polling for None immediately would always succeed, regardless whether send hangs or not
-                self.assertIsNone(sender.poll())
+            # All FDs are now in use, new send should not succeed.  May fail by hanging (epoll) or by
+            # immediate failure (libuv). But poll() should never be 0.
+            sender = subprocess.Popen(["send", "", b.port, "x"],
+                                       stdout=self.devnull, stderr=subprocess.STDOUT)
+            time.sleep(1)  # polling for None immediately would always succeed, regardless whether send hangs or not
+            self.assertNotEqual(sender.poll(), 0)
 
-                # Kill receivers to free up FDs
-                for r in receivers:
-                    r.kill()
-                for r in receivers:
-                    r.wait()
+            # Kill receivers to free up FDs
+            for r in receivers:
+                r.kill()
+            for r in receivers:
+                r.wait()
 
-                # Sender now succeeded and exited
-                self.assertEqual(sender.wait(), 0)
+            # Sender completes on its own
+            sender.wait()
 
             # Additional send/receive should succeed now
-            self.assertIn("10 messages sent", test_subprocess.check_output(["send", "", b.port], universal_newlines=True))
-            self.assertIn("10 messages received", test_subprocess.check_output(["receive", "", b.port], universal_newlines=True))
+            self.assertIn("10 messages sent", test_subprocess.check_output(
+                ["send", "", b.port], universal_newlines=True))
+            self.assertIn("10 messages received", test_subprocess.check_output(
+                ["receive", "", b.port], universal_newlines=True))
 
 
 if __name__ == "__main__":

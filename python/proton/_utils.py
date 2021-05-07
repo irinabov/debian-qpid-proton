@@ -90,6 +90,7 @@ class BlockingSender(BlockingLink):
     A synchronous sender wrapper. This is typically created by calling
     :meth:`BlockingConnection.create_sender`.
     """
+
     def __init__(self, connection, sender):
         super(BlockingSender, self).__init__(connection, sender)
         if self.link.target and self.link.target.address and self.link.target.address != self.link.remote_target.address:
@@ -137,6 +138,7 @@ class Fetcher(MessagingHandler):
     :param prefetch:
     :type prefetch:
     """
+
     def __init__(self, connection, prefetch):
         super(Fetcher, self).__init__(prefetch=prefetch, auto_accept=False)
         self.connection = connection
@@ -198,6 +200,7 @@ class BlockingReceiver(BlockingLink):
     A synchronous receiver wrapper. This is typically created by calling
     :meth:`BlockingConnection.create_receiver`.
     """
+
     def __init__(self, connection, receiver, fetcher, credit=1):
         super(BlockingReceiver, self).__init__(connection, receiver)
         if self.link.source and self.link.source.address and self.link.source.address != self.link.remote_source.address:
@@ -206,7 +209,8 @@ class BlockingReceiver(BlockingLink):
             # ...but close ourselves if peer does not
             self.link.close()
             raise LinkException("Failed to open receiver %s, source does not match" % self.link.name)
-        if credit: receiver.flow(credit)
+        if credit:
+            receiver.flow(credit)
         self.fetcher = fetcher
         self.container = connection.container
 
@@ -287,6 +291,7 @@ class LinkDetached(LinkException):
     :param link: The link which closed unexpectedly.
     :type link: :class:`proton.Link`
     """
+
     def __init__(self, link):
         self.link = link
         if link.is_sender:
@@ -310,6 +315,7 @@ class ConnectionClosed(ConnectionException):
     :param connection: The connection which closed unexpectedly.
     :type connection: :class:`proton.Connection`
     """
+
     def __init__(self, connection):
         self.connection = connection
         txt = "Connection %s closed" % connection.hostname
@@ -331,33 +337,39 @@ class BlockingConnection(Handler):
     object operations are enclosed in a try block and that close() is
     always executed on exit.
 
-    :param url: Connection URL
-    :type url: :class:`proton.Url` or ``str``
+    :param url: The connection URL.
+    :type url: ``str``
     :param timeout: Connection timeout in seconds. If ``None``, defaults to 60 seconds.
     :type timeout: ``None`` or float
     :param container: Container to process the events on the connection. If ``None``,
         a new :class:`proton.Container` will be created.
-    :param ssl_domain: 
+    :param ssl_domain:
     :param heartbeat: A value in seconds indicating the desired frequency of
         heartbeats used to test the underlying socket is alive.
     :type heartbeat: ``float``
+    :param urls: A list of connection URLs to try to connect to.
+    :type urls: ``list``[``str``]
     :param kwargs: Container keyword arguments. See :class:`proton.reactor.Container`
         for a list of the valid kwargs.
     """
 
-    def __init__(self, url, timeout=None, container=None, ssl_domain=None, heartbeat=None, **kwargs):
+    def __init__(self, url=None, timeout=None, container=None, ssl_domain=None, heartbeat=None, urls=None,
+                 reconnect=None, **kwargs):
         self.disconnected = False
         self.timeout = timeout or 60
         self.container = container or Container()
         self.container.timeout = self.timeout
         self.container.start()
-        self.url = Url(url).defaults()
         self.conn = None
         self.closing = False
+        # Preserve previous behaviour if neither reconnect nor urls are supplied
+        if url is not None and urls is None and reconnect is None:
+            reconnect = False
+            url = Url(url).defaults()
         failed = True
         try:
-            self.conn = self.container.connect(url=self.url, handler=self, ssl_domain=ssl_domain, reconnect=False,
-                                               heartbeat=heartbeat, **kwargs)
+            self.conn = self.container.connect(url=url, handler=self, ssl_domain=ssl_domain, reconnect=reconnect,
+                                               heartbeat=heartbeat, urls=urls, **kwargs)
             self.wait(lambda: not (self.conn.state & Endpoint.REMOTE_UNINIT),
                       msg="Opening connection")
             failed = False
@@ -428,14 +440,27 @@ class BlockingConnection(Handler):
                 self.conn.close()
                 self.wait(lambda: not (self.conn.state & Endpoint.REMOTE_ACTIVE),
                           msg="Closing connection")
+                if self.conn.transport:
+                    # Close tail to force transport cleanup without waiting/hanging for peer close frame.
+                    self.conn.transport.close_tail()
         finally:
             self.conn.free()
             # Nothing left to block on.  Allow reactor to clean up.
             self.run()
-            self.conn = None
-            self.container.global_handler = None  # break circular ref: container to cadapter.on_error
+            if self.conn:
+                self.conn.handler = None  # break cyclical reference
+                self.conn = None
             self.container.stop_events()
             self.container = None
+
+    @property
+    def url(self):
+        """
+        The address for this connection.
+
+        :type: ``str``
+        """
+        return self.conn and self.conn.connected_address
 
     def _is_closed(self):
         return self.conn.state & (Endpoint.LOCAL_CLOSED | Endpoint.REMOTE_CLOSED)
@@ -444,7 +469,8 @@ class BlockingConnection(Handler):
         """
         Hand control over to the event loop (e.g. if waiting indefinitely for incoming messages)
         """
-        while self.container.process(): pass
+        while self.container.process():
+            pass
         self.container.stop()
         self.container.process()
 
@@ -475,13 +501,11 @@ class BlockingConnection(Handler):
                     self.container.process()
                     if deadline < time.time():
                         txt = "Connection %s timed out" % self.url
-                        if msg: txt += ": " + msg
+                        if msg:
+                            txt += ": " + msg
                         raise Timeout(txt)
             finally:
                 self.container.timeout = container_timeout
-        if self.disconnected or self._is_closed():
-            self.container.stop()
-            self.conn.handler = None  # break cyclical reference
         if self.disconnected and not self._is_closed():
             raise ConnectionException(
                 "Connection %s disconnected: %s" % (self.url, self.disconnected))
@@ -511,7 +535,8 @@ class BlockingConnection(Handler):
         self.on_transport_closed(event)
 
     def on_transport_closed(self, event):
-        self.disconnected = event.transport.condition or "unknown"
+        if not self.closing:
+            self.disconnected = event.transport.condition or "unknown"
 
 
 class AtomicCount(object):
@@ -523,7 +548,7 @@ class AtomicCount(object):
     def next(self):
         """Get the next value"""
         self.lock.acquire()
-        self.count += self.step;
+        self.count += self.step
         result = self.count
         self.lock.release()
         return result
