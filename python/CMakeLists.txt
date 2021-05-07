@@ -125,7 +125,7 @@ else ()
         COMMAND ${PN_ENV_SCRIPT} --
         PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_CURRENT_SOURCE_DIR}
         LD_LIBRARY_PATH="${CMAKE_CURRENT_BINARY_DIR}/c"
-        ${Python_EXECUTABLE} -m sphinx "${CMAKE_CURRENT_SOURCE_DIR}/docs" "${CMAKE_CURRENT_BINARY_DIR}/docs")
+        sphinx-build "${CMAKE_CURRENT_SOURCE_DIR}/docs" "${CMAKE_CURRENT_BINARY_DIR}/docs")
     add_dependencies(docs docs-py)
     install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/docs/"
             DESTINATION "${PROTON_SHARE}/docs/api-py"

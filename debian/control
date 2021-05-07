@@ -146,7 +146,7 @@ Replaces: libqpid-proton-proactor-dev
 Conflicts: libqpid-proton-proactor-dev
 Architecture: any
 Section: libdevel
-Depends: libqpid-proton11-dev (>= ${binary:Version}), libqpid-proton-proactor1 (= ${binary:Version}), ${misc:Depends}
+Depends: libqpid-proton-core10-dev (>= ${binary:Version}), libqpid-proton-proactor1 (= ${binary:Version}), ${misc:Depends}
 Multi-Arch: same
 Description: C proactor development library for writing messaging apps with Qpid Proton
  Qpid Proton is a high-performance, lightweight messaging library. It can be
