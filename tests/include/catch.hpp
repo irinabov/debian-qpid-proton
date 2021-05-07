@@ -1,6 +1,6 @@
 /*
- *  Catch v1.12.1
- *  Generated: 2018-03-02 21:17:41.036711
+ *  Catch v1.12.2
+ *  Generated: 2018-05-14 15:10:01.112442
  *  ----------------------------------------------------------
  *  This file has been merged from multiple headers. Please don't edit it directly
  *  Copyright (c) 2012 Two Blue Cubes Ltd. All rights reserved.
@@ -6540,7 +6540,7 @@ namespace Catch {
         static bool isSet;
         static struct sigaction oldSigActions [sizeof(signalDefs)/sizeof(SignalDefs)];
         static stack_t oldSigStack;
-        static char altStackMem[SIGSTKSZ];
+        static char altStackMem[32768];
 
         static void handleSignal( int sig ) {
             std::string name = "<unknown signal>";
@@ -6560,7 +6560,7 @@ namespace Catch {
             isSet = true;
             stack_t sigStack;
             sigStack.ss_sp = altStackMem;
-            sigStack.ss_size = SIGSTKSZ;
+            sigStack.ss_size = 32768;
             sigStack.ss_flags = 0;
             sigaltstack(&sigStack, &oldSigStack);
             struct sigaction sa = { 0 };
@@ -6591,7 +6591,7 @@ namespace Catch {
     bool FatalConditionHandler::isSet = false;
     struct sigaction FatalConditionHandler::oldSigActions[sizeof(signalDefs)/sizeof(SignalDefs)] = {};
     stack_t FatalConditionHandler::oldSigStack = {};
-    char FatalConditionHandler::altStackMem[SIGSTKSZ] = {};
+    char FatalConditionHandler::altStackMem[32768] = {};
 
 } // namespace Catch
 
@@ -6599,6 +6599,7 @@ namespace Catch {
 
 #endif // not Windows
 
+#include <cassert>
 #include <set>
 #include <string>
 
@@ -8466,7 +8467,7 @@ namespace Catch {
     }
 
     inline Version libraryVersion() {
-        static Version version( 1, 12, 1, "", 0 );
+        static Version version( 1, 12, 2, "", 0 );
         return version;
     }
 
@@ -9170,6 +9171,8 @@ std::string toString( std::nullptr_t ) {
 
 // #included from: catch_result_builder.hpp
 #define TWOBLUECUBES_CATCH_RESULT_BUILDER_HPP_INCLUDED
+
+#include <cassert>
 
 namespace Catch {
 
@@ -10664,6 +10667,7 @@ namespace Catch {
 // #included from: ../reporters/catch_reporter_console.hpp
 #define TWOBLUECUBES_CATCH_REPORTER_CONSOLE_HPP_INCLUDED
 
+#include <cassert>
 #include <cfloat>
 #include <cstdio>
 

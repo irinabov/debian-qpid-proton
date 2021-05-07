@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -26,9 +26,8 @@ from proton.handlers import IncomingMessageHandler
 conn = BlockingConnection("localhost:5672")
 receiver = conn.create_receiver("examples")
 sender = conn.create_sender("examples")
-sender.send(Message(body="Hello World!"));
+sender.send(Message(body="Hello World!"))
 msg = receiver.receive(timeout=30)
 print(msg.body)
 receiver.accept()
 conn.close()
-

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -22,6 +22,7 @@ from __future__ import print_function
 from proton import Message
 from proton.reactor import Container
 from proton.handlers import MessagingHandler, TransactionHandler
+
 
 class TxRequest(TransactionHandler):
     def __init__(self, response, sender, request_delivery):
@@ -71,9 +72,8 @@ class TxServer(MessagingHandler):
         if event.connection.remote_offered_capabilities and 'ANONYMOUS-RELAY' in event.connection.remote_offered_capabilities:
             self.relay = self.container.create_sender(self.conn, None)
 
+
 try:
     Container(TxServer("localhost:5672", "examples")).run()
-except KeyboardInterrupt: pass
-
-
-
+except KeyboardInterrupt:
+    pass

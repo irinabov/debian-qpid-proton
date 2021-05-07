@@ -18,6 +18,8 @@
 #
 
 jobs:
+  allow_failures:
+  - os: osx
   include:
   - os: linux
     dist: xenial
@@ -68,14 +70,14 @@ jobs:
     os: linux
     dist: focal
     before_install:
-    - sudo apt-get install -y clang-10 llvm-10-dev
+    - sudo apt-get install -y clang-11 llvm-11-dev
     env:
-    - CC=clang-10
-    - CXX=clang++-10
+    - CC=clang-11
+    - CXX=clang++-11
     - PYTHON=python3
     - QPID_PROTON_CMAKE_ARGS='-DRUNTIME_CHECK=asan -DENABLE_TOX_TEST=OFF -DTHREADERCISER=ON'
     # otherwise, on Travis ldd gives `libclang_rt.asan-x86_64.so => not found` and binaries don't work
-    - LD_LIBRARY_PATH=/usr/lib/llvm-10/lib/clang/10.0.0/lib/linux/
+    - LD_LIBRARY_PATH=/usr/lib/llvm-11/lib/clang/11.0.0/lib/linux/
   - name: gcc tsan
     os: linux
     dist: focal
@@ -99,25 +101,25 @@ jobs:
     - bash <(curl -s https://codecov.io/bash)
 
   - os: osx
-    osx_image: xcode9.4
-    language: cpp
-    compiler: clang
-    env:
-    - PATH="/usr/local/opt/python/libexec/bin:/usr/local/bin:$PATH"
-    - PKG_CONFIG_PATH='/usr/local/opt/openssl@1.1/lib/pkgconfig'
-    - QPID_PROTON_CMAKE_ARGS='-DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 -DTHREADERCISER=ON'
-    # c-threaderciser test hangs on older clang
-    # python-tox-test segfaults and ruby tests do not start due to dynamic library issues
-    - QPID_PROTON_CTEST_ARGS="--exclude-regex 'c-threaderciser|python-tox-test|ruby.*'"
-
-  - os: osx
-    osx_image: xcode11.3
+    osx_image: xcode10.3
     language: cpp
     compiler: clang
     env:
     - PATH="/usr/local/opt/python/libexec/bin:/usr/local/bin:$PATH"
     - PKG_CONFIG_PATH='/usr/local/opt/openssl@1.1/lib/pkgconfig'
     - QPID_PROTON_CMAKE_ARGS='-DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DTHREADERCISER=ON'
+    # c-threaderciser test hangs on older clang
+    # python-tox-test segfaults and ruby tests do not start due to dynamic library issues
+    - QPID_PROTON_CTEST_ARGS="--exclude-regex 'c-threaderciser|python-tox-test|ruby.*'"
+
+  - os: osx
+    osx_image: xcode12.2
+    language: cpp
+    compiler: clang
+    env:
+    - PATH="/usr/local/opt/python/libexec/bin:/usr/local/bin:$PATH"
+    - PKG_CONFIG_PATH='/usr/local/opt/openssl@1.1/lib/pkgconfig'
+    - QPID_PROTON_CMAKE_ARGS='-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DTHREADERCISER=ON'
     # TODO PROTON-2225: c-threaderciser sometimes fails with assertion error
     # python-tox-test segfaults and ruby tests do not start due to dynamic library issues
     - QPID_PROTON_CTEST_ARGS="--exclude-regex 'c-threaderciser|python-tox-test|ruby.*'"
@@ -155,12 +157,12 @@ install:
 - ${PYTHON} -m pip install --user --upgrade pip
 - ${PYTHON} -m pip install --user coverage setuptools wheel tox virtualenv==20.0.23
 # PROTON-2125 suppress annoying deprecation warning from Minitest in Ruby tests
-- gem install minitest:4.3.2 simplecov codecov
+- gem install minitest:4.3.2 simplecov:0.18.0 codecov
 
 before_script:
 - mkdir build
 - cd build
-- cmake .. -DCMAKE_INSTALL_PREFIX=$PWD/install -DPYTHON_EXECUTABLE="$(which ${PYTHON})" ${QPID_PROTON_CMAKE_ARGS}
+- cmake .. -DCMAKE_INSTALL_PREFIX=$PWD/install -DPython_EXECUTABLE="$(which ${PYTHON})" ${QPID_PROTON_CMAKE_ARGS}
 
 script:
 # travis timeouts a job after 600 s elapses without any new output being printed; use 360 s here to preempt that

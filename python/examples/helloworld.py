@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -23,6 +23,7 @@ from proton import Message
 from proton.handlers import MessagingHandler
 from proton.reactor import Container
 
+
 class HelloWorld(MessagingHandler):
     def __init__(self, server, address):
         super(HelloWorld, self).__init__()
@@ -41,5 +42,6 @@ class HelloWorld(MessagingHandler):
     def on_message(self, event):
         print(event.message.body)
         event.connection.close()
+
 
 Container(HelloWorld("localhost:5672", "examples")).run()

@@ -16,7 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-cmake_minimum_required(VERSION 2.8.12)
 
 include(CMakeDependentOption)
 enable_language(CXX)
@@ -149,10 +148,6 @@ set(qpid-proton-cpp-source
   src/work_queue.cpp
   ${CONNECT_CONFIG_SRC}
   )
-
-if (MSVC)
-  set (CMAKE_DEBUG_POSTFIX "d")
-endif ()
 
 add_library(qpid-proton-cpp SHARED ${qpid-proton-cpp-source})
 if(BUILD_STATIC_LIBS)

@@ -34,7 +34,7 @@ from cproton import PN_DEFAULT_PRIORITY, PN_OVERFLOW, pn_error_text, pn_message,
 
 from . import _compat
 from ._common import isinteger, millis2secs, secs2millis, unicode2utf8, utf82unicode
-from ._data import Data, symbol, ulong, AnnotationDict
+from ._data import char, Data, decimal128, symbol, ulong, AnnotationDict
 from ._endpoints import Link
 from ._exceptions import EXCEPTIONS, MessageException
 
@@ -89,16 +89,41 @@ class Message(object):
             return err
 
     def _check_property_keys(self):
+        '''
+        AMQP allows only string keys for properties. This function checks that this requirement is met
+        and raises a MessageException if not. However, in certain cases, conversions to string are
+        automatically performed:
+
+        1. When a key is a user-defined (non-AMQP) subclass of unicode/str (py2/py3).
+           AMQP types symbol and char, although derived from unicode/str, are not converted,
+           and result in an exception.
+
+        2. In Py2, when a key is binary. This is a convenience for Py2 users that encode
+           string literals without using the u'' prefix. In Py3, this is not the case, and
+           using a binary key will result in an error. AMQP type decimal128, which is derived
+           from binary, will not be converted, and will result in an exception.
+        '''
+        # We cannot make changes to the dict while iterating, so we
+        # must save and make the changes afterwards
+        changed_keys = []
         for k in self.properties.keys():
             if isinstance(k, unicode):
-                # py2 unicode, py3 str (via hack definition)
-                continue
-            # If key is binary then change to string
-            elif isinstance(k, str):
-                # py2 str
-                self.properties[k.encode('utf-8')] = self.properties.pop(k)
+                # Py2 & Py3 strings and their subclasses
+                if type(k) is symbol or type(k) is char:
+                    # Exclude symbol and char
+                    raise MessageException('Application property key is not string type: key=%s %s' % (str(k), type(k)))
+                if type(k) is not unicode:
+                    # Only for string subclasses, convert to string
+                    changed_keys.append((k, unicode(k)))
+            elif isinstance(k, str) and not (type(k) is decimal128):
+                # Py2 only: If key is binary string then convert to unicode. Exclude bytes subclass decimal128.
+                changed_keys.append((k, k.decode('utf-8')))
             else:
+                # Anything else: raise exception
                 raise MessageException('Application property key is not string type: key=%s %s' % (str(k), type(k)))
+        # Make the key changes
+        for old_key, new_key in changed_keys:
+            self.properties[new_key] = self.properties.pop(old_key)
 
     def _pre_encode(self):
         inst = Data(pn_message_instructions(self._msg))
@@ -427,7 +452,7 @@ class Message(object):
         The group-id for any replies.
 
         :type: ``str``
-        :raise: :exc:`MessageException` if there is any Proton error when using the setter.        
+        :raise: :exc:`MessageException` if there is any Proton error when using the setter.
         """)
 
     def _get_instructions(self):
@@ -523,9 +548,11 @@ class Message(object):
         :rtype: :class:`Delivery`
 
         """
-        if link.is_sender: return None
+        if link.is_sender:
+            return None
         dlv = link.current
-        if not dlv or dlv.partial: return None
+        if not dlv or dlv.partial:
+            return None
         dlv.encoded = link.recv(dlv.pending)
         link.advance()
         # the sender has already forgotten about the delivery, so we might
@@ -543,5 +570,6 @@ class Message(object):
                      "reply_to_group_id", "instructions", "annotations",
                      "properties", "body"):
             value = getattr(self, attr)
-            if value: props.append("%s=%r" % (attr, value))
+            if value:
+                props.append("%s=%r" % (attr, value))
         return "Message(%s)" % ", ".join(props)

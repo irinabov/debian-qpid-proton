@@ -65,13 +65,13 @@ include_directories (
 
 add_custom_command (
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
-  COMMAND ${PN_ENV_SCRIPT} PYTHONPATH=${CMAKE_SOURCE_DIR}/tools/python ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/src/encodings.h.py > ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
+  COMMAND ${PN_ENV_SCRIPT} PYTHONPATH=${CMAKE_SOURCE_DIR}/tools/python ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/src/encodings.h.py > ${CMAKE_CURRENT_BINARY_DIR}/src/encodings.h
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/encodings.h.py
   )
 
 add_custom_command (
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/protocol.h
-  COMMAND ${PN_ENV_SCRIPT} PYTHONPATH=${CMAKE_SOURCE_DIR}/tools/python ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/src/protocol.h.py > ${CMAKE_CURRENT_BINARY_DIR}/src/protocol.h
+  COMMAND ${PN_ENV_SCRIPT} PYTHONPATH=${CMAKE_SOURCE_DIR}/tools/python ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/src/protocol.h.py > ${CMAKE_CURRENT_BINARY_DIR}/src/protocol.h
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/protocol.h.py
   )
 
@@ -165,22 +165,8 @@ if (PN_WINAPI)
   list(APPEND PLATFORM_DEFINITIONS "PN_WINAPI")
 endif (PN_WINAPI)
 
-if (MSVC)
-    set(CMAKE_DEBUG_POSTFIX "d")
-    add_definitions(
-        /wd4244
-        /wd4267
-        /wd4800
-        /wd4996
-    )
-endif (MSVC)
-
-# Ensure that examples build with c99 on gcc/clang
-set(C_EXAMPLE_FLAGS_GNU "-pedantic")
-set(C_EXAMPLE_FLAGS_Clang "-pedantic")
-
 # Flags for example self-test build
-set(C_EXAMPLE_FLAGS "${COMPILE_WARNING_FLAGS} ${C_EXAMPLE_FLAGS_${CMAKE_C_COMPILER_ID}}")
+set(C_EXAMPLE_FLAGS "${C_STANDARD_FLAGS} ${COMPILE_WARNING_FLAGS}")
 set(C_EXAMPLE_LINK_FLAGS "${SANITIZE_FLAGS}")
 
 set(qpid-proton-platform_GNU src/compiler/gcc/start.c)
@@ -447,6 +433,7 @@ if (qpid-proton-proactor)
     COMPILE_FLAGS "${LTO}"
     LINK_FLAGS "${CATCH_UNDEFINED} ${LINK_LTO}")
   target_compile_definitions(qpid-proton-proactor-objects PRIVATE qpid_proton_proactor_EXPORTS)
+  set(TARGET_OBJECTS_qpid-proton-proactor-objects "$<TARGET_OBJECTS:qpid-proton-proactor-objects>")
 
   # Can't use target_link_libraries() because cmake 2.8.12 doesn't allow object libraries as the first param
   # otherwise for cmake 3.9 and on this would be:
@@ -478,7 +465,11 @@ set(qpid-proton-noncore-src
   ${qpid-proton-include-extra}
 )
 
-add_library (qpid-proton SHARED $<TARGET_OBJECTS:qpid-proton-core-objects> $<TARGET_OBJECTS:qpid-proton-platform-io-objects> $<TARGET_OBJECTS:qpid-proton-proactor-objects> ${qpid-proton-noncore-src})
+add_library (qpid-proton SHARED
+  $<TARGET_OBJECTS:qpid-proton-core-objects>
+  $<TARGET_OBJECTS:qpid-proton-platform-io-objects>
+  ${TARGET_OBJECTS_qpid-proton-proactor-objects}
+  ${qpid-proton-noncore-src})
 target_link_libraries (qpid-proton LINK_PRIVATE ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS} ${PROACTOR_LIBS})
 set_target_properties (qpid-proton
   PROPERTIES
@@ -494,7 +485,10 @@ if (BUILD_STATIC_LIBS)
     C_EXTENSIONS ON)
   add_library(qpid-proton-static STATIC $<TARGET_OBJECTS:qpid-proton-platform-io-static> ${qpid-proton-noncore-src})
   target_compile_definitions(qpid-proton-static PUBLIC PROTON_DECLARE_STATIC)
-  target_link_libraries (qpid-proton-static qpid-proton-core-static qpid-proton-proactor-static ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS} ${PROACTOR_LIBS})
+  target_link_libraries (qpid-proton-static
+    qpid-proton-core-static
+    $<$<BOOL:${HAS_PROACTOR}>:qpid-proton-proactor-static>
+    ${SSL_LIB} ${SASL_LIB} ${TIME_LIB} ${PLATFORM_LIBS} ${PROACTOR_LIBS})
 endif(BUILD_STATIC_LIBS)
 
 # Install executables and libraries

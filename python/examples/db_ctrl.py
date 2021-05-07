@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -40,8 +40,9 @@ else:
         elif sys.argv[1] == "insert":
             while True:
                 l = sys.stdin.readline()
-                if not l: break
+                if not l:
+                    break
                 conn.execute("INSERT INTO records(description) VALUES (?)", (l.rstrip(),))
             conn.commit()
         else:
-            print("Unrecognised command: %s" %  sys.argv[1])
+            print("Unrecognised command: %s" % sys.argv[1])

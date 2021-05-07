@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -20,11 +20,12 @@
 
 try:
     import Queue
-except:
+except ImportError:
     import queue as Queue
 
 import sqlite3
 import threading
+
 
 class Db(object):
     def __init__(self, db, injector):
@@ -35,7 +36,7 @@ class Db(object):
         self.pending_events = []
         self.running = True
         self.thread = threading.Thread(target=self._process)
-        self.thread.daemon=True
+        self.thread.daemon = True
         self.thread.start()
 
     def close(self):
@@ -110,7 +111,8 @@ class Db(object):
                     while True:
                         f(conn)
                         f = self.tasks.get(False)
-                except Queue.Empty: pass
+                except Queue.Empty:
+                    pass
                 conn.commit()
                 for event in self.pending_events:
                     self.injector.trigger(event)

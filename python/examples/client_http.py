@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -26,6 +26,7 @@ from tornado.concurrent import Future
 from proton import Message
 from proton.handlers import MessagingHandler
 from proton_tornado import Container
+
 
 class Client(MessagingHandler):
     def __init__(self, host, address):
@@ -71,6 +72,7 @@ class Client(MessagingHandler):
         self.do_request()
         self.container.touch()
         return future
+
 
 class ExampleHandler(tornado.web.RequestHandler):
     def initialize(self, client):

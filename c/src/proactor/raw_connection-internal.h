@@ -39,6 +39,37 @@ typedef enum {
   buff_written   = 6
 } buff_type;
 
+/*
+ * r = read, w = write
+ * init = initial
+ * o = open - can read/write
+ * d = draining - write draining
+ * c = closing - shutdown pending
+ * s = stopped (closed)
+ */
+typedef enum {
+  conn_wrong = -1,
+  conn_init  = 0,
+  conn_ro_wo = 1,
+  conn_ro_wd = 2,
+  conn_ro_wc = 3,
+  conn_ro_ws = 4,
+  conn_rc_wo = 5,
+  conn_rc_wd = 6,
+  conn_rs_wo = 7,
+  conn_rs_wd = 8,
+  conn_rs_ws = 9,
+  conn_fini  = 10,
+} raw_conn_state;
+
+typedef enum {
+  disc_init        = 0,
+  disc_drain_msg   = 1,
+  disc_read_msg    = 2,
+  disc_written_msg = 3,
+  disc_fini        = 4
+} raw_disconnect_state;
+
 typedef uint16_t buff_ptr; // This is always the index+1 so that 0 can be special
 
 typedef struct pbuffer_t {
@@ -72,17 +103,17 @@ struct pn_raw_connection_t {
   buff_ptr wbuffer_last_towrite;
   buff_ptr wbuffer_first_written;
   buff_ptr wbuffer_last_written;
-  bool rneedbufferevent;
-  bool wneedbufferevent;
+
+  uint8_t state; // really raw_conn_state
+  uint8_t disconnect_state; // really raw_disconnect_state
+
+  bool rrequestedbuffers;
+  bool wrequestedbuffers;
+
   bool rpending;
   bool wpending;
-  bool rclosed;
-  bool wdraining;
-  bool wclosed;
   bool rclosedpending;
   bool wclosedpending;
-  bool rdrainpending;
-  bool wdrainpending;
   bool disconnectpending;
   bool wakepending;
 };
@@ -95,8 +126,11 @@ void pni_raw_connected(pn_raw_connection_t *conn);
 void pni_raw_connect_failed(pn_raw_connection_t *conn);
 void pni_raw_wake(pn_raw_connection_t *conn);
 void pni_raw_close(pn_raw_connection_t *conn);
+void pni_raw_read_close(pn_raw_connection_t *conn);
+void pni_raw_write_close(pn_raw_connection_t *conn);
 void pni_raw_read(pn_raw_connection_t *conn, int sock, long (*recv)(int, void*, size_t), void (*set_error)(pn_raw_connection_t *, const char *, int));
 void pni_raw_write(pn_raw_connection_t *conn, int sock, long (*send)(int, const void*, size_t), void (*set_error)(pn_raw_connection_t *, const char *, int));
+void pni_raw_process_shutdown(pn_raw_connection_t *conn, int sock, int (*shutdown_rd)(int), int (*shutdown_wr)(int));
 bool pni_raw_can_read(pn_raw_connection_t *conn);
 bool pni_raw_can_write(pn_raw_connection_t *conn);
 pn_event_t *pni_raw_event_next(pn_raw_connection_t *conn);

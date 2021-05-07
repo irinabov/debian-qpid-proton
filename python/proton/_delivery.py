@@ -34,7 +34,7 @@ from ._wrapper import Wrapper
 
 
 class NamedInt(int):
-    values = {}  # type: Dict[int, str]
+    values = {}  # type: Dict[int, str]  # noqa  # TODO(PROTON-2323) typing.Dict is not available on Python 2.7
 
     def __new__(cls, i, name):
         ni = super(NamedInt, cls).__new__(cls, i)
@@ -74,7 +74,7 @@ class Disposition(object):
     """
     A non terminal state indicating how much (if any) message data
     has been received for a delivery.
-    """    
+    """
 
     ACCEPTED = DispositionType(PN_ACCEPTED, "ACCEPTED")
     """
@@ -107,7 +107,6 @@ class Disposition(object):
     delivery being settled.
     """
 
-
     def __init__(self, impl, local):
         self._impl = impl
         self.local = local
@@ -121,13 +120,13 @@ class Disposition(object):
         Get the type of this disposition object.
 
         Defined values are:
-        
+
         * :const:`RECEIVED`
         * :const:`ACCEPTED`
         * :const:`REJECTED`
         * :const:`RELEASED`
         * :const:`MODIFIED`
-        
+
         :type: ``str``
         """
         return DispositionType.get(pn_disposition_type(self._impl))
@@ -249,7 +248,7 @@ class Disposition(object):
 
     condition = property(_get_condition, _set_condition, doc="""
         The condition object associated with a disposition.
-        
+
         The :class:`Condition` object retrieved by this operation may be
         modified prior to updating a delivery. When a delivery is updated,
         the condition described by the disposition is reported to the peer
@@ -269,7 +268,7 @@ class Delivery(Wrapper):
     """
     A non terminal state indicating how much (if any) message data
     has been received for a delivery.
-    """    
+    """
 
     ACCEPTED = Disposition.ACCEPTED
     """
@@ -301,7 +300,6 @@ class Delivery(Wrapper):
     state there will be no further state changes prior to the
     delivery being settled.
     """
-
 
     @staticmethod
     def wrap(impl):

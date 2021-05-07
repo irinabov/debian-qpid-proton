@@ -21,6 +21,7 @@
 
 #include "proton_bits.hpp"
 
+#include "proton/codec/map.hpp"
 #include "proton/codec/vector.hpp"
 #include "proton/connection.hpp"
 #include "proton/connection_options.hpp"
@@ -60,7 +61,11 @@ void connection::open(const connection_options &opts) {
     pn_connection_open(pn_object());
 }
 
-void connection::close() { pn_connection_close(pn_object()); }
+void connection::close() {
+  pn_connection_close(pn_object());
+  reconnect_context* rctx = connection_context::get(pn_object()).reconnect_context_.get();
+  if (rctx) rctx->stop_reconnect_ = true;
+}
 
 std::string connection::virtual_host() const {
     return str(pn_connection_remote_hostname(pn_object()));
@@ -190,6 +195,15 @@ std::vector<symbol> connection::offered_capabilities() const {
 std::vector<symbol> connection::desired_capabilities() const {
     value caps(pn_connection_remote_desired_capabilities(pn_object()));
     return get_multiple<std::vector<symbol> >(caps);
+}
+
+std::map<symbol, value> connection::properties() const {
+    std::map<symbol, value> props_ret;
+    value props(pn_connection_remote_properties(pn_object()));
+    if (!props.empty()) {
+        get(props, props_ret);
+    }
+    return props_ret;
 }
 
 bool connection::reconnected() const {

@@ -19,7 +19,6 @@
 
 from __future__ import absolute_import
 
-#from functools import total_ordering
 import heapq
 import json
 import logging
@@ -28,14 +27,15 @@ import os
 import time
 import traceback
 import uuid
+from functools import total_ordering
 
 from cproton import PN_PYREF, PN_ACCEPTED, PN_EVENT_NONE
 
-from ._delivery import  Delivery
+from ._delivery import Delivery
 from ._endpoints import Connection, Endpoint, Link, Session, Terminus
 from ._exceptions import SSLUnavailable
 from ._data import Described, symbol, ulong
-from ._message import  Message
+from ._message import Message
 from ._transport import Transport, SSL, SSLDomain
 from ._url import Url
 from ._common import isstring, unicode2utf8, utf82unicode
@@ -60,7 +60,8 @@ def _generate_uuid():
 def _now():
     return time.time()
 
-#@total_ordering
+
+@total_ordering
 class Task(object):
 
     def __init__(self, reactor, deadline, handler):
@@ -99,6 +100,7 @@ class TimerSelectable(Selectable):
         self._reactor.timer_tick()
         self.deadline = self._reactor.timer_deadline
         self.update()
+
 
 class Reactor(object):
 
@@ -177,7 +179,8 @@ class Reactor(object):
         # TODO: Why do we timeout like this?
         self.timeout = 3.14159265359
         self.start()
-        while self.process(): pass
+        while self.process():
+            pass
         self.stop()
         self.process()
         # TODO: This isn't correct if we ever run again
@@ -187,7 +190,7 @@ class Reactor(object):
     # Cross thread reactor wakeup
     def wakeup(self):
         # TODO: Do this with pipe and write?
-        #os.write(self._wakeup[1], "x", 1);
+        #  os.write(self._wakeup[1], "x", 1);
         pass
 
     def start(self):
@@ -195,8 +198,8 @@ class Reactor(object):
         self._selectable = TimerSelectable(self)
         self._selectable.deadline = self.timer_deadline
         # TODO set up fd to read for wakeups - but problematic on windows
-        #self._selectable.fileno(self._wakeup[0])
-        #self._selectable.reading = True
+        #  self._selectable.fileno(self._wakeup[0])
+        #  self._selectable.reading = True
         self.update(self._selectable)
 
     @property
@@ -272,7 +275,7 @@ class Reactor(object):
         :param handler:
         """
         himpl = self._make_handler(handler)
-        task = Task(self, self._now+delay, himpl)
+        task = Task(self, self._now + delay, himpl)
         heapq.heappush(self._timerheap, task)
         self._timers += 1
         deadline = self._timerheap[0]._deadline
@@ -412,7 +415,7 @@ class EventInjector(object):
 
     def on_selectable_init(self, event):
         sel = event.context
-        #sel.fileno(self.fileno())
+        # sel.fileno(self.fileno())
         sel.reading = True
         sel.update()
 
@@ -492,11 +495,11 @@ class Transaction(object):
     a call to :meth:`proton.reactor.Container.declare_transaction`.
 
     To send messages under this transaction, use :meth:`send`.
-    
+
     To receive messages under this transaction, call :meth:`accept` once the
     message is received (typically from the
     :meth:`proton.handlers.MessagingHandler.on_message` callback).
-    
+
     To discharge the transaction, call either :meth:`commit`
     (for a successful transaction), or :meth:`abort` (for a failed transaction).
     """
@@ -633,6 +636,7 @@ class AtMostOnce(LinkOption):
     setting the sender link settle mode to :const:`proton.Link.SND_SETTLED`
     (ie pre-settled).
     """
+
     def apply(self, link):
         """
         Set the at-most-once delivery semantics on the link.
@@ -650,6 +654,7 @@ class AtLeastOnce(LinkOption):
     and the receiver link settle mode to :const:`proton.Link.RCV_FIRST`. This
     forces the receiver to settle all messages once they are successfully received.
     """
+
     def apply(self, link):
         """
         Set the at-least-once delivery semantics on the link.
@@ -665,6 +670,7 @@ class SenderOption(LinkOption):
     """
     Abstract class for sender options.
     """
+
     def apply(self, sender):
         """
         Set the option on the sender.
@@ -674,13 +680,15 @@ class SenderOption(LinkOption):
         """
         pass
 
-    def test(self, link): return link.is_sender
+    def test(self, link):
+        return link.is_sender
 
 
 class ReceiverOption(LinkOption):
     """
     Abstract class for receiver options
     """
+
     def apply(self, receiver):
         """
         Set the option on the receiver.
@@ -690,7 +698,8 @@ class ReceiverOption(LinkOption):
         """
         pass
 
-    def test(self, link): return link.is_receiver
+    def test(self, link):
+        return link.is_receiver
 
 
 class DynamicNodeProperties(LinkOption):
@@ -702,6 +711,7 @@ class DynamicNodeProperties(LinkOption):
     :param props: A map of link options to be applied to a link.
     :type props: ``dict``
     """
+
     def __init__(self, props={}):
         self.properties = {}
         for k in props:
@@ -731,6 +741,7 @@ class Filter(ReceiverOption):
         containing the filter name, and the value a filter string.
     :type filter_set: ``dict``
     """
+
     def __init__(self, filter_set={}):
         self.filter_set = filter_set
 
@@ -755,7 +766,8 @@ class Selector(Filter):
     """
 
     def __init__(self, value, name='selector'):
-        super(Selector, self).__init__({symbol(name): Described(symbol('apache.org:selector-filter:string'), utf82unicode(value))})
+        super(Selector, self).__init__({symbol(name): Described(
+            symbol('apache.org:selector-filter:string'), utf82unicode(value))})
 
 
 class DurableSubscription(ReceiverOption):
@@ -765,6 +777,7 @@ class DurableSubscription(ReceiverOption):
     to :const:`proton.Terminus.DELIVERIES` and the source expiry policy to
     :const:`proton.Terminus.EXPIRE_NEVER`.
     """
+
     def apply(self, receiver):
         """
         Set durability on the specified receiver.
@@ -783,6 +796,7 @@ class Move(ReceiverOption):
     receivers. This is achieved by setting the receiver source distribution
     mode to :const:`proton.Terminus.DIST_MODE_MOVE`.
     """
+
     def apply(self, receiver):
         """
         Set message move semantics on the specified receiver.
@@ -800,6 +814,7 @@ class Copy(ReceiverOption):
     are. This is achieved by setting the receiver source distribution mode to
     :const:`proton.Terminus.DIST_MODE_COPY`.
     """
+
     def apply(self, receiver):
         """
         Set message copy semantics on the specified receiver.
@@ -814,9 +829,11 @@ def _apply_link_options(options, link):
     if options:
         if isinstance(options, list):
             for o in options:
-                if o.test(link): o.apply(link)
+                if o.test(link):
+                    o.apply(link)
         else:
-            if options.test(link): options.apply(link)
+            if options.test(link):
+                options.apply(link)
 
 
 def _create_session(connection, handler=None):
@@ -885,7 +902,7 @@ class Acceptor(Handler):
         s = event.selectable
 
         sock, name = IO.accept(self._selectable)
-        _logger.debug("Accepted connection from %s", name)
+        _logger.info("Accepted connection from %s", name)
 
         r = self._reactor
         handler = self._handler or r.handler
@@ -902,7 +919,73 @@ class Acceptor(Handler):
         t._selectable = s
         IOHandler.update(t, s, r.now)
 
-class Connector(Handler):
+
+def delay_iter(initial=0.1, factor=2.0, max_delay=10.0, max_tries=None):
+    """
+    iterator yielding the next delay in the sequence of delays. The first
+    delay is 0 seconds, the second 0.1 seconds, and each subsequent
+    call to :meth:`next` doubles the next delay period until a
+    maximum value of 10 seconds is reached.
+    """
+    yield 0.0
+    tries = 1
+    delay = initial
+    while max_tries is None or tries < max_tries:
+        yield delay
+        tries += 1
+        delay = min(max_delay, factor * delay)
+
+
+class Backoff(object):
+    """
+    A reconnect strategy involving an increasing delay between
+    retries, up to a maximum or 10 seconds. Repeated calls
+    to :meth:`next` returns a value for the next delay, starting
+    with an initial value of 0 seconds.
+    """
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.iter = delay_iter(**self.kwargs)
+
+    def __iter__(self):
+        return self.iter
+
+
+def make_backoff_wrapper(backoff):
+    """
+    Make a wrapper for a backoff object:
+    If the object conforms to the old protocol (has reset and next methods) then
+    wrap it in an iterable that returns an iterator suitable for the new backoff approach
+    otherwise assume it is fine as it is!
+    :param backoff:
+    :return:
+    """
+    class WrappedBackoff(object):
+        def __init__(self, backoff):
+            self.backoff = backoff
+
+        def __iter__(self):
+            self.backoff.reset()
+            return self
+
+        def __next__(self):
+            return self.backoff.next()
+    if hasattr(backoff, 'reset') and hasattr(backoff, 'next'):
+        return WrappedBackoff(backoff)
+    else:
+        return backoff
+
+
+class Urls(object):
+    def __init__(self, values):
+        self.values = [Url(v) for v in values]
+
+    def __iter__(self):
+        return iter(self.values)
+
+
+class _Connector(Handler):
     """
     Internal handler that triggers the necessary socket connect for an
     opened connection.
@@ -922,14 +1005,15 @@ class Connector(Handler):
         self.virtual_host = None
         self.ssl_sni = None
         self.max_frame_size = None
+        self._connect_sequence = None
+        self._next_url = None
 
-    def _connect(self, connection):
-        url = self.address.next()
+    def _connect(self, connection, url):
         connection.url = url
         # if virtual-host not set, use host from address as default
         if self.virtual_host is None:
             connection.hostname = url.host
-        _logger.debug("connecting to %r..." % url)
+        _logger.info("Connecting to %r..." % url)
 
         transport = Transport()
         if self.sasl_enabled:
@@ -957,86 +1041,56 @@ class Connector(Handler):
             transport.max_frame_size = self.max_frame_size
 
     def on_connection_local_open(self, event):
-        self._connect(event.connection)
+        if self.reconnect is None:
+            self._connect_sequence = ((delay, url) for delay in delay_iter() for url in self.address)
+        elif self.reconnect is False:
+            self._connect_sequence = ((delay, url) for delay in delay_iter(max_tries=1) for url in self.address)
+        else:
+            self._connect_sequence = ((delay, url) for delay in self.reconnect for url in self.address)
+        _, url = next(self._connect_sequence)  # Ignore delay as we assume first delay must be 0
+        self._connect(event.connection, url)
 
     def on_connection_remote_open(self, event):
-        _logger.debug("connected to %s" % event.connection.hostname)
-        if self.reconnect:
-            self.reconnect.reset()
+        _logger.info("Connected to %s" % event.connection.hostname)
+        if self.reconnect is None:
+            self._connect_sequence = ((delay, url) for delay in delay_iter() for url in self.address)
+        elif self.reconnect:
+            self._connect_sequence = ((delay, url) for delay in self.reconnect for url in self.address)
+        else:
+            self._connect_sequence = None  # Help take out the garbage
 
     def on_transport_closed(self, event):
-        if self.connection is None: return
-        if self.connection.state & Endpoint.LOCAL_ACTIVE:
+        if self.connection is None:
 
-            if self.reconnect:
+            return
+
+        if not self.connection.state & Endpoint.LOCAL_ACTIVE:
+            _logger.info("Disconnected, already closed")
+        elif self.reconnect is False:
+            _logger.info("Disconnected, reconnect disabled")
+        else:
+            try:
                 event.transport.unbind()
-                delay = self.reconnect.next()
+                delay, url = next(self._connect_sequence)
                 if delay == 0:
-                    _logger.info("Disconnected, reconnecting...")
-                    self._connect(self.connection)
+                    _logger.info("Disconnected, reconnecting immediately...")
+                    self._connect(self.connection, url)
                     return
                 else:
                     _logger.info("Disconnected will try to reconnect after %s seconds" % delay)
+                    self._next_url = url
                     event.reactor.schedule(delay, self)
                     return
-            else:
-                _logger.debug("Disconnected")
+            except StopIteration:
+                _logger.info("Disconnected, giving up retrying")
+
         # See connector.cpp: conn.free()/pn_connection_release() here?
         self.connection = None
 
     def on_timer_task(self, event):
-        self._connect(self.connection)
-
-
-class Backoff(object):
-    """
-    A reconnect strategy involving an increasing delay between
-    retries, up to a maximum or 10 seconds. Repeated calls
-    to :meth:`next` returns a value for the next delay, starting
-    with an initial value of 0 seconds.
-    """
-
-    def __init__(self):
-        self.delay = 0
-
-    def reset(self):
-        """
-        Reset the backoff delay to 0 seconds.
-        """
-        self.delay = 0
-
-    def next(self):
-        """
-        Start the next delay in the sequence of delays. The first
-        delay is 0 seconds, the second 0.1 seconds, and each subsequent
-        call to :meth:`next` doubles the next delay period until a
-        maximum value of 10 seconds is reached.
-
-        :return: The next delay in seconds.
-        :rtype: ``float``
-        """
-        current = self.delay
-        if current == 0:
-            self.delay = 0.1
-        else:
-            self.delay = min(10, 2 * current)
-        return current
-
-
-class Urls(object):
-    def __init__(self, values):
-        self.values = [Url(v) for v in values]
-        self.i = iter(self.values)
-
-    def __iter__(self):
-        return self
-
-    def next(self):
-        try:
-            return next(self.i)
-        except StopIteration:
-            self.i = iter(self.values)
-            return next(self.i)
+        if self._next_url:
+            self._connect(self.connection, self._next_url)
+            self._next_url = None
 
 
 class SSLConfig(object):
@@ -1052,6 +1106,7 @@ class SSLConfig(object):
         self.client.set_trusted_ca_db(certificate_db)
         self.server.set_trusted_ca_db(certificate_db)
 
+
 def _find_config_file():
     confname = 'connect.json'
     confpath = ['.', os.path.expanduser('~/.config/messaging'), '/etc/messaging']
@@ -1060,6 +1115,7 @@ def _find_config_file():
         if os.path.isfile(f):
             return f
     return None
+
 
 def _get_default_config():
     conf = os.environ.get('MESSAGING_CONNECT_FILE') or _find_config_file()
@@ -1071,23 +1127,26 @@ def _get_default_config():
     else:
         return {}
 
+
 def _strip_json_comments(json_text):
     """This strips c-style comments from text, taking into account '/*comments*/' and '//comments'
     nested inside a string etc."""
     def replacer(match):
         s = match.group(0)
         if s.startswith('/'):
-            return " " # note: a space and not an empty string
+            return " "  # note: a space and not an empty string
         else:
             return s
     pattern = re.compile(r'//.*?$|/\*.*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"', re.DOTALL | re.MULTILINE)
     return re.sub(pattern, replacer, json_text)
+
 
 def _get_default_port_for_scheme(scheme):
     if scheme == 'amqps':
         return 5671
     else:
         return 5672
+
 
 class Container(Reactor):
     """
@@ -1126,14 +1185,14 @@ class Container(Reactor):
         for it as follows:
 
             1.  The location set in the environment variable ``MESSAGING_CONNECT_FILE``
-            2.  ``.connect.json``
+            2.  ``./connect.json``
             3.  ``~/.config/messaging/connect.json``
             4.  ``/etc/messaging/connect.json``
 
         To use SSL/TLS for encryption (when an ``amqps`` URL scheme is used), the above
         configuration file must contain a ``tls`` submap containing the following
         configuration entries (See :class:`proton.SSLDomain` for details):
-        
+
         *   ``ca``: Path to a database of trusted CAs that the server will advertise.
         *   ``cert``: Path to a file/database containing the identifying certificate.
         *   ``key``: An optional key to access the identifying certificate.
@@ -1222,7 +1281,8 @@ class Container(Reactor):
         if not url and not urls and not address:
             config = _get_default_config()
             scheme = config.get('scheme', 'amqps')
-            _url = "%s://%s:%s" % (scheme, config.get('host', 'localhost'), config.get('port', _get_default_port_for_scheme(scheme)))
+            _url = "%s://%s:%s" % (scheme, config.get('host', 'localhost'),
+                                   config.get('port', _get_default_port_for_scheme(scheme)))
             _ssl_domain = None
             _kwargs = kwargs
             if config.get('user'):
@@ -1246,18 +1306,20 @@ class Container(Reactor):
                 if cert and key:
                     _ssl_domain.set_credentials(str(cert), str(key), None)
 
-            return self._connect(_url, handler=handler, reconnect=reconnect, heartbeat=heartbeat, ssl_domain=_ssl_domain, **_kwargs)
+            return self._connect(_url, handler=handler, reconnect=reconnect,
+                                 heartbeat=heartbeat, ssl_domain=_ssl_domain, **_kwargs)
         else:
-            return self._connect(url=url, urls=urls, handler=handler, reconnect=reconnect, heartbeat=heartbeat, ssl_domain=ssl_domain, **kwargs)
+            return self._connect(url=url, urls=urls, handler=handler, reconnect=reconnect,
+                                 heartbeat=heartbeat, ssl_domain=ssl_domain, **kwargs)
 
-    def _connect(self, url=None, urls=None, address=None, handler=None, reconnect=None, heartbeat=None, ssl_domain=None, **kwargs):
+    def _connect(self, url=None, urls=None, handler=None, reconnect=None, heartbeat=None, ssl_domain=None, **kwargs):
         conn = self.connection(handler)
         conn.container = self.container_id or str(_generate_uuid())
         conn.offered_capabilities = kwargs.get('offered_capabilities')
         conn.desired_capabilities = kwargs.get('desired_capabilities')
         conn.properties = kwargs.get('properties')
 
-        connector = Connector(conn)
+        connector = _Connector(conn)
         connector.allow_insecure_mechs = kwargs.get('allow_insecure_mechs', self.allow_insecure_mechs)
         connector.allowed_mechs = kwargs.get('allowed_mechs', self.allowed_mechs)
         connector.sasl_enabled = kwargs.get('sasl_enabled', self.sasl_enabled)
@@ -1275,16 +1337,13 @@ class Container(Reactor):
             connector.address = Urls([url])
         elif urls:
             connector.address = Urls(urls)
-        elif address:
-            connector.address = address
         else:
-            raise ValueError("One of url, urls or address required")
+            raise ValueError("One of url or urls required")
         if heartbeat:
             connector.heartbeat = heartbeat
-        if reconnect:
-            connector.reconnect = reconnect
-        elif reconnect is None:
-            connector.reconnect = Backoff()
+
+        connector.reconnect = make_backoff_wrapper(reconnect)
+
         # use container's default client domain if none specified.  This is
         # only necessary of the URL specifies the "amqps:" scheme
         connector.ssl_domain = ssl_domain or (self.ssl and self.ssl.client)

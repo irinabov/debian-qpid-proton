@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -43,13 +43,12 @@ url = Url(opts.address)
 client = SyncRequestResponse(BlockingConnection(url, timeout=opts.timeout), url.path)
 
 try:
-    REQUESTS= ["Twas brillig, and the slithy toves",
-               "Did gire and gymble in the wabe.",
-               "All mimsy were the borogroves,",
-               "And the mome raths outgrabe."]
+    REQUESTS = ["Twas brillig, and the slithy toves",
+                "Did gire and gymble in the wabe.",
+                "All mimsy were the borogroves,",
+                "And the mome raths outgrabe."]
     for request in REQUESTS:
         response = client.call(Message(body=request))
         print("%s => %s" % (request, response.body))
 finally:
     client.connection.close()
-

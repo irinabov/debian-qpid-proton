@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -23,6 +23,7 @@ import optparse
 from proton.handlers import MessagingHandler
 from proton.reactor import ApplicationEvent, Container, EventInjector
 from db_common import Db
+
 
 class Recv(MessagingHandler):
     def __init__(self, url, count):
@@ -65,6 +66,7 @@ class Recv(MessagingHandler):
         else:
             self.accept(event.delivery)
 
+
 parser = optparse.OptionParser(usage="usage: %prog [options]")
 parser.add_option("-a", "--address", default="localhost:5672/examples",
                   help="address from which messages are received (default %default)")
@@ -74,7 +76,5 @@ opts, args = parser.parse_args()
 
 try:
     Container(Recv(opts.address, opts.messages)).run()
-except KeyboardInterrupt: pass
-
-
-
+except KeyboardInterrupt:
+    pass

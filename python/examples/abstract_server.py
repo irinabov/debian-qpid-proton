@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -22,6 +22,7 @@ from __future__ import print_function
 
 from proton_server import Server
 
+
 class Application(Server):
     def __init__(self, host, address):
         super(Application, self).__init__(host, address)
@@ -31,7 +32,8 @@ class Application(Server):
         self.send(response, reply_to)
         print("Request from: %s" % reply_to)
 
+
 try:
     Application("localhost:5672", "examples").run()
-except KeyboardInterrupt: pass
-
+except KeyboardInterrupt:
+    pass
